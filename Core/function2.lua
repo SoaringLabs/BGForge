@@ -14,32 +14,9 @@ local HopeMaxn = ns.HopeMaxn
 local HopeMaxb = ns.HopeMaxb
 local HopeMaxi = ns.HopeMaxi
 
-local RealmID = GetRealmID()
-local player = BG.playerName
-
 ------------------Lite stubs for deleted modules------------------
 do
     pcall(function()
-    BiaoGe = BiaoGe or {}
-    if not BiaoGe.FilterClassItemDB then
-        BiaoGe.FilterClassItemDB = {}
-    end
-    if not BiaoGe.FilterClassItemDB[RealmID] then
-        BiaoGe.FilterClassItemDB[RealmID] = {}
-    end
-    if not BiaoGe.FilterClassItemDB[RealmID][player] then
-        BiaoGe.FilterClassItemDB[RealmID][player] = {chooseID=1}
-    end
-    if not BG.FilterClassItemDB then
-        BG.FilterClassItemDB = {ShuXing_filter={}, MainAttribute_filter={}}
-    end
-    if not BG.FilterClassItem_Default then
-        BG.FilterClassItem_Default = {TankKey={}}
-    end
-    if not BG.FilterClassItemMainFrame then
-        BG.FilterClassItemMainFrame = {AddFrame = CreateFrame("Frame")}
-    end
-    BG.FilterClassItemMainFrame.AddFrame:Hide()
     if not BG.ItemLibMainFrame then
         BG.ItemLibMainFrame = CreateFrame("Frame")
     end
@@ -48,10 +25,6 @@ do
     BG.ItemLibMainFrame.IsShown = function() return false end
     if not BG.canShowTrunToItemLibCursor then
         BG.canShowTrunToItemLibCursor = false
-    end
-
-    function BG.LootFilterClassItem(link)
-        return false
     end
 
     function BG.HighlightItemOutTime(link)
@@ -91,13 +64,7 @@ do
     function BG.UpdateAllItemLib()
     end
 
-    function BG.UpdateAllFilter()
-    end
-
     function BG.RoleOverviewUI()
-    end
-
-    function BG.FilterClassItemUI()
     end
 
     function BG.ItemLibUI()
@@ -112,30 +79,22 @@ do
     end)
 end
 
-------------------过滤装备------------------
+------------------隐藏物品提示读取------------------
 do
-    local alpha_ban = 0.4
-    local alpha_yes = 1
-    local ITEM_SOCKET_BONUS = ITEM_SOCKET_BONUS:gsub("%%s", "(.+)")                     -- 镶孔奖励：%s
-    local ITEM_MOD_FERAL_ATTACK_POWER = ITEM_MOD_FERAL_ATTACK_POWER:gsub("%%s", "(.+)") -- 在猎豹、熊等等攻击强度提高%s点
-    local ITEM_LIMIT_CATEGORY_MULTIPLE = ITEM_LIMIT_CATEGORY_MULTIPLE:gsub("%%s", "(.+)"):gsub("%%d", "(%%d+)")
-    local itemAttributeCache = {}
-    local attribute = {
-        ITEM_MOD_STRENGTH_SHORT = "^%+%C-" .. ITEM_MOD_STRENGTH_SHORT,
-        ITEM_MOD_AGILITY_SHORT = "^%+%C-" .. ITEM_MOD_AGILITY_SHORT,
-        ITEM_MOD_INTELLECT_SHORT = "^%+%C-" .. ITEM_MOD_INTELLECT_SHORT,
-    }
-    local db
-    BG.Init(function()
-        player = BG.playerName or GetUnitName("player", true) or player
-        BiaoGe.FilterClassItemDB = BiaoGe.FilterClassItemDB or {}
-        BiaoGe.FilterClassItemDB[RealmID] = BiaoGe.FilterClassItemDB[RealmID] or {}
-        BiaoGe.FilterClassItemDB[RealmID][player] = BiaoGe.FilterClassItemDB[RealmID][player] or {}
-        db = BiaoGe.FilterClassItemDB[RealmID][player]
-        if db.chooseID and not db[db.chooseID] then
-            db.chooseID = nil -- lite 无装备库配置时停用过滤，避免 db[num] 崩溃
+    local function FormatPattern(value)
+        if type(value) ~= "string" or value == "" then return end
+        return value:gsub("%%s", "(.+)"):gsub("%%d", "(%%d+)")
+    end
+
+    local excludedPatterns = {}
+    for index = 1, 4 do
+        local value = select(index, WARDROBE_SETS, ITEM_SOCKET_BONUS, ITEM_MOD_FERAL_ATTACK_POWER, ITEM_LIMIT_CATEGORY_MULTIPLE)
+        local pattern = FormatPattern(value)
+        if pattern then
+            tinsert(excludedPatterns, pattern)
         end
-    end)
+    end
+
     function BG.Tooltip_SetItemByID(itemID)
         BiaoGeTooltip:SetOwner(UIParent, "ANCHOR_NONE")
         BiaoGeTooltip:ClearLines()
@@ -150,313 +109,25 @@ do
         BG.Tooltip_SetItemByID(itemID)
         local tbl = {}
         local ii = 2
-        if BG.IsRetail and not itemAttributeCache[itemID] then
-            itemAttributeCache[itemID] = {}
-            for ii = 2, BiaoGeTooltip:NumLines() do
-                local leftText = _G["BiaoGeTooltipTextLeft" .. ii]
-                local text = leftText:GetText()
-                if text and text ~= "" then
-                    for name, ab in pairs(attribute) do
-                        if text:find(ab) then
-                            itemAttributeCache[itemID][name] = true
-                        end
-                    end
-                end
-            end
-        end
         while _G["BiaoGeTooltipTextLeft" .. ii] do
             local leftText = _G["BiaoGeTooltipTextLeft" .. ii]
             local text = leftText:GetText()
             if text and text ~= "" then
                 text = text:gsub("每5秒恢复%d+点法力值", "每5秒回复%d+点法力值")
-                if not text:find(WARDROBE_SETS) and
-                    not text:find(ITEM_SOCKET_BONUS) and
-                    not text:find(ITEM_MOD_FERAL_ATTACK_POWER) and
-                    not text:find(ITEM_LIMIT_CATEGORY_MULTIPLE)
-                then
+                local excluded
+                for _, pattern in ipairs(excludedPatterns) do
+                    if pattern and text:find(pattern) then
+                        excluded = true
+                        break
+                    end
+                end
+                if not excluded then
                     tinsert(tbl, text)
                 end
             end
             ii = ii + 1
         end
         return table.concat(tbl, "\n")
-    end
-
-    local function FilterArmor(typeID, EquipLoc, subclassID)
-        local num = db.chooseID
-        if not num then return end
-        if typeID == 4 and EquipLoc ~= "INVTYPE_CLOAK" then
-            for id, v in pairs(db[num].Armor) do
-                if subclassID == tonumber(id) then
-                    if subclassID == 0 then
-                        if EquipLoc == "INVTYPE_HOLDABLE" then
-                            return true
-                        end
-                    else
-                        return true
-                    end
-                end
-            end
-        end
-    end
-    local function FilterWeapon(typeID, EquipLoc, subclassID)
-        local num = db.chooseID
-        if not num then return end
-        if typeID == 2 then
-            for id, v in pairs(db[num].Weapon) do
-                if subclassID == tonumber(id) then
-                    return true
-                end
-            end
-        end
-    end
-    local function GetDBShuXingInfo(name)
-        local tbl = BG.FilterClassItemDB.ShuXing_filter[name]
-        if tbl then
-            return tbl.value, tbl.nothave
-        end
-    end
-    local function FilterShuXing(TooltipText)
-        local num = db.chooseID
-        if not num then return end
-        for name in pairs(db[num].ShuXing) do
-            local localTextTbl, nothave = GetDBShuXingInfo(name)
-            if localTextTbl then
-                local yes
-                for _, localText in pairs(localTextTbl) do
-                    if strfind(TooltipText, localText) then
-                        yes = true
-                        break
-                    end
-                end
-                if yes then
-                    if nothave then
-                        for _, nothaveLocalText in pairs(nothave) do
-                            if strfind(TooltipText, nothaveLocalText) then
-                                return false
-                            end
-                        end
-                        return true
-                    else
-                        return true
-                    end
-                end
-            end
-        end
-    end
-    local function FilterCLASS(TooltipText)
-        local num = db.chooseID
-        if not num then return end
-        if strfind(TooltipText, CLASS) then
-            for id, v in pairs(db[num].Class) do
-                if id == "过滤职业限定" then
-                    local c = UnitClass("player")
-                    if not strfind(TooltipText, c) then
-                        return true
-                    end
-                end
-            end
-        end
-    end
-    local function FilterBnetAccount(TooltipText)
-        local num = db.chooseID
-        if not num then return end
-        for id in pairs(db[num].BnetAccount) do
-            if id == "忽略战网绑定" then
-                if strfind(TooltipText, ITEM_BIND_TO_BNETACCOUNT) then
-                    return true
-                end
-            end
-        end
-    end
-    local function FilterTANK(TooltipText, typeID, EquipLoc)
-        if not BG.FilterClassItem_Default.TankKey then return end
-        local num = db.chooseID
-        if not num then return end
-        if typeID == 4 and EquipLoc ~= "INVTYPE_TRINKET" and EquipLoc ~= "INVTYPE_RELIC" then
-            for id, v in pairs(db[num].Tank) do
-                if id == "过滤坦克" then
-                    local tank
-                    for key, value in pairs(BG.FilterClassItem_Default.TankKey) do
-                        tank = strfind(TooltipText, value)
-                        if tank then
-                            break
-                        end
-                    end
-                    if not tank then
-                        return true
-                    end
-                end
-            end
-        end
-    end
-    local function FilterAttribute(itemID)
-        local num = db.chooseID
-        if not num then return end
-        if not next(db[num].MainAttribute) then
-            return false
-        end
-        local stats = itemAttributeCache[itemID]
-        if stats and next(stats) then
-            for id, v in pairs(db[num].MainAttribute) do
-                if stats[BG.FilterClassItemDB.MainAttribute_filter[id]] then
-                    return false
-                end
-            end
-            return true
-        end
-    end
-    -- ITEM_BIND_TO_BNETACCOUNT
-    function BG.FilterAll(itemID, typeID, EquipLoc, subclassID, tooltipText)
-        if typeID == 9 then return false end
-        local TooltipText = tooltipText or BG.GetTooltipTextLeftAll(itemID)
-        if FilterBnetAccount(TooltipText) then return false end
-        if FilterArmor(typeID, EquipLoc, subclassID) then
-            return true
-        end
-        if FilterWeapon(typeID, EquipLoc, subclassID) then
-            return true
-        end
-        if FilterShuXing(TooltipText) then
-            return true
-        end
-        if FilterCLASS(TooltipText) then
-            return true
-        end
-        if FilterTANK(TooltipText, typeID, EquipLoc) then
-            return true
-        end
-        if BG.FilterClassItemDB.MainAttribute then
-            if FilterAttribute(itemID) then
-                return true
-            end
-        end
-    end
-
-    function BG.FilterItem(bt, link)
-        local text = link or bt:GetText()
-        local itemID, _, _, EquipLoc, _, typeID, subclassID = GetItemInfoInstant(text)
-        local num = db.chooseID
-
-        if itemID and num then
-            if BG.FilterAll(itemID, typeID, EquipLoc, subclassID) then
-                bt:SetAlpha(alpha_ban)
-                return
-            end
-        end
-        bt:SetAlpha(alpha_yes)
-    end
-
-    function BG.UpdateFilter(bt, link)
-        local link = link or bt:GetText()
-        local itemID = GetItemID(link)
-        local num = db.chooseID
-        if not (link:find("item:") and itemID and num) then
-            bt:SetAlpha(alpha_yes)
-            return
-        end
-
-        local item = Item:CreateFromItemID(itemID)
-        item:ContinueOnItemLoad(function()
-            if not BG.itemCaches[itemID] then
-                BG.Tooltip_SetItemByID(itemID)
-                BG.After(0.01, function()
-                    BG.FilterItem(bt, link)
-                    BG.itemCaches[itemID] = true
-                end)
-            else
-                BG.FilterItem(bt, link)
-            end
-        end)
-    end
-
-    function BG.UpdateAllFilter()
-        local FB = BG.FB1
-        for b = 1, Maxb[FB] do -- 当前表格
-            for i = 1, BG.GetMaxi(FB, b) do
-                local bt = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
-                if bt then
-                    BG.UpdateFilter(bt)
-                end
-            end
-        end
-        for n = 1, HopeMaxn[FB] do -- 心愿清单
-            for b = 1, HopeMaxb[FB] do
-                for i = 1, HopeMaxi do
-                    local bt = BG.HopeFrame[FB]["nandu" .. n]["boss" .. b]["zhuangbei" .. i]
-                    if bt then
-                        BG.UpdateFilter(bt)
-                    end
-                end
-            end
-        end
-        if BG.ZhuangbeiList then
-            local i = 1
-            while BG.ZhuangbeiList["button" .. i] do
-                local bt = BG.ZhuangbeiList["button" .. i]
-                BG.UpdateFilter(bt)
-                i = i + 1
-            end
-        end
-        -- 装备过期列表
-        if BG.itemGuoQiFrame and BG.itemGuoQiFrame:IsVisible() then
-            for i, bt in ipairs(BG.itemGuoQiFrame.buttons) do
-                BG.UpdateFilter(bt, bt.link)
-            end
-        end
-        -- 自动拍卖记录
-        if BG.auctionLogFrame and BG.auctionLogFrame:IsVisible() then
-            for i, bt in ipairs(BG.auctionLogFrame.buttons) do
-                BG.UpdateFilter(bt.frame, bt.link)
-            end
-        end
-
-        for k, bt in pairs(BG.ItemLibMainFrame.Hope) do
-            if type(bt) == "table" and bt.EquipLoc then
-                BG.UpdateFilter(bt)
-            end
-        end
-
-        BG.FilterClassItemMainFrame.AddFrame:Hide()
-        if not BG.ItemLibMainFrame:IsVisible() then
-            BG.itemLibNeedUpdate = true
-        end
-
-        if BGA.Frames then
-            for _, f in ipairs(BGA.Frames) do
-                f.filter = nil
-                if f.player and f.player == BG.playerName then
-                    BGA.aura_env.SetFrameColor(f, 1)
-                else
-                    if db.chooseID then
-                        local name, link, quality, level, _, _, _, _, EquipLoc, Texture, _, typeID, subclassID, bindType = GetItemInfo(f.itemID)
-                        if BG.FilterAll(f.itemID, typeID, EquipLoc, subclassID) then
-                            f.filter = true
-                            BGA.aura_env.SetFrameColor(f, 2)
-                        end
-                    end
-                    if not f.filter then
-                        BGA.aura_env.SetFrameColor(f, 0)
-                    end
-                end
-            end
-        end
-    end
-
-    -- 拾取通知
-    function BG.LootFilterClassItem(link)
-        local num = db.chooseID
-        if not num then return "" end
-
-        local icon = AddTexture(db[num].Icon)
-        local itemID, _, _, EquipLoc, _, typeID, subclassID = GetItemInfoInstant(link)
-
-        if itemID then
-            if BG.FilterAll(itemID, typeID, EquipLoc, subclassID) then
-                return ""
-            end
-        end
-        return icon
     end
 end
 
@@ -621,11 +292,6 @@ do
         -- 已拥有图标
         BG.IsHave(self, true)
 
-        local num = BiaoGe.FilterClassItemDB[RealmID][player].chooseID -- 隐藏
-        if num ~= 0 then
-            local _, class = UnitClass("player")
-            BG.UpdateFilter(self)
-        end
     end
     function BG.SetListzhuangbei(self)
         local FB = self.FB

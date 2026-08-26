@@ -146,7 +146,6 @@ function BG.HistoryZhuangBeiUI(FB, t, b, bb, i, ii, scrollFrame)
             BG.LevelText(self)
             BG.IsHave(self)
         end
-        BG.UpdateFilter(self)
     end)
     -- 发送装备到聊天输入框
     bt:SetScript("OnMouseDown", function(self, enter)

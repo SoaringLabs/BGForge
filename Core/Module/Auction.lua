@@ -16,7 +16,6 @@ local HopeMaxn      = ns.HopeMaxn
 local HopeMaxb      = ns.HopeMaxb
 local HopeMaxi      = ns.HopeMaxi
 
-local RealmId       = GetRealmID()
 local player        = BG.playerName
 local IsAddOnLoaded = IsAddOnLoaded or C_AddOns.IsAddOnLoaded
 local LoadAddOn     = LoadAddOn or C_AddOns.LoadAddOn
@@ -1370,31 +1369,18 @@ BG.Init(function()
             end
             if hasHope then break end
         end
-        local isFold
         if hasGZ or hasHope then
             BG.After(0.5, function()
                 f.autoFrame:Show()
             end)
             ShowTooltipGlow(f)
         end
-        -- 过滤
-        f.filter = nil
-        local num = BiaoGe.FilterClassItemDB[RealmId][player].chooseID
-        if num then
-            local name, link, quality, level, _, _, _, _, EquipLoc, Texture, _, typeID, subclassID, bindType = GetItemInfo(f.itemID)
-            if BG.FilterAll(f.itemID, typeID, EquipLoc, subclassID) then
-                f.filter = true
-                if not (f.player and f.player == BG.playerName) then
-                    BGA.aura_env.SetFrameColor(f, 2)
-                end
-                if not hasGZ and not hasHope and not isFold and bindType ~= 2 and BiaoGe.options.autoAuctionFold == 1 then
-                    f.notClick = true
-                    f.hide:Click()
-                    f.notClick = false
-                end
+        if BG.SpecGearFilter then
+            local link = f.link or (f.itemID and ("item:" .. f.itemID))
+            if link then
+                BG.SpecGearFilter.ApplyToCell(f.itemFrame or f, link)
             end
         end
-
         tinsert(BG.auctionLogFrame.auctioning, f.itemID)
         BG.UpdateAuctioning()
         CheckIgnore()

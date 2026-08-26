@@ -96,9 +96,6 @@ BG.Init(function()
   wa.edgeSize = 2.5
   wa.backdropColor = { 0, 0, 0, .6 }
   wa.backdropBorderColor = { 1, 1, 0, 1 }
-  wa.backdropColor_filter = { .5, .5, .5, .5 }
-  wa.backdropBorderColor_filter = { .5, .5, .5, 1 }
-  wa.barColor_filter = { .5, .5, .5, .8 }
   wa.backdropColor_IsMe = { 0, .6, 0, .6 }
   wa.backdropBorderColor_IsMe = { 0, 1, 0, 1 }
   wa.raidRosterInfo = {}
@@ -291,10 +288,6 @@ BG.Init(function()
     backdropColor = wa.backdropColor_IsMe
     borderColor = wa.backdropBorderColor_IsMe
     font = BGA.FontGreen15
-   elseif colorIndex == 2 then
-    backdropColor = wa.backdropColor_filter
-    borderColor = wa.backdropBorderColor_filter
-    font = BGA.FontDis15
    else
     backdropColor = wa.backdropColor
     borderColor = wa.backdropBorderColor
@@ -785,11 +778,7 @@ BG.Init(function()
    else
     bidFrame.topMoneyText:SetText(L["|cffFFD100出价最高者：|r"] .. bidFrame.colorplayer)
     tinsert(bidFrame.logs, { money = money, player = bidFrame.colorplayer, time = isLate })
-    if bidFrame.filter then
-     wa.SetFrameColor(bidFrame, 2)
-    else
-     wa.SetFrameColor(bidFrame, 0)
-    end
+    wa.SetFrameColor(bidFrame, 0)
     if bidFrame.isAuto then
      bidFrame.autoSendDelayFrame.t = 0
      bidFrame.autoSendDelayFrame.delay = wa.AutoSendLate()
@@ -1273,19 +1262,11 @@ BG.Init(function()
    local entry = progress * max
    bidFrame.bar:SetValue(entry)
    if remaining <= 10 then
-    if bidFrame.filter and not wa.IsMe(bidFrame) then
-     bidFrame.bar:SetStatusBarColor(unpack(BGA.aura_env.barColor_filter))
-    else
-     bidFrame.bar:SetStatusBarColor(1, 0, 0, 0.6)
-    end
+    bidFrame.bar:SetStatusBarColor(1, 0, 0, 0.6)
     bidFrame.remainingTime:SetTextColor(1, 0, 0)
     bidFrame.remainingTime:SetFont(font, 20, "OUTLINE")
    else
-    if bidFrame.filter and not wa.IsMe(bidFrame) then
-     bidFrame.bar:SetStatusBarColor(unpack(BGA.aura_env.barColor_filter))
-    else
-     bidFrame.bar:SetStatusBarColor(1, 1, 0, 0.6)
-    end
+    bidFrame.bar:SetStatusBarColor(1, 1, 0, 0.6)
     bidFrame.remainingTime:SetTextColor(1, 1, 1)
     bidFrame.remainingTime:SetFont(font, 15, "OUTLINE")
    end

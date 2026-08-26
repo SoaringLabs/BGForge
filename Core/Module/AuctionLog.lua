@@ -1719,7 +1719,6 @@ BG.Init(function()
 
                 tinsert(BG.auctionLogFrame.buttons, bts)
 
-                BG.UpdateFilter(f, link)
             end
             -- 图标和装等
             do
@@ -1793,6 +1792,10 @@ BG.Init(function()
                 text:SetPoint("TOPRIGHT", -1, -1)
                 text:SetText(L["已交易"])
                 text:SetTextColor(0, 1, 0)
+            end
+
+            if BG.SpecGearFilter then
+                BG.SpecGearFilter.ApplyToCell(bts.frame, link)
             end
         end
     end

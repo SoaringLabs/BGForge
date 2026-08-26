@@ -1486,9 +1486,9 @@ do
     L["职业限定过滤"] = "Profession-specific filtering"
     L["没有%s任一属性的装备会被过滤（武器、饰品、圣物除外）"] = "Gear without any of the 'Lesser Stats' will be filtered (except for weapons, jewelry, and dmg11)."
     L["坦克专属过滤"] = "Tank-specific filters"
-    L["死亡骑士-冰霜/邪恶"] = "Deaths Knight - 'Felcloth Hood' / Evil"
-    L["战士-武器/狂怒"] = "Warrior - Weapon / 'Netherfury Belt"
-    L["牧师-戒律/神圣"] = "Cleric - Ragnarok/Holy"
+    L["死亡骑士-冰霜/邪恶"] = "Death Knight - Frost/Unholy"
+    L["战士-武器/狂怒"] = "Warrior - Arms/Fury"
+    L["牧师-戒律/神圣"] = "Priest - Discipline/Holy"
     L["这里是指法系的副手，不是物理dps的副手武器"] = "This is a reference to lawful sidearms, not physical dps sidearms"
     L["单手剑"] = "One-Handed Swords"
     L["单手斧"] = "One-Handed Axes"
@@ -2969,5 +2969,9 @@ do -- Mail history
     L["距重置 %s"] = "Resets in %s"
     L["资源最后记录：%s"] = "Resources last recorded: %s"
     L["资源尚未记录"] = "Resources not recorded yet"
+    L["不适合该方案的装备会被置灰。"] = "Gear unsuitable for this scheme is dimmed."
+    L["再次点击可关闭装备过滤。"] = "Click again to disable gear filtering."
+    L["点击启用该装备过滤方案。"] = "Click to enable this gear-filter scheme."
+    L["战网账号绑定装备始终保持高亮。"] = "Battle.net Account Bound gear always remains highlighted."
 
 end

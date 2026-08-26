@@ -652,8 +652,6 @@ end
 
 local info = {
     "Hope",
-    "FilterClassItemDB",
-    "filterClassNum",
     "MeetingHorn",
     "MeetingHornWhisper",
     "FBCD",

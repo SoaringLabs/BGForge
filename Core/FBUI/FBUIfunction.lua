@@ -332,7 +332,9 @@ local function OnTextChanged(self)
         BG.IsHave(self)
     end
 
-    BG.UpdateFilter(self)
+    if BG.SpecGearFilter then
+        BG.SpecGearFilter.ApplyToCell(self)
+    end
 
     if bossnum ~= Maxb[FB] and bossnum ~= Maxb[FB] + 1 and bossnum ~= Maxb[FB] + 2 then
         BG.DuiZhangFrame[FB]["boss" .. bossnum]["zhuangbei" .. i]:SetText(itemText)

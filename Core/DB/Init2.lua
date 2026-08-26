@@ -9,7 +9,7 @@ C_ChatInfo.RegisterAddonMessagePrefix("BiaoGe")
 C_ChatInfo.RegisterAddonMessagePrefix("BiaoGe2")
 C_ChatInfo.RegisterAddonMessagePrefix("BiaoGeWorldBoss")
 
-BiaoGeTooltip = CreateFrame("GameTooltip", "BiaoGeTooltip", UIParent, "GameTooltipTemplate")   -- 用于装备过滤功能
+BiaoGeTooltip = CreateFrame("GameTooltip", "BiaoGeTooltip", UIParent, "GameTooltipTemplate")   -- 通用隐藏物品提示读取
 BiaoGeTooltip2 = CreateFrame("GameTooltip", "BiaoGeTooltip2", UIParent, "GameTooltipTemplate") -- 用于装备库
 BiaoGeTooltip2:SetClampedToScreen(false)
 BiaoGeTooltip3 = CreateFrame("GameTooltip", "BiaoGeTooltip3", UIParent, "GameTooltipTemplate") -- 用于装备过期提醒

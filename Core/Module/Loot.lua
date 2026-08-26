@@ -357,7 +357,7 @@ BG.Init(function()
         if BG.GetItemCount(itemID) ~= 0 then
             icon = AddTexture("interface/raidframe/readycheck-ready")
         else
-            icon = BG.LootFilterClassItem(link)
+            icon = ""
         end
         local levelText = ""
         if typeID == 2 or typeID == 4 then
@@ -478,7 +478,7 @@ BG.Init(function()
                         if BG.GetItemCount(link) ~= 0 then
                             icon = AddTexture("interface/raidframe/readycheck-ready")
                         else
-                            icon = BG.LootFilterClassItem(link)
+                            icon = ""
                         end
                         if BiaoGe.options["autolootNotice"] == 1 then
                             BG.FrameLootMsg:AddMessage(icon .. "|cff00BFFF" ..

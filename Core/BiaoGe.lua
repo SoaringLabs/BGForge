@@ -424,9 +424,9 @@ BG.Init(function()
         if BG.DuiZhangUI then securecall(BG.DuiZhangUI) end
         if BG.DuiZhangList then securecall(BG.DuiZhangList) end
         if BG.RoleOverviewUI then securecall(BG.RoleOverviewUI) end
-        if BG.FilterClassItemUI then securecall(BG.FilterClassItemUI) end
         if BG.ItemLibUI then securecall(BG.ItemLibUI) end
         securecall(BG.ClearBiaoGeUI)
+        if BG.SpecGearFilter then securecall(BG.SpecGearFilter.CreateUI) end
     end
     ----------设置----------
     do
@@ -803,7 +803,9 @@ BG.Init(function()
             BiaoGe.FB = FB
             BG.FrameDongHua()
 
-            BG.UpdateAllFilter()
+            if BG.SpecGearFilter then
+                BG.SpecGearFilter.RefreshCurrentTable()
+            end
             BG.UpdateHopeFrame_IsLooted_All()
 
             -- 装备库 (Lite: removed)

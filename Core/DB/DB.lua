@@ -28,7 +28,6 @@ do
     BG.FBfromBossPosition = {}
     BG.Movetable = {}
     BG.options = {}
-    BG.itemCaches = {}
     BG.dropDown = LibBG:Create_UIDropDownMenu(nil, UIParent)
     BG.onEnterAlpha = 0.1
     BG.highLightAlpha = 0.2
@@ -1184,21 +1183,6 @@ BG.Init(function()
     local name = "moLing"
     BG.options[name .. "reset"] = 1
     BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
-
-    -- 高亮天赋装备
-    if not BiaoGe.filterClassNum then
-        BiaoGe.filterClassNum = {}
-    end
-    if not BiaoGe.filterClassNum[realmID] then
-        BiaoGe.filterClassNum[realmID] = {}
-    end
-    if not BiaoGe.filterClassNum[realmID][player] then
-        BiaoGe.filterClassNum[realmID][player] = 0
-    end
-    if BiaoGeA and BiaoGeA.filterClassNum then
-        BiaoGe.filterClassNum[realmID][player] = BiaoGeA.filterClassNum
-        BiaoGeA.filterClassNum = nil
-    end
 
     -- 心愿清单
     if not BiaoGe.Hope then
