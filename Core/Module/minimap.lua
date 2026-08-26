@@ -28,10 +28,16 @@ function plugin:OnClick(button) --function plugin.OnClick(self, button)
     BG.PlaySound(1)
 end
 
-function plugin:OnEnter(button)
+function plugin.OnEnter(button)
+    if BG.ShowRaidLockoutHover then
+        BG.ShowRaidLockoutHover(button)
+    end
 end
 
-function plugin:OnLeave(button)
+function plugin.OnLeave(button)
+    if BG.HideRaidLockoutHover then
+        BG.HideRaidLockoutHover()
+    end
 end
 
 local frame = CreateFrame("Frame")

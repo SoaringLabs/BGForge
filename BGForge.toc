@@ -1,10 +1,9 @@
 ## Interface: 11508, 11509, 20506, 30405, 38002, 40402, 50503, 50504, 50505, 120005, 120007, 120100
-## Title: <BGForge> |cff00BFFFBGLite 增强版|r
+## Title: |cff00BFFF<BGForge> 团本事务台|r
 ## Notes: 基于 BGLite 开发的团本拍卖增强插件。命令：/bgf、/bglite 或 /gbg
 ## IconTexture: Interface\AddOns\BGForge\Media\icon\icon.tga
 ## Author: Soaring Labs
 ## X-Original-Addon: BGLite
-## X-Original-Author: CQZS (Lite)
 ## X-Upstream-Version: 2.4.0
 ## LoadOnDemand: 0
 ## SavedVariables: BiaoGe
@@ -20,6 +19,7 @@ Core\DB\DB.xml
 Core\function1.lua
 Core\function2.lua
 Core\FBUI\FBUI.xml
+Core\Module\RaidLockoutOverview.lua
 
 Core\Module\Receive.lua
 Core\Module\DuiZhang.lua

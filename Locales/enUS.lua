@@ -14,7 +14,6 @@ do --英语说明书
         "The BGLite base was security-cleaned and streamlined by the World of Warcraft China operations team; BGForge continues development on that foundation.",
         "This release keeps the core auction and accounting features and will be expanded gradually with safety and stability in mind.",
         "BGForge developer: Soaring Labs",
-        "Original base author: Cang**Shuang",
         " ",
         "|cff00BFFFCommands:|r",
         "|cffFFFFFF-Open: |r/bgf, /bglite, or /gbg; you can also bind a key in the game settings.",
@@ -2925,5 +2924,29 @@ do -- Mail history
     L["邮寄金额：%s %s"] = "Amount: %s %s"
     L["金额不能为负数！"] = "The amount cannot be negative!"
     L["（只会导入前40个名字）"] = "(Only the first 40 names will be imported)"
+
+    -- Current-character raid lockouts (session data only)
+    L["尚未收到当前角色的团本锁定数据。"] = "No current-character raid lockout data has been received yet."
+    L["未检测到团本锁定"] = "No raid lockout detected"
+    L["已击杀"] = "Defeated"
+    L["重置时间"] = "Reset"
+    L["正在刷新当前角色的团本锁定…"] = "Refreshing current-character raid lockouts…"
+    L["刷新时间：%s"] = "Refreshed: %s"
+    L["打开/关闭团本CD总览"] = "Toggle Raid Lockout Overview"
+    L["所有角色团本锁定总览"] = "All Character Raid Lockouts"
+    L["< 角色团本CD总览 >"] = "< Raid Lockout Overview >"
+    L["汇总当前服务器下已在本机记录的角色本周团本进度"] = "Weekly raid progress for characters recorded locally on this realm."
+    L["角色列表"] = "Character List"
+    L["%d个角色"] = "%d characters"
+    L["查看团本CD"] = "View Raid Lockouts"
+    L["团本CD展示"] = "Raid Lockouts"
+    L["团本CD展示设置"] = "Raid Lockout Settings"
+    L["勾选要在小界面和大界面中展示的副本。"] = "Choose which raids appear in the compact and detailed views."
+    L["已记录角色（%d）"] = "Recorded Characters (%d)"
+    L["暂无已记录角色"] = "No recorded characters"
+    L["这里只删除团本CD列表记录，不影响拍卖、账本或其他插件数据。"] = "Deleting here only removes the local raid-lockout entry; auction and ledger data are unaffected."
+    L["确认删除%s的本机团本CD记录？"] = "Delete the local raid-lockout record for %s?"
+    L["该页面已预留，后续将加入角色列表、显示方式等设置。"] = "This page is reserved for character-list and display settings."
+    L["角色列表（%d）"] = "Characters (%d)"
 
 end

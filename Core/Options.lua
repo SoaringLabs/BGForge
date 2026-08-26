@@ -38,7 +38,14 @@ function BG.OpenOption()
     Settings.OpenToCategory(BG.optionsID)
 end
 
-BG.optionsName = "BGForge-团本拍卖增强版"
+function BG.OpenRaidLockoutOptions()
+    BG.OpenOption()
+    if BG.ButtonOptions_raidLockout then
+        BG.ButtonOptions_raidLockout:Click()
+    end
+end
+
+BG.optionsName = "<BGForge> 团本事务台"
 BG.Init(function()
     local main = CreateFrame("Frame", nil, UIParent)
     do
@@ -47,7 +54,7 @@ BG.Init(function()
         BG.AddOption(main)
         local t = main:CreateFontString()
         t:SetFont(BIAOGE_TEXT_FONT, 16, "OUTLINE")
-        t:SetText("|cff" .. "00BFFF" .. "BGForge-团本拍卖增强版" .. "|r")
+        t:SetText("|cff" .. "00BFFF" .. BG.optionsName .. "|r")
         t:SetPoint("TOPLEFT", main, 15, 0)
         local top = t
         local t = main:CreateFontString()
@@ -132,7 +139,7 @@ BG.Init(function()
 
     -- 子选项
     local Frames = {}
-    local biaoge, autoAuction, roleOverview, boss, map, others, config
+    local biaoge, autoAuction, raidLockout, roleOverview, boss, map, others, config
     do
         local last
 
@@ -181,6 +188,7 @@ BG.Init(function()
 
         biaoge = BG.OptionsCreateTab("Options_biaoge", L["表格"])
         autoAuction = BG.OptionsCreateTab("Options_autoAuction", L["自动拍卖"])
+        raidLockout = BG.OptionsCreateTab("Options_raidLockout", L["团本CD展示"])
         -- Lite: 恢复「其他功能」页（2026-08-24 按 BiaoGe v2.3.5 还原，仅保留有模块支撑的配置项）
         others = BG.OptionsCreateTab("Options_others", L["其他功能"])
 
@@ -193,6 +201,157 @@ BG.Init(function()
                 BG.FrameOptions_biaoge:GetParent():SetEnabled(false)
             end
         end)
+    end
+
+    -- 团本 CD 展示
+    do
+        raidLockout:SetSize(1, 320)
+
+        local title = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        title:SetPoint("TOPLEFT", 15, -15)
+        title:SetText(L["团本CD展示设置"])
+        title:SetTextColor(0, 0.75, 1)
+
+        local text = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -14)
+        text:SetWidth(700)
+        text:SetJustifyH("LEFT")
+        text:SetText(L["勾选要在小界面和大界面中展示的副本。"])
+
+        local choices = BG.GetRaidLockoutDisplayChoices and BG.GetRaidLockoutDisplayChoices() or {}
+        local columnWidth = 175
+        for index, choice in ipairs(choices) do
+            local optionKey = choice.optionKey
+            local raidName = choice.name
+            if BiaoGe.options[optionKey] == nil then
+                BiaoGe.options[optionKey] = 1
+            end
+
+            local checkbox = CreateFrame("CheckButton", nil, raidLockout, "ChatConfigCheckButtonTemplate")
+            local column = (index - 1) % 4
+            local row = floor((index - 1) / 4)
+            checkbox:SetPoint("TOPLEFT", 15 + column * columnWidth, -72 - row * 34)
+            checkbox:SetSize(28, 28)
+            checkbox.Text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            checkbox.Text:SetText(raidName)
+            checkbox.Text:SetWordWrap(false)
+            checkbox.Text:SetWidth(columnWidth - 35)
+            checkbox:SetHitRectInsets(0, -(columnWidth - 35), 0, 0)
+            checkbox:SetChecked(BiaoGe.options[optionKey] == 1)
+            checkbox:SetScript("OnShow", function(self)
+                self:SetChecked(BiaoGe.options[optionKey] == 1)
+            end)
+            checkbox:SetScript("OnClick", function(self)
+                BiaoGe.options[optionKey] = self:GetChecked() and 1 or 0
+                if BG.RefreshRaidLockoutDisplays then
+                    BG.RefreshRaidLockoutDisplays()
+                end
+                BG.PlaySound(1)
+            end)
+        end
+
+        local line = raidLockout:CreateTexture(nil, "ARTWORK")
+        line:SetColorTexture(0.5, 0.5, 0.5, 0.7)
+        line:SetPoint("TOPLEFT", 15, -184)
+        line:SetSize(700, 1)
+
+        local characterTitle = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        characterTitle:SetPoint("TOPLEFT", 15, -202)
+        characterTitle:SetTextColor(0, 0.75, 1)
+
+        local characterHelp = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        characterHelp:SetPoint("TOPLEFT", characterTitle, "BOTTOMLEFT", 0, -8)
+        characterHelp:SetWidth(700)
+        characterHelp:SetJustifyH("LEFT")
+        characterHelp:SetText(L["这里只删除团本CD列表记录，不影响拍卖、账本或其他插件数据。"])
+
+        local emptyText = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        emptyText:SetPoint("TOPLEFT", 15, -258)
+        emptyText:SetText(L["暂无已记录角色"])
+        emptyText:SetTextColor(0.5, 0.5, 0.5)
+
+        local characterRows = {}
+        local pendingDelete
+
+        if not StaticPopupDialogs["BGFORGE_DELETE_RAID_LOCKOUT_CHARACTER"] then
+            StaticPopupDialogs["BGFORGE_DELETE_RAID_LOCKOUT_CHARACTER"] = {
+                text = L["确认删除%s的本机团本CD记录？"],
+                button1 = L["是"],
+                button2 = L["否"],
+                OnAccept = function()
+                    local target = pendingDelete
+                    pendingDelete = nil
+                    if target and BG.DeleteRaidLockoutCharacter then
+                        BG.DeleteRaidLockoutCharacter(target.realmID, target.name)
+                    end
+                end,
+                OnCancel = function()
+                    pendingDelete = nil
+                end,
+                timeout = 0,
+                whileDead = true,
+                hideOnEscape = true,
+                showAlert = true,
+            }
+        end
+
+        local function EnsureCharacterRow(index)
+            if characterRows[index] then
+                return characterRows[index]
+            end
+
+            local row = CreateFrame("Frame", nil, raidLockout)
+            row:SetSize(430, 28)
+            row:SetPoint("TOPLEFT", 15, -250 - (index - 1) * 30)
+
+            local name = row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+            name:SetPoint("LEFT", 4, 0)
+            name:SetWidth(320)
+            name:SetJustifyH("LEFT")
+            name:SetWordWrap(false)
+            row.name = name
+
+            local deleteButton = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            deleteButton:SetSize(64, 22)
+            deleteButton:SetPoint("RIGHT")
+            deleteButton:SetText(DELETE)
+            deleteButton:SetScript("OnClick", function(self)
+                pendingDelete = {
+                    realmID = self.realmID,
+                    name = self.characterName,
+                }
+                StaticPopup_Show("BGFORGE_DELETE_RAID_LOCKOUT_CHARACTER", self.displayName)
+            end)
+            row.deleteButton = deleteButton
+
+            characterRows[index] = row
+            return row
+        end
+
+        local function UpdateCharacterManager()
+            local characters = BG.GetRaidLockoutStoredCharacters
+                and BG.GetRaidLockoutStoredCharacters(GetRealmID()) or {}
+            characterTitle:SetFormattedText(L["已记录角色（%d）"], #characters)
+            emptyText:SetShown(#characters == 0)
+
+            for index, character in ipairs(characters) do
+                local row = EnsureCharacterRow(index)
+                row:Show()
+                row.name:SetText(character.displayName or character.name)
+                row.deleteButton.realmID = GetRealmID()
+                row.deleteButton.characterName = character.name
+                row.deleteButton.displayName = character.displayName or character.name
+            end
+
+            for index = #characters + 1, #characterRows do
+                characterRows[index]:Hide()
+            end
+            raidLockout:SetHeight(max(320, 278 + #characters * 30))
+        end
+
+        BG.RefreshRaidLockoutCharacterOptions = UpdateCharacterManager
+        raidLockout:HookScript("OnShow", UpdateCharacterManager)
+        UpdateCharacterManager()
     end
 
     -- 模板

@@ -103,6 +103,10 @@ BG.Init(function()
         bt:SetScript("OnLeave", GameTooltip_Hide)
     end
 
+    if BG.CreateRaidLockoutMainMenuButton then
+        BG.CreateRaidLockoutMainMenuButton(bt)
+    end
+
     local frame, child, scroll
     local CancelAllChoose
     local drag = {}

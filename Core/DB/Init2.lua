@@ -27,7 +27,7 @@ end
 -- 游戏按键设置
 BINDING_HEADER_BIAOGE     = "BGForge"
 BINDING_NAME_BIAOGE       = L["打开/关闭表格"]
-BINDING_NAME_RoleOverview = L["打开/关闭角色总览"]
+BINDING_NAME_RoleOverview = L["打开/关闭团本CD总览"]
 
 -- 已移除 BG.blackListPlayer 空壳（原为一个空表 + 一个空 if 分支）。
 -- 它没有任何赋值来源、没有任何消费者，唯一作用是让阅读者/审查者误以为

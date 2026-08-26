@@ -1596,10 +1596,14 @@ BG.Init(function()
             BG.PlaySound(1)
         end)
         f:SetScript("OnEnter", function(self)
+            if self.isMoving then return end
+            if BG.ShowRaidLockoutHover then
+                BG.ShowRaidLockoutHover(self)
+            end
         end)
         f:SetScript("OnLeave", function(self)
-            if BG.FBCDFrame and not BG.FBCDFrame.click then
-                BG.FBCDFrame:Hide()
+            if BG.HideRaidLockoutHover then
+                BG.HideRaidLockoutHover()
             end
             GameTooltip:Hide()
         end)
@@ -2030,7 +2034,7 @@ BG.Init2(function()
     end
     SLASH_BIAOGEOPTIONS1 = "/bgo"
 
-    -- 角色总览已删除
+    -- 本机多角色团本锁定总览由 RaidLockoutOverview.lua 注册（/bgr）
     -- 站位图已删除
     end)
 end)

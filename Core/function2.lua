@@ -83,27 +83,8 @@ do
     end
 
     function BG.SetFBCD(frame, type, toggle)
-        if not BG.MainFrame then
-            return
-        end
-        -- type='minimap' = minimap icon click, toggle=true = slash command
-        if type == 'minimap' then
-            toggle = not BG.MainFrame:IsVisible()
-        end
-        if toggle then
-            if BG.MainFrame:IsVisible() then
-                BG.MainFrame:Hide()
-            else
-                -- Ensure minimum size
-                if (BG.MainFrame:GetWidth() or 0) < 100 then
-                    BG.MainFrame:SetWidth(1100)
-                    BG.MainFrame:SetHeight(700)
-                end
-                BG.MainFrame:Show()
-                if BG.FBMainFrame and not BG.FBMainFrame:IsVisible() then
-                    BG.ClickTabButton(BG.FBMainFrameTabNum)
-                end
-            end
+        if toggle and BG.ToggleRaidLockoutOverview then
+            BG.ToggleRaidLockoutOverview()
         end
     end
 
