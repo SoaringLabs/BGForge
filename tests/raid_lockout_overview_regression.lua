@@ -97,7 +97,10 @@ local function ResetEnvironment()
         end,
     }
     _G.BG = BG
-    local L = setmetatable({}, {
+    local L = setmetatable({
+        ["工程学"] = "Engineering",
+        ["采矿"] = "Mining",
+    }, {
         __index = function(_, key)
             return key
         end,
