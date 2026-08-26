@@ -8,6 +8,8 @@ BGForge 是由 **Soaring Labs** 开发、基于 **BGLite 2.4.0** 的《魔兽世
 
 当前版本：`0.1.0`
 
+版本变更参见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 当前状态
 
 当前版本首先完成了 BGForge 的独立识别和基础品牌调整：
