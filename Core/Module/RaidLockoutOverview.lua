@@ -26,6 +26,82 @@ end
 local RAID_OPTION_PREFIX = "raidLockoutShow_"
 local DATA_VERSION = 1
 local DATA_KEY = "BGForgeRaidLockouts"
+local TITAN_EMBER_CURRENCY_ID = 3403
+local TITAN_SHARD_CURRENCY_ID = 3406
+
+local SMALL_UI = {
+    padding = 10,
+    topBarHeight = 36,
+    nameWidth = 184,
+    rowHeight = 24,
+    raidHeaderHeight = 30,
+    sectionGap = 8,
+    resourceGroupHeight = 22,
+    resourceSubHeaderHeight = 22,
+    goldWidth = 100,
+    emberWidth = 100,
+    shardWidth = 100,
+    footerHeight = 30,
+}
+
+local currencyIconCache = {}
+
+local function GetCoinIconFile()
+    if C_CurrencyInfo and C_CurrencyInfo.GetCoinIcon then
+        local iconFileID = C_CurrencyInfo.GetCoinIcon(10000)
+        if iconFileID then
+            return iconFileID
+        end
+    end
+    return "Interface\\MoneyFrame\\UI-GoldIcon"
+end
+
+local function GetCurrencyIconFile(currencyID, fallback)
+    if currencyIconCache[currencyID] then
+        return currencyIconCache[currencyID]
+    end
+    if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+        local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
+        if info and info.iconFileID then
+            currencyIconCache[currencyID] = info.iconFileID
+            return info.iconFileID
+        end
+    end
+    return fallback
+end
+
+local function FormatResourceNumber(amount)
+    if amount == nil then
+        return ""
+    end
+    return tostring(BG.FormatNumber(amount, 0))
+end
+
+local function GetResourceIconMarkup(iconFile)
+    if not iconFile then
+        return ""
+    end
+    return " |T" .. iconFile .. ":13:13:0:0:64:64:4:60:4:60|t"
+end
+
+local function FormatResourceAmount(amount, iconFile)
+    return FormatResourceNumber(amount) .. GetResourceIconMarkup(iconFile)
+end
+
+local COLOR = {
+    panel = { 0.015, 0.055, 0.075, 0.98 },
+    panelTop = { 0.02, 0.075, 0.095, 0.98 },
+    header = { 0.025, 0.105, 0.13, 0.98 },
+    headerStrong = { 0.035, 0.13, 0.155, 0.98 },
+    rowOdd = { 0.018, 0.07, 0.09, 0.9 },
+    rowEven = { 0.025, 0.095, 0.115, 0.9 },
+    current = { 0.24, 0.18, 0.05, 0.7 },
+    gold = { 0.84, 0.55, 0.18, 0.95 },
+    goldDim = { 0.42, 0.29, 0.13, 0.82 },
+    grid = { 0.34, 0.25, 0.15, 0.72 },
+    complete = { 0.1, 0.31, 0.14, 0.62 },
+    partial = { 0.36, 0.19, 0.035, 0.48 },
+}
 
 local function GetRaidOptionKey(raidID)
     return RAID_OPTION_PREFIX .. raidID
@@ -58,6 +134,8 @@ local deletedThisSession = {}
 
 local overviewFrame
 local hoverFrame
+local hoverAnchor
+local hoverHideSerial = 0
 local updateOverviewFrame
 local updateHoverFrame
 
@@ -210,6 +288,67 @@ local function RefreshCurrentCharacterIdentity()
     currentCharacter.specIndex = GetCurrentTalentIndex()
 end
 
+local function GetOrCreateCurrentCharacterStore()
+    RefreshCurrentCharacterIdentity()
+
+    local realmID = GetCurrentRealmID()
+    local characterName = currentCharacter.name
+    if deletedThisSession[GetCharacterKey(realmID, characterName)] then
+        return
+    end
+
+    local realm = GetRealmStore(realmID, true)
+    local stored = realm.characters[characterName]
+    if type(stored) ~= "table" then
+        stored = {
+            name = characterName,
+            order = realm.nextOrder,
+            instances = {},
+        }
+        realm.nextOrder = realm.nextOrder + 1
+        realm.characters[characterName] = stored
+    end
+
+    stored.name = characterName
+    stored.classFile = currentCharacter.classFile
+    stored.specIndex = currentCharacter.specIndex
+    stored.itemLevel = currentCharacter.itemLevel
+    stored.instances = type(stored.instances) == "table" and stored.instances or {}
+    return stored
+end
+
+local function CaptureCurrentResources()
+    local stored = GetOrCreateCurrentCharacterStore()
+    if not stored then
+        return
+    end
+
+    stored.money = GetMoney and GetMoney() or stored.money
+    if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+        local info = C_CurrencyInfo.GetCurrencyInfo(TITAN_EMBER_CURRENCY_ID)
+        -- 登录早期可能暂时拿不到货币资料；此时保留旧快照，不能用 0 覆盖。
+        if info then
+            stored.titanEmbers = info.quantity
+            stored.titanEmbersEarnedThisWeek = info.quantityEarnedThisWeek
+            stored.titanEmbersWeeklyMax = info.maxWeeklyQuantity
+            stored.titanEmberIconFileID = info.iconFileID
+            currencyIconCache[TITAN_EMBER_CURRENCY_ID] = info.iconFileID
+        end
+
+        info = C_CurrencyInfo.GetCurrencyInfo(TITAN_SHARD_CURRENCY_ID)
+        if info then
+            stored.titanShards = info.quantity
+            stored.titanShardIconFileID = info.iconFileID
+            currencyIconCache[TITAN_SHARD_CURRENCY_ID] = info.iconFileID
+        end
+    end
+    stored.resourcesUpdatedAt = GetServerTime()
+
+    if updateHoverFrame then
+        updateHoverFrame()
+    end
+end
+
 local function GetCharacterSpecIcon(character)
     local classIcons = BG.talentIcon and BG.talentIcon[character.classFile]
     return classIcons and character.specIndex and classIcons[character.specIndex] or nil
@@ -243,6 +382,14 @@ local function BuildCharacterRows(realmID)
                     itemLevel = stored.itemLevel,
                     order = tonumber(stored.order) or math.huge,
                     lastRecordedAt = stored.lastRecordedAt,
+                    money = tonumber(stored.money),
+                    titanEmbers = tonumber(stored.titanEmbers),
+                    titanEmbersEarnedThisWeek = tonumber(stored.titanEmbersEarnedThisWeek),
+                    titanEmbersWeeklyMax = tonumber(stored.titanEmbersWeeklyMax),
+                    titanEmberIconFileID = stored.titanEmberIconFileID,
+                    titanShards = tonumber(stored.titanShards),
+                    titanShardIconFileID = stored.titanShardIconFileID,
+                    resourcesUpdatedAt = tonumber(stored.resourcesUpdatedAt),
                     instances = type(stored.instances) == "table" and stored.instances or {},
                     ready = true,
                     isCurrent = realmID == currentRealmID and name == currentName,
@@ -299,27 +446,71 @@ local function GetPrimaryLockout(lockouts)
     return primary
 end
 
-local function UpdateStatusDisplay(status, character, lockout, compact)
+local function UpdateStatusDisplay(status, character, lockout, compact, blankWhenAvailable)
     status.check:Hide()
+
+    if status.background then
+        if status.baseColor then
+            status.background:SetColorTexture(unpack(status.baseColor))
+        else
+            status.background:SetColorTexture(0, 0, 0, 0)
+        end
+    end
 
     if not character.ready then
         status.text:SetText("…")
         status.text:SetTextColor(0.55, 0.55, 0.55)
     elseif not lockout then
-        status.text:SetText("—")
+        status.text:SetText(blankWhenAvailable and "" or "—")
         status.text:SetTextColor(0.38, 0.38, 0.38)
-    elseif compact or lockout.numEncounters == 0 or lockout.killedCount >= lockout.numEncounters then
+    elseif compact then
+        status.text:SetText("")
+        if (lockout.killedCount or 0) > 0 then
+            status.check:Show()
+            if status.background then
+                status.background:SetColorTexture(unpack(COLOR.complete))
+            end
+        end
+    elseif lockout.numEncounters == 0 or lockout.killedCount >= lockout.numEncounters then
         status.text:SetText("")
         status.check:Show()
+        if status.background then
+            status.background:SetColorTexture(unpack(COLOR.complete))
+        end
     else
         status.text:SetFormattedText("%d/%d", lockout.killedCount, lockout.numEncounters)
-        status.text:SetTextColor(1, 0.82, 0)
+        if status.background then
+            status.text:SetTextColor(1, 0.68, 0.18)
+            status.background:SetColorTexture(unpack(COLOR.partial))
+        else
+            -- 大界面沿用原有颜色；本轮只重构小界面。
+            status.text:SetTextColor(1, 0.82, 0)
+        end
     end
 end
 
-local function CreateStatusDisplay(parent, width, height, checkSize, fontSize)
-    local status = CreateFrame("Frame", nil, parent)
+local function CreateStatusDisplay(parent, width, height, checkSize, fontSize, styled)
+    local status = CreateFrame("Frame", nil, parent, styled and "BackdropTemplate" or nil)
     status:SetSize(width, height)
+
+    if styled then
+        local background = status:CreateTexture(nil, "BACKGROUND")
+        background:SetAllPoints()
+        background:SetColorTexture(0, 0, 0, 0)
+        status.background = background
+
+        local rightBorder = status:CreateTexture(nil, "BORDER")
+        rightBorder:SetPoint("TOPRIGHT")
+        rightBorder:SetPoint("BOTTOMRIGHT")
+        rightBorder:SetWidth(1)
+        rightBorder:SetColorTexture(unpack(COLOR.grid))
+
+        local bottomBorder = status:CreateTexture(nil, "BORDER")
+        bottomBorder:SetPoint("BOTTOMLEFT")
+        bottomBorder:SetPoint("BOTTOMRIGHT")
+        bottomBorder:SetHeight(1)
+        bottomBorder:SetColorTexture(unpack(COLOR.grid))
+    end
 
     local text = status:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     text:SetAllPoints()
@@ -387,24 +578,8 @@ local function CaptureRaidInfo()
     currentCharacter.refreshing = false
     currentCharacter.updatedAt = date("%H:%M:%S")
 
-    local realmID = GetCurrentRealmID()
-    local characterName = currentCharacter.name
-    local characterKey = GetCharacterKey(realmID, characterName)
-    if not deletedThisSession[characterKey] then
-        local realm = GetRealmStore(realmID, true)
-        local stored = realm.characters[characterName]
-        if type(stored) ~= "table" then
-            stored = {
-                name = characterName,
-                order = realm.nextOrder,
-            }
-            realm.nextOrder = realm.nextOrder + 1
-            realm.characters[characterName] = stored
-        end
-        stored.name = characterName
-        stored.classFile = currentCharacter.classFile
-        stored.specIndex = currentCharacter.specIndex
-        stored.itemLevel = currentCharacter.itemLevel
+    local stored = GetOrCreateCurrentCharacterStore()
+    if stored then
         stored.lastRecordedAt = capturedAt
         stored.instances = instances
     end
@@ -684,66 +859,261 @@ local function CreateHoverFrame()
         return
     end
 
-    local nameWidth = 130
-    local rowHeight = 24
-    local raidsWidth = 0
-    for _, raid in ipairs(RAIDS) do
-        raidsWidth = raidsWidth + raid.compactWidth
-    end
-    local width = 30 + nameWidth + raidsWidth
+    local ui = SMALL_UI
     local headers = {}
     local rows = {}
+    local width = 720
+    local resourceTop = 0
+    local resourceRowsTop = 0
+
+    local function CreateTableCell(parent, backgroundColor, borders)
+        local cell = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        cell:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+        })
+        cell:SetBackdropColor(unpack(backgroundColor or COLOR.rowOdd))
+
+        borders = borders or {}
+        local function AddVerticalBorder(point)
+            local line = cell:CreateTexture(nil, "BORDER")
+            line:SetPoint("TOP" .. point)
+            line:SetPoint("BOTTOM" .. point)
+            line:SetWidth(1)
+            line:SetColorTexture(unpack(COLOR.grid))
+        end
+        local function AddHorizontalBorder(point)
+            local line = cell:CreateTexture(nil, "BORDER")
+            line:SetPoint(point .. "LEFT")
+            line:SetPoint(point .. "RIGHT")
+            line:SetHeight(1)
+            line:SetColorTexture(unpack(COLOR.grid))
+        end
+
+        if borders.left then
+            AddVerticalBorder("LEFT")
+        end
+        if borders.top then
+            AddHorizontalBorder("TOP")
+        end
+        if borders.right ~= false then
+            AddVerticalBorder("RIGHT")
+        end
+        if borders.bottom ~= false then
+            AddHorizontalBorder("BOTTOM")
+        end
+        return cell
+    end
+
+    local function CreateCellText(cell, fontObject, size, color, justify)
+        local text = cell:CreateFontString(nil, "ARTWORK", fontObject or "GameFontNormal")
+        text:SetPoint("LEFT", 7, 0)
+        text:SetPoint("RIGHT", -7, 0)
+        text:SetJustifyH(justify or "LEFT")
+        text:SetWordWrap(false)
+        if size then
+            text:SetFont(BIAOGE_TEXT_FONT, size, "OUTLINE")
+        end
+        if color then
+            text:SetTextColor(unpack(color))
+        end
+        return text
+    end
+
+    local function SetCellColor(cell, color)
+        cell:SetBackdropColor(unpack(color))
+    end
+
+    local function ShowButtonTooltip(button)
+        GameTooltip:SetOwner(button, "ANCHOR_TOP")
+        GameTooltip:SetText(button.tooltipText, 1, 0.82, 0)
+        GameTooltip:Show()
+    end
+
+    local function CreateIconButton(texture, tooltipText)
+        local button = CreateFrame("Button", nil, hoverFrame, "BackdropTemplate")
+        button:SetSize(23, 23)
+        button:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        button:SetBackdropColor(0.04, 0.09, 0.1, 0.96)
+        button:SetBackdropBorderColor(unpack(COLOR.goldDim))
+
+        local icon = button:CreateTexture(nil, "ARTWORK")
+        icon:SetPoint("TOPLEFT", 3, -3)
+        icon:SetPoint("BOTTOMRIGHT", -3, 3)
+        icon:SetTexture(texture)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        icon:SetVertexColor(0.95, 0.67, 0.28)
+        button.icon = icon
+
+        local highlight = button:CreateTexture(nil, "HIGHLIGHT")
+        highlight:SetPoint("TOPLEFT", 2, -2)
+        highlight:SetPoint("BOTTOMRIGHT", -2, 2)
+        highlight:SetColorTexture(1, 0.72, 0.25, 0.18)
+        button.tooltipText = tooltipText
+        button:SetScript("OnEnter", ShowButtonTooltip)
+        button:SetScript("OnLeave", GameTooltip_Hide)
+        return button
+    end
 
     hoverFrame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    hoverFrame:SetSize(width, 98)
+    hoverFrame:SetSize(width, 540)
     hoverFrame:SetFrameStrata("FULLSCREEN_DIALOG")
     hoverFrame:SetClampedToScreen(true)
-    hoverFrame:EnableMouse(false)
+    hoverFrame:EnableMouse(true)
     hoverFrame:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        edgeSize = 14,
-        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+        bgFile = "Interface\\Buttons\\WHITE8X8",
     })
-    hoverFrame:SetBackdropColor(0.02, 0.02, 0.03, 0.94)
-    hoverFrame:SetBackdropBorderColor(0, 0.75, 1, 0.9)
+    hoverFrame:SetBackdropColor(unpack(COLOR.panel))
     hoverFrame:Hide()
 
-    local title = hoverFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    title:SetPoint("TOPLEFT", 15, -11)
-    title:SetJustifyH("LEFT")
-    title:SetWordWrap(false)
-    title:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
-    title:SetText(L["< 角色团本CD总览 >"])
-    title:SetTextColor(0.2, 1, 0.2)
+    local innerBorder = CreateFrame("Frame", nil, hoverFrame, "BackdropTemplate")
+    innerBorder:SetPoint("TOPLEFT", 6, -6)
+    innerBorder:SetPoint("BOTTOMRIGHT", -6, 6)
+    innerBorder:SetBackdrop({
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    innerBorder:SetBackdropBorderColor(0.3, 0.22, 0.12, 0.82)
 
-    local resetText = hoverFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    resetText:SetPoint("LEFT", title, "RIGHT", 6, 0)
-    resetText:SetJustifyH("LEFT")
+    local topBar = CreateTableCell(hoverFrame, COLOR.panelTop, { left = true, top = true })
+    topBar:SetPoint("TOPLEFT", ui.padding, -ui.padding)
+    topBar:SetSize(width - ui.padding * 2, ui.topBarHeight)
+
+    local logo = topBar:CreateTexture(nil, "ARTWORK")
+    logo:SetSize(22, 22)
+    logo:SetPoint("LEFT", 8, 0)
+    logo:SetTexture("Interface\\AddOns\\BGForge\\Media\\icon\\icon.tga")
+
+    local title = topBar:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("LEFT", logo, "RIGHT", 7, 0)
+    title:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+    title:SetText(L["BGForge · 全角色总览"])
+    title:SetTextColor(unpack(COLOR.gold))
+
+    local close = CreateIconButton("Interface\\Buttons\\UI-Panel-MinimizeButton-Up", L["关闭"])
+    close:SetPoint("TOPRIGHT", -ui.padding - 6, -ui.padding - 6)
+    close:SetScript("OnClick", function()
+        hoverFrame:Hide()
+        GameTooltip:Hide()
+    end)
+
+    local settings = CreateIconButton("Interface\\Icons\\Trade_Engineering", L["设置"])
+    settings:SetPoint("RIGHT", close, "LEFT", -5, 0)
+    settings:SetScript("OnClick", function()
+        hoverFrame:Hide()
+        GameTooltip:Hide()
+        if BG.OpenRaidLockoutOptions then
+            BG.OpenRaidLockoutOptions()
+        end
+    end)
+
+    local refresh = CreateIconButton("Interface\\Buttons\\UI-RotationRight-Button-Up", REFRESH)
+    refresh:SetPoint("RIGHT", settings, "LEFT", -5, 0)
+    refresh.icon:SetTexCoord(0, 1, 0, 1)
+    refresh:SetScript("OnClick", function()
+        CaptureCurrentResources()
+        RequestCurrentRaidInfo()
+        BG.PlaySound(1)
+    end)
+
+    local resetText = topBar:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    resetText:SetPoint("RIGHT", refresh, "LEFT", -10, 0)
+    resetText:SetWidth(245)
+    resetText:SetJustifyH("RIGHT")
     resetText:SetWordWrap(false)
     resetText:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
-    resetText:SetTextColor(0.72, 0.72, 0.72)
+    resetText:SetTextColor(0.72, 0.66, 0.55)
 
-    local characterCount = hoverFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    characterCount:SetPoint("TOPLEFT", 15, -39)
-    characterCount:SetWidth(nameWidth)
-    characterCount:SetJustifyH("LEFT")
-    characterCount:SetWordWrap(false)
-    characterCount:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
-    characterCount:SetTextColor(0, 0.75, 1)
+    local raidTitleCell = CreateTableCell(hoverFrame, COLOR.headerStrong, { left = true })
+    raidTitleCell:SetPoint("TOPLEFT", ui.padding, -(ui.padding + ui.topBarHeight))
+    raidTitleCell:SetSize(ui.nameWidth, ui.raidHeaderHeight)
+    local raidTitleAccent = raidTitleCell:CreateTexture(nil, "ARTWORK")
+    raidTitleAccent:SetPoint("TOPLEFT", 5, -5)
+    raidTitleAccent:SetPoint("BOTTOMLEFT", 5, 5)
+    raidTitleAccent:SetWidth(3)
+    raidTitleAccent:SetColorTexture(unpack(COLOR.gold))
+    local raidTitle = CreateCellText(raidTitleCell, "GameFontNormal", 13, COLOR.gold, "LEFT")
+    raidTitle:ClearAllPoints()
+    raidTitle:SetPoint("LEFT", 14, 0)
+    raidTitle:SetPoint("RIGHT", -7, 0)
 
-    local raidOffsetX = 15 + nameWidth
     for _, raid in ipairs(RAIDS) do
-        local header = hoverFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        header:SetPoint("TOPLEFT", raidOffsetX, -39)
-        header:SetWidth(raid.compactWidth)
-        header:SetJustifyH("CENTER")
-        header:SetWordWrap(false)
-        header:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
-        header:SetText(raid.name)
-        header:SetTextColor(0, 0.75, 1)
+        local header = CreateTableCell(hoverFrame, COLOR.header)
+        header:SetSize(raid.compactWidth, ui.raidHeaderHeight)
+        local text = CreateCellText(header, "GameFontNormal", 12, COLOR.gold, "CENTER")
+        text:SetText(raid.name)
         headers[raid.id] = header
-        raidOffsetX = raidOffsetX + raid.compactWidth
+    end
+
+    local resourceTitleCell = CreateTableCell(hoverFrame, COLOR.headerStrong, { left = true, top = true })
+    resourceTitleCell:SetSize(ui.nameWidth, ui.resourceGroupHeight + ui.resourceSubHeaderHeight)
+    local resourceAccent = resourceTitleCell:CreateTexture(nil, "ARTWORK")
+    resourceAccent:SetPoint("TOPLEFT", 5, -5)
+    resourceAccent:SetPoint("BOTTOMLEFT", 5, 5)
+    resourceAccent:SetWidth(3)
+    resourceAccent:SetColorTexture(unpack(COLOR.gold))
+    local resourceTitle = CreateCellText(resourceTitleCell, "GameFontNormal", 13, COLOR.gold, "LEFT")
+    resourceTitle:ClearAllPoints()
+    resourceTitle:SetPoint("LEFT", 14, 0)
+    resourceTitle:SetPoint("RIGHT", -7, 0)
+
+    local commonHeader = CreateTableCell(hoverFrame, COLOR.headerStrong, { top = true })
+    commonHeader:SetSize(ui.goldWidth + ui.emberWidth + ui.shardWidth, ui.resourceGroupHeight)
+    local commonHeaderText = CreateCellText(commonHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    commonHeaderText:SetText(L["通用资源"])
+
+    local goldHeader = CreateTableCell(hoverFrame, COLOR.header)
+    goldHeader:SetSize(ui.goldWidth, ui.resourceSubHeaderHeight)
+    local goldHeaderText = CreateCellText(goldHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    goldHeaderText:SetText(L["金币"])
+
+    local emberHeader = CreateTableCell(hoverFrame, COLOR.header)
+    emberHeader:SetSize(ui.emberWidth, ui.resourceSubHeaderHeight)
+    local emberHeaderText = CreateCellText(emberHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    emberHeaderText:SetText(L["泰坦余烬"])
+
+    local shardHeader = CreateTableCell(hoverFrame, COLOR.header)
+    shardHeader:SetSize(ui.shardWidth, ui.resourceSubHeaderHeight)
+    local shardHeaderText = CreateCellText(shardHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    shardHeaderText:SetText(L["泰坦碎片"])
+
+    local legendaryHeader = CreateTableCell(hoverFrame, COLOR.headerStrong, { top = true })
+    local legendaryHeaderText = CreateCellText(legendaryHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    legendaryHeaderText:SetText(L["橙装进度"])
+
+    local footerText = hoverFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    footerText:SetJustifyH("LEFT")
+    footerText:SetWordWrap(false)
+    footerText:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
+    footerText:SetTextColor(0.58, 0.52, 0.43)
+
+    local function ShowResourceTooltip(cell)
+        local character = cell.character
+        if not character then
+            return
+        end
+        GameTooltip:SetOwner(cell, "ANCHOR_BOTTOM")
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine(cell.resourceName .. "（" .. character.name .. "）", 1, 0.82, 0)
+        if cell.resourceType == "ember" and character.titanEmbersWeeklyMax
+            and character.titanEmbersWeeklyMax > 0 then
+            GameTooltip:AddDoubleLine(
+                L["本周已获取"],
+                format("%d/%d", character.titanEmbersEarnedThisWeek or 0, character.titanEmbersWeeklyMax),
+                0.75, 0.75, 0.75, 1, 1, 1
+            )
+        end
+        if character.resourcesUpdatedAt then
+            GameTooltip:AddDoubleLine(
+                L["最后记录"],
+                date("%m-%d %H:%M", character.resourcesUpdatedAt),
+                0.75, 0.75, 0.75, 0.75, 0.75, 0.75
+            )
+        end
+        GameTooltip:Show()
     end
 
     local function EnsureRow(rowIndex)
@@ -751,99 +1121,286 @@ local function CreateHoverFrame()
             return rows[rowIndex]
         end
 
-        local row = CreateFrame("Frame", nil, hoverFrame)
-        row:SetSize(width - 30, rowHeight)
-        row:SetPoint("TOPLEFT", 15, -61 - (rowIndex - 1) * rowHeight)
+        local row = {
+            raidCells = {},
+        }
 
-        local highlight = row:CreateTexture(nil, "BACKGROUND")
-        highlight:SetAllPoints()
-        highlight:SetColorTexture(0, 0.55, 1, 0.18)
-        highlight:Hide()
-        row.highlight = highlight
+        row.raidNameCell = CreateTableCell(hoverFrame, nil, { left = true })
+        row.raidNameCell:SetSize(ui.nameWidth, ui.rowHeight)
+        row.raidName = CreateCellText(row.raidNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
 
-        local name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        name:SetPoint("LEFT")
-        name:SetSize(nameWidth, rowHeight)
-        name:SetJustifyH("LEFT")
-        name:SetWordWrap(false)
-        name:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
-        row.name = name
-        row.cells = {}
-
-        local cellOffsetX = nameWidth
         for _, raid in ipairs(RAIDS) do
-            local cell = CreateStatusDisplay(row, raid.compactWidth, rowHeight, 16, 12)
-            cell:SetPoint("LEFT", cellOffsetX, 0)
-            row.cells[raid.id] = cell
-            cellOffsetX = cellOffsetX + raid.compactWidth
+            local cell = CreateStatusDisplay(hoverFrame, raid.compactWidth, ui.rowHeight, 15, 11, true)
+            cell:EnableMouse(true)
+            cell.raid = raid
+            cell:SetScript("OnEnter", ShowLockoutTooltip)
+            cell:SetScript("OnLeave", GameTooltip_Hide)
+            row.raidCells[raid.id] = cell
         end
+
+        row.resourceNameCell = CreateTableCell(hoverFrame, nil, { left = true })
+        row.resourceNameCell:SetSize(ui.nameWidth, ui.rowHeight)
+        row.resourceName = CreateCellText(row.resourceNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
+
+        row.goldCell = CreateTableCell(hoverFrame)
+        row.goldCell:SetSize(ui.goldWidth, ui.rowHeight)
+        row.gold = CreateCellText(row.goldCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+        row.goldCell.resourceType = "gold"
+        row.goldCell.resourceName = L["金币"]
+        row.goldCell:EnableMouse(true)
+        row.goldCell:SetScript("OnEnter", ShowResourceTooltip)
+        row.goldCell:SetScript("OnLeave", GameTooltip_Hide)
+
+        row.emberCell = CreateTableCell(hoverFrame)
+        row.emberCell:SetSize(ui.emberWidth, ui.rowHeight)
+        row.ember = CreateCellText(row.emberCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+        row.emberCell.resourceType = "ember"
+        row.emberCell.resourceName = L["泰坦余烬"]
+        row.emberCell:EnableMouse(true)
+        row.emberCell:SetScript("OnEnter", ShowResourceTooltip)
+        row.emberCell:SetScript("OnLeave", GameTooltip_Hide)
+
+        row.shardCell = CreateTableCell(hoverFrame)
+        row.shardCell:SetSize(ui.shardWidth, ui.rowHeight)
+        row.shard = CreateCellText(row.shardCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+        row.shardCell.resourceType = "shard"
+        row.shardCell.resourceName = L["泰坦碎片"]
+        row.shardCell:EnableMouse(true)
+        row.shardCell:SetScript("OnEnter", ShowResourceTooltip)
+        row.shardCell:SetScript("OnLeave", GameTooltip_Hide)
+
+        row.legendaryCell = CreateTableCell(hoverFrame)
+        row.legendaryCell:SetHeight(ui.rowHeight)
 
         rows[rowIndex] = row
         return row
     end
 
+    local totalNameCell = CreateTableCell(hoverFrame, COLOR.header, { left = true })
+    totalNameCell:SetSize(ui.nameWidth, ui.rowHeight)
+    local totalName = CreateCellText(totalNameCell, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    totalName:SetText(L["合计"])
+
+    local totalGoldCell = CreateTableCell(hoverFrame, COLOR.header)
+    totalGoldCell:SetSize(ui.goldWidth, ui.rowHeight)
+    local totalGold = CreateCellText(totalGoldCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+
+    local totalEmberCell = CreateTableCell(hoverFrame, COLOR.header)
+    totalEmberCell:SetSize(ui.emberWidth, ui.rowHeight)
+    local totalEmber = CreateCellText(totalEmberCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+
+    local totalShardCell = CreateTableCell(hoverFrame, COLOR.header)
+    totalShardCell:SetSize(ui.shardWidth, ui.rowHeight)
+    local totalShard = CreateCellText(totalShardCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+
+    local totalLegendaryCell = CreateTableCell(hoverFrame, COLOR.header)
+    totalLegendaryCell:SetHeight(ui.rowHeight)
+
     updateHoverFrame = function()
         local characters = GetCharacterRows()
         local visibleRaids = GetVisibleRaids()
         local rowCount = max(1, #characters)
-        raidsWidth = 0
+        local raidsWidth = 0
         for _, raid in ipairs(visibleRaids) do
             raidsWidth = raidsWidth + raid.compactWidth
         end
-        width = max(420, 30 + nameWidth + raidsWidth)
+
+        width = max(660, ui.padding * 2 + ui.nameWidth + raidsWidth)
         hoverFrame:SetWidth(width)
-        characterCount:SetFormattedText(L["角色列表（%d）"], #characters)
+        topBar:SetWidth(width - ui.padding * 2)
+        raidTitle:SetFormattedText(L["本周团本 CD · %d个角色"], #characters)
+        resourceTitle:SetFormattedText(L["角色资源总览 · %d个角色"], #characters)
 
         for _, header in pairs(headers) do
             header:Hide()
         end
-        raidOffsetX = 15 + nameWidth
+        local raidOffsetX = ui.padding + ui.nameWidth
         for _, raid in ipairs(visibleRaids) do
             local header = headers[raid.id]
             header:ClearAllPoints()
-            header:SetPoint("TOPLEFT", raidOffsetX, -39)
+            header:SetPoint("TOPLEFT", raidOffsetX, -(ui.padding + ui.topBarHeight))
             header:Show()
             raidOffsetX = raidOffsetX + raid.compactWidth
         end
 
         local resetTime = GetRaidResetTime()
         if resetTime then
-            resetText:SetFormattedText(L["（团本重置时间：%s）"], FormatResetTime(resetTime))
+            resetText:SetFormattedText(L["距重置 %s"], FormatResetTime(resetTime))
         else
             resetText:SetText("")
         end
 
+        goldHeaderText:SetText(L["金币"] .. GetResourceIconMarkup(GetCoinIconFile()))
+        emberHeaderText:SetText(L["泰坦余烬"] .. GetResourceIconMarkup(
+            GetCurrencyIconFile(TITAN_EMBER_CURRENCY_ID)
+        ))
+        shardHeaderText:SetText(L["泰坦碎片"] .. GetResourceIconMarkup(
+            GetCurrencyIconFile(TITAN_SHARD_CURRENCY_ID)
+        ))
+
+        local raidRowsTop = ui.padding + ui.topBarHeight + ui.raidHeaderHeight
+        resourceTop = raidRowsTop + rowCount * ui.rowHeight + ui.sectionGap
+        resourceRowsTop = resourceTop + ui.resourceGroupHeight + ui.resourceSubHeaderHeight
+        local legendaryWidth = width - ui.padding * 2 - ui.nameWidth
+            - ui.goldWidth - ui.emberWidth - ui.shardWidth
+
+        resourceTitleCell:ClearAllPoints()
+        resourceTitleCell:SetPoint("TOPLEFT", ui.padding, -resourceTop)
+        commonHeader:ClearAllPoints()
+        commonHeader:SetPoint("TOPLEFT", ui.padding + ui.nameWidth, -resourceTop)
+        goldHeader:ClearAllPoints()
+        goldHeader:SetPoint("TOPLEFT", ui.padding + ui.nameWidth, -(resourceTop + ui.resourceGroupHeight))
+        emberHeader:ClearAllPoints()
+        emberHeader:SetPoint("TOPLEFT", ui.padding + ui.nameWidth + ui.goldWidth, -(resourceTop + ui.resourceGroupHeight))
+        shardHeader:ClearAllPoints()
+        shardHeader:SetPoint(
+            "TOPLEFT",
+            ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth,
+            -(resourceTop + ui.resourceGroupHeight)
+        )
+        legendaryHeader:ClearAllPoints()
+        legendaryHeader:SetPoint(
+            "TOPLEFT",
+            ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth + ui.shardWidth,
+            -resourceTop
+        )
+        legendaryHeader:SetSize(legendaryWidth, ui.resourceGroupHeight + ui.resourceSubHeaderHeight)
+
+        local goldTotal = 0
+        local emberTotal = 0
+        local shardTotal = 0
+        local latestResourceRecord
         for rowIndex, character in ipairs(characters) do
             local row = EnsureRow(rowIndex)
-            row:Show()
-            row:SetWidth(width - 30)
-            row.name:SetText(GetCharacterDisplayName(character))
-            row.highlight:SetShown(character.isCurrent)
+            local rowColor = character.isCurrent and COLOR.current
+                or (rowIndex % 2 == 0 and COLOR.rowEven or COLOR.rowOdd)
+            local rowY = raidRowsTop + (rowIndex - 1) * ui.rowHeight
+            local resourceRowY = resourceRowsTop + (rowIndex - 1) * ui.rowHeight
 
-            for _, cell in pairs(row.cells) do
+            row.raidNameCell:Show()
+            row.raidNameCell:ClearAllPoints()
+            row.raidNameCell:SetPoint("TOPLEFT", ui.padding, -rowY)
+            SetCellColor(row.raidNameCell, rowColor)
+            row.raidName:SetText(GetCharacterDisplayName(character))
+
+            for _, cell in pairs(row.raidCells) do
                 cell:Hide()
             end
-            local cellOffsetX = nameWidth
+            local cellOffsetX = ui.padding + ui.nameWidth
             for _, raid in ipairs(visibleRaids) do
-                local cell = row.cells[raid.id]
+                local cell = row.raidCells[raid.id]
                 cell:ClearAllPoints()
-                cell:SetPoint("LEFT", cellOffsetX, 0)
+                cell:SetPoint("TOPLEFT", cellOffsetX, -rowY)
+                cell.character = character
+                cell.baseColor = rowColor
                 UpdateStatusDisplay(
                     cell,
                     character,
                     GetPrimaryLockout(character.instances[raid.id]),
+                    true,
                     true
                 )
                 cell:Show()
                 cellOffsetX = cellOffsetX + raid.compactWidth
             end
+
+            row.resourceNameCell:Show()
+            row.resourceNameCell:ClearAllPoints()
+            row.resourceNameCell:SetPoint("TOPLEFT", ui.padding, -resourceRowY)
+            SetCellColor(row.resourceNameCell, rowColor)
+            row.resourceName:SetText(GetCharacterDisplayName(character))
+
+            row.goldCell:Show()
+            row.goldCell:ClearAllPoints()
+            row.goldCell:SetPoint("TOPLEFT", ui.padding + ui.nameWidth, -resourceRowY)
+            row.goldCell.character = character
+            SetCellColor(row.goldCell, rowColor)
+            local gold = character.money and floor(character.money / 10000) or nil
+            row.gold:SetText(FormatResourceNumber(gold))
+
+            row.emberCell:Show()
+            row.emberCell:ClearAllPoints()
+            row.emberCell:SetPoint("TOPLEFT", ui.padding + ui.nameWidth + ui.goldWidth, -resourceRowY)
+            row.emberCell.character = character
+            SetCellColor(row.emberCell, rowColor)
+            row.ember:SetText(FormatResourceNumber(character.titanEmbers))
+
+            row.shardCell:Show()
+            row.shardCell:ClearAllPoints()
+            row.shardCell:SetPoint(
+                "TOPLEFT",
+                ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth,
+                -resourceRowY
+            )
+            row.shardCell.character = character
+            SetCellColor(row.shardCell, rowColor)
+            row.shard:SetText(FormatResourceNumber(character.titanShards))
+
+            row.legendaryCell:Show()
+            row.legendaryCell:ClearAllPoints()
+            row.legendaryCell:SetPoint(
+                "TOPLEFT",
+                ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth + ui.shardWidth,
+                -resourceRowY
+            )
+            row.legendaryCell:SetSize(legendaryWidth, ui.rowHeight)
+            SetCellColor(row.legendaryCell, rowColor)
+
+            goldTotal = goldTotal + (gold or 0)
+            emberTotal = emberTotal + (character.titanEmbers or 0)
+            shardTotal = shardTotal + (character.titanShards or 0)
+            if character.resourcesUpdatedAt
+                and (not latestResourceRecord or character.resourcesUpdatedAt > latestResourceRecord) then
+                latestResourceRecord = character.resourcesUpdatedAt
+            end
         end
 
         for rowIndex = #characters + 1, #rows do
-            rows[rowIndex]:Hide()
+            local row = rows[rowIndex]
+            row.raidNameCell:Hide()
+            row.resourceNameCell:Hide()
+            row.goldCell:Hide()
+            row.emberCell:Hide()
+            row.shardCell:Hide()
+            row.legendaryCell:Hide()
+            for _, cell in pairs(row.raidCells) do
+                cell:Hide()
+            end
         end
 
-        hoverFrame:SetHeight(74 + rowCount * rowHeight)
+        local totalY = resourceRowsTop + rowCount * ui.rowHeight
+        totalNameCell:ClearAllPoints()
+        totalNameCell:SetPoint("TOPLEFT", ui.padding, -totalY)
+        totalGoldCell:ClearAllPoints()
+        totalGoldCell:SetPoint("TOPLEFT", ui.padding + ui.nameWidth, -totalY)
+        totalEmberCell:ClearAllPoints()
+        totalEmberCell:SetPoint("TOPLEFT", ui.padding + ui.nameWidth + ui.goldWidth, -totalY)
+        totalShardCell:ClearAllPoints()
+        totalShardCell:SetPoint(
+            "TOPLEFT",
+            ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth,
+            -totalY
+        )
+        totalLegendaryCell:ClearAllPoints()
+        totalLegendaryCell:SetPoint(
+            "TOPLEFT",
+            ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth + ui.shardWidth,
+            -totalY
+        )
+        totalLegendaryCell:SetSize(legendaryWidth, ui.rowHeight)
+        totalGold:SetText(FormatResourceAmount(goldTotal, GetCoinIconFile()))
+        totalEmber:SetText(FormatResourceAmount(emberTotal, GetCurrencyIconFile(TITAN_EMBER_CURRENCY_ID)))
+        totalShard:SetText(FormatResourceAmount(shardTotal, GetCurrencyIconFile(TITAN_SHARD_CURRENCY_ID)))
+
+        footerText:ClearAllPoints()
+        footerText:SetPoint("TOPLEFT", ui.padding + 7, -(totalY + ui.rowHeight + 8))
+        if latestResourceRecord then
+            footerText:SetFormattedText(L["资源最后记录：%s"], date("%m-%d %H:%M", latestResourceRecord))
+        else
+            footerText:SetText(L["资源尚未记录"])
+        end
+
+        hoverFrame:SetHeight(totalY + ui.rowHeight + ui.footerHeight + ui.padding)
     end
 
     updateHoverFrame()
@@ -865,15 +1422,48 @@ local function PositionHoverFrame(anchor)
     end
 end
 
+local function IsPointerOver(frame)
+    if not frame or not frame.IsShown or not frame:IsShown() then
+        return false
+    end
+    if frame.IsMouseOver then
+        return frame:IsMouseOver()
+    end
+    return MouseIsOver and MouseIsOver(frame)
+end
+
+local function ScheduleHoverHide()
+    hoverHideSerial = hoverHideSerial + 1
+    local serial = hoverHideSerial
+    BG.After(0.12, function()
+        if serial ~= hoverHideSerial then
+            return
+        end
+        if IsPointerOver(hoverAnchor) or IsPointerOver(hoverFrame) then
+            return
+        end
+        if hoverFrame then
+            hoverFrame:Hide()
+        end
+    end)
+end
+
 function BG.ShowRaidLockoutHover(anchor)
     if not anchor then
         return
     end
 
     CreateHoverFrame()
+    hoverHideSerial = hoverHideSerial + 1
+    hoverAnchor = anchor
     PositionHoverFrame(anchor)
     updateHoverFrame()
     hoverFrame:Show()
+    hoverFrame:SetScript("OnEnter", function()
+        hoverHideSerial = hoverHideSerial + 1
+    end)
+    hoverFrame:SetScript("OnLeave", ScheduleHoverHide)
+    CaptureCurrentResources()
 
     if not currentCharacter.ready
         or not currentCharacter.lastRequestAt
@@ -885,7 +1475,7 @@ end
 
 function BG.HideRaidLockoutHover()
     if hoverFrame then
-        hoverFrame:Hide()
+        ScheduleHoverHide()
     end
 end
 
@@ -972,11 +1562,16 @@ BG.RegisterEvent("ENCOUNTER_END", function(_, _, _, _, _, _, success)
     end
 end)
 
+BG.RegisterEvent({ "CURRENCY_DISPLAY_UPDATE", "PLAYER_MONEY" }, function()
+    BG.After(0.2, CaptureCurrentResources)
+end)
+
 BG.Init2(function()
     SlashCmdList["BGFORGERAIDLOCKOUT"] = BG.ToggleRaidLockoutOverview
     SLASH_BGFORGERAIDLOCKOUT1 = "/bgr"
     SLASH_BGFORGERAIDLOCKOUT2 = "/bgraid"
 
     ClearExpiredRaidData()
+    BG.After(0.5, CaptureCurrentResources)
     RequestCurrentRaidInfo()
 end)

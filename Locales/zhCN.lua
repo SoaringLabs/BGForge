@@ -2963,5 +2963,17 @@ do
     L["确认删除%s的本机团本CD记录？"] = true
     L["该页面已预留，后续将加入角色列表、显示方式等设置。"] = true
     L["角色列表（%d）"] = true
+    L["BGForge · 全角色总览"] = true
+    L["本周团本 CD · %d个角色"] = true
+    L["角色资源总览 · %d个角色"] = true
+    L["通用资源"] = true
+    L["泰坦余烬"] = true
+    L["泰坦碎片"] = true
+    L["橙装进度"] = true
+    L["本周已获取"] = true
+    L["最后记录"] = true
+    L["距重置 %s"] = true
+    L["资源最后记录：%s"] = true
+    L["资源尚未记录"] = true
 
 end

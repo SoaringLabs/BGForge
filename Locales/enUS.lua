@@ -2948,5 +2948,17 @@ do -- Mail history
     L["确认删除%s的本机团本CD记录？"] = "Delete the local raid-lockout record for %s?"
     L["该页面已预留，后续将加入角色列表、显示方式等设置。"] = "This page is reserved for character-list and display settings."
     L["角色列表（%d）"] = "Characters (%d)"
+    L["BGForge · 全角色总览"] = "BGForge · Character Overview"
+    L["本周团本 CD · %d个角色"] = "Weekly Raid Lockouts · %d characters"
+    L["角色资源总览 · %d个角色"] = "Character Resources · %d characters"
+    L["通用资源"] = "Common Resources"
+    L["泰坦余烬"] = "Titan Embers"
+    L["泰坦碎片"] = "Titan Shards"
+    L["橙装进度"] = "Legendary Progress"
+    L["本周已获取"] = "Earned This Week"
+    L["最后记录"] = "Last Recorded"
+    L["距重置 %s"] = "Resets in %s"
+    L["资源最后记录：%s"] = "Resources last recorded: %s"
+    L["资源尚未记录"] = "Resources not recorded yet"
 
 end
