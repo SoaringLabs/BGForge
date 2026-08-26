@@ -26,23 +26,95 @@ end
 local RAID_OPTION_PREFIX = "raidLockoutShow_"
 local DATA_VERSION = 1
 local DATA_KEY = "BGForgeRaidLockouts"
+local RAID_MIN_LEVEL = 80
 local TITAN_EMBER_CURRENCY_ID = 3403
 local TITAN_SHARD_CURRENCY_ID = 3406
+local LEGENDARY_ITEM_QUALITY = 5
+local TITAN_LEGENDARY_UPGRADE_ITEM_IDS = {
+    265340, 265524, 267339, 269664, -- 橙颈
+    265335, 265523, 267338, 269667, -- 橙锤
+    265526, 267335, 269669,         -- 风剑
+    267340, 269665,                 -- 橙杖
+    269670,                         -- 橙匕
+}
+local TITAN_LEGENDARY_UPGRADE_ITEM_ID_SET = {}
+for _, itemID in ipairs(TITAN_LEGENDARY_UPGRADE_ITEM_IDS) do
+    TITAN_LEGENDARY_UPGRADE_ITEM_ID_SET[itemID] = true
+end
+local TITAN_PRIMARY_PROFESSION_INFO = {
+    [L["锻造"]] = { skillLineID = 164, iconFileID = 136241 },
+    [L["工程学"]] = { skillLineID = 202, iconFileID = 136243 },
+    [L["炼金术"]] = { skillLineID = 171, iconFileID = 136240 },
+    [L["制皮"]] = { skillLineID = 165, iconFileID = 133611 },
+    [L["裁缝"]] = { skillLineID = 197, iconFileID = 136249 },
+    [L["附魔"]] = { skillLineID = 333, iconFileID = 136244 },
+    [L["采矿"]] = { skillLineID = 186, iconFileID = 136248 },
+    [L["草药学"]] = { skillLineID = 182, iconFileID = 136065 },
+    [L["剥皮"]] = { skillLineID = 393, iconFileID = 134366 },
+    [L["铭文"]] = { skillLineID = 773, iconFileID = 237171 },
+    [L["珠宝加工"]] = { skillLineID = 755, iconFileID = 134071 },
+}
+
+local ITEM_TILE_SIZE = 22
+local ITEM_TILE_GAP = 2
+local ITEM_TILE_PADDING = 4
 
 local SMALL_UI = {
     padding = 10,
     topBarHeight = 36,
-    nameWidth = 184,
+    nameWidth = 160,
     rowHeight = 24,
     raidHeaderHeight = 30,
     sectionGap = 8,
     resourceGroupHeight = 22,
     resourceSubHeaderHeight = 22,
-    goldWidth = 100,
-    emberWidth = 100,
-    shardWidth = 100,
+    professionWidth = 100,
+    legendaryWidth = 150,
+    upgradeWidth = 130,
+    trinketWidth = 100,
+    goldWidth = 88,
+    emberWidth = 88,
+    shardWidth = 88,
     footerHeight = 30,
 }
+
+local function CalculateItemStripLayout(cellWidth, itemCount)
+    local usableWidth = max(0, cellWidth - ITEM_TILE_PADDING * 2)
+    local capacity = max(0, floor((usableWidth + ITEM_TILE_GAP) / (ITEM_TILE_SIZE + ITEM_TILE_GAP)))
+    local visibleCount = min(itemCount or 0, capacity)
+    local stripWidth = visibleCount > 0
+        and visibleCount * ITEM_TILE_SIZE + (visibleCount - 1) * ITEM_TILE_GAP or 0
+    return visibleCount, (cellWidth - stripWidth) / 2, ITEM_TILE_SIZE, ITEM_TILE_GAP
+end
+
+local function GetItemTileDisplay(item, valueKey, forcedQuality, valuePrefix)
+    local quality = tonumber(forcedQuality) or tonumber(item and item.quality)
+    local value = item and tonumber(item[valueKey])
+    local valueText = value and (valuePrefix or "") .. BG.FormatNumber(value, 0) or ""
+    return quality, valueText
+end
+
+local function ShowItemTooltip(owner, item)
+    if not owner or not item or not GameTooltip then
+        return
+    end
+
+    local hasReference = item.link or item.itemID
+    if not hasReference then
+        return
+    end
+    local anchor = BG.ButtonIsInRight(owner) and "ANCHOR_LEFT" or "ANCHOR_RIGHT"
+    GameTooltip:SetOwner(owner, anchor, 0, 0)
+    GameTooltip:ClearLines()
+    if item.link then
+        GameTooltip:SetHyperlink(item.link)
+    elseif GameTooltip.SetItemByID then
+        GameTooltip:SetItemByID(item.itemID)
+    else
+        GameTooltip:SetHyperlink("item:" .. item.itemID)
+    end
+    GameTooltip:Show()
+end
 
 local currencyIconCache = {}
 
@@ -84,8 +156,269 @@ local function GetResourceIconMarkup(iconFile)
     return " |T" .. iconFile .. ":13:13:0:0:64:64:4:60:4:60|t"
 end
 
+local function GetCompactIconMarkup(iconFile)
+    if not iconFile then
+        return ""
+    end
+    return " |T" .. iconFile .. ":16:16:0:0:64:64:4:60:4:60|t"
+end
+
+local function FormatProfessionStrip(professions)
+    local values = {}
+    for _, profession in ipairs(professions or {}) do
+        if profession.iconFileID then
+            values[#values + 1] = tostring(profession.rank or 0)
+                .. GetCompactIconMarkup(profession.iconFileID)
+        end
+    end
+    return table.concat(values, "  ")
+end
+
 local function FormatResourceAmount(amount, iconFile)
     return FormatResourceNumber(amount) .. GetResourceIconMarkup(iconFile)
+end
+
+local function RequestItemData(itemID)
+    if itemID and C_Item and C_Item.RequestLoadItemDataByID then
+        C_Item.RequestLoadItemDataByID(itemID)
+    end
+end
+
+local function GetItemIconFile(itemInfo, fallback)
+    local itemID, _, _, _, iconFileID = GetItemInfoInstant(itemInfo)
+    if not iconFileID then
+        RequestItemData(itemID or tonumber(itemInfo))
+    end
+    return iconFileID or fallback
+end
+
+local function GetActualItemLevel(itemInfo)
+    local itemLevel
+    if C_Item and C_Item.GetDetailedItemLevelInfo then
+        itemLevel = C_Item.GetDetailedItemLevelInfo(itemInfo)
+    elseif GetDetailedItemLevelInfo then
+        itemLevel = GetDetailedItemLevelInfo(itemInfo)
+    end
+    if not itemLevel then
+        itemLevel = select(4, GetItemInfo(itemInfo))
+    end
+    return tonumber(itemLevel)
+end
+
+local function CreateItemSnapshot(itemLink, itemID, iconFileID, quality)
+    itemID = itemID or (itemLink and GetItemInfoInstant(itemLink))
+    if not itemID then
+        return
+    end
+    local link = itemLink or select(2, GetItemInfo(itemID))
+    local icon = GetItemIconFile(link or itemID, iconFileID)
+    if not link or not icon then
+        RequestItemData(itemID)
+    end
+    local infoQuality = select(3, GetItemInfo(link or itemID))
+    quality = tonumber(quality) or tonumber(infoQuality)
+    return {
+        itemID = itemID,
+        link = link,
+        itemLevel = GetActualItemLevel(link or itemID),
+        iconFileID = icon,
+        quality = quality,
+    }
+end
+
+local function IsLegendaryUpgradeItem(itemID)
+    return itemID and TITAN_LEGENDARY_UPGRADE_ITEM_ID_SET[tonumber(itemID)] or false
+end
+
+local function IsLegendaryEquipment(itemLink, itemID, quality)
+    if quality ~= LEGENDARY_ITEM_QUALITY then
+        return false
+    end
+    local resolvedItemID, _, _, equipLoc = GetItemInfoInstant(itemLink or itemID)
+    itemID = tonumber(itemID) or tonumber(resolvedItemID)
+    if IsLegendaryUpgradeItem(itemID) then
+        return false
+    end
+    if equipLoc == nil then
+        RequestItemData(itemID)
+    end
+    return equipLoc and equipLoc ~= ""
+end
+
+local function SortItemSnapshots(items)
+    sort(items, function(a, b)
+        if (a.itemLevel or 0) == (b.itemLevel or 0) then
+            return (a.itemID or 0) < (b.itemID or 0)
+        end
+        return (a.itemLevel or 0) > (b.itemLevel or 0)
+    end)
+    return items
+end
+
+local function MergeItemSnapshots(...)
+    local merged = {}
+    local seen = {}
+    for listIndex = 1, select("#", ...) do
+        for _, item in ipairs(select(listIndex, ...) or {}) do
+            local key = tostring(item.itemID or 0) .. ":" .. tostring(item.itemLevel or 0)
+            if not IsLegendaryUpgradeItem(item.itemID) and not seen[key] then
+                seen[key] = true
+                merged[#merged + 1] = item
+            end
+        end
+    end
+    return SortItemSnapshots(merged)
+end
+
+local function CaptureProfessionsFromPrimaryAPI()
+    if not GetProfessions or not GetProfessionInfo then
+        return
+    end
+
+    local professions = {}
+    local profession1, profession2 = GetProfessions()
+    if not profession1 and not profession2 then
+        return
+    end
+    for _, professionIndex in ipairs({ profession1, profession2 }) do
+        if professionIndex then
+            local name, iconFileID, rank, maxRank, _, _, skillLineID = GetProfessionInfo(professionIndex)
+            if not name or not iconFileID or not skillLineID then
+                return
+            end
+            professions[#professions + 1] = {
+                skillLineID = skillLineID,
+                rank = tonumber(rank) or 0,
+                maxRank = tonumber(maxRank) or 0,
+                iconFileID = iconFileID,
+            }
+        end
+    end
+    return professions
+end
+
+local function CaptureProfessionsFromSkillLines()
+    if not GetNumSkillLines or not GetSkillLineInfo then
+        return
+    end
+
+    local numSkillLines = GetNumSkillLines()
+    if not numSkillLines or numSkillLines <= 0 then
+        return
+    end
+
+    local professions = {}
+    local collapsedHeaders = {}
+    for index = 1, numSkillLines do
+        local skillName, isHeader, isExpanded, rank, _, _, maxRank = GetSkillLineInfo(index)
+        if isHeader and not isExpanded then
+            collapsedHeaders[#collapsedHeaders + 1] = index
+        end
+        local professionInfo = not isHeader and TITAN_PRIMARY_PROFESSION_INFO[skillName] or nil
+        if professionInfo and #professions < 2 then
+            professions[#professions + 1] = {
+                skillLineID = professionInfo.skillLineID,
+                rank = tonumber(rank) or 0,
+                maxRank = tonumber(maxRank) or 0,
+                iconFileID = professionInfo.iconFileID,
+            }
+        end
+    end
+
+    -- GetProfessions 由按需加载的 Blizzard 面板提供时可能尚不可用。
+    -- 只有确实存在折叠分类时才逐个展开；下一次 SKILL_LINES_CHANGED 会完成采集。
+    -- 绝不能反复调用 ExpandSkillHeader(0)，否则会形成事件自激循环。
+    if #professions < 2 and #collapsedHeaders > 0 then
+        local skillFrameVisible = SkillFrame and SkillFrame.IsVisible and SkillFrame:IsVisible()
+        if not skillFrameVisible and ExpandSkillHeader then
+            for index = #collapsedHeaders, 1, -1 do
+                ExpandSkillHeader(collapsedHeaders[index])
+            end
+        end
+        return
+    end
+    return professions
+end
+
+local function CaptureCurrentProfessions()
+    return CaptureProfessionsFromPrimaryAPI() or CaptureProfessionsFromSkillLines()
+end
+
+local function CaptureEquippedTrinkets()
+    local trinkets = {}
+    for _, slotID in ipairs({ 13, 14 }) do
+        local link = GetInventoryItemLink("player", slotID)
+        if link then
+            local item = CreateItemSnapshot(
+                link,
+                GetInventoryItemID("player", slotID),
+                GetInventoryItemTexture("player", slotID),
+                GetInventoryItemQuality("player", slotID)
+            )
+            if item then
+                item.slotID = slotID
+                trinkets[#trinkets + 1] = item
+            end
+        end
+    end
+    return trinkets
+end
+
+local function CollectLegendaryFromContainer(containerID, target)
+    if not C_Container or not C_Container.GetContainerNumSlots or not C_Container.GetContainerItemInfo then
+        return
+    end
+    for slotID = 1, C_Container.GetContainerNumSlots(containerID) do
+        local info = C_Container.GetContainerItemInfo(containerID, slotID)
+        if info and IsLegendaryEquipment(info.hyperlink, info.itemID, info.quality) then
+            local item = CreateItemSnapshot(info.hyperlink, info.itemID, info.iconFileID, info.quality)
+            if item then
+                target[#target + 1] = item
+            end
+        end
+    end
+end
+
+local function CaptureEquippedAndBagLegendaries()
+    local items = {}
+    for slotID = 1, 19 do
+        local link = GetInventoryItemLink("player", slotID)
+        local itemID = link and GetInventoryItemID("player", slotID)
+        local quality = link and GetInventoryItemQuality("player", slotID)
+        if link and IsLegendaryEquipment(link, itemID, quality) then
+            local item = CreateItemSnapshot(link, itemID, GetInventoryItemTexture("player", slotID), quality)
+            if item then
+                items[#items + 1] = item
+            end
+        end
+    end
+    for bagID = 0, NUM_BAG_SLOTS do
+        CollectLegendaryFromContainer(bagID, items)
+    end
+    return MergeItemSnapshots(items)
+end
+
+local function CaptureLegendaryUpgradeItems()
+    local items = {}
+    for _, itemID in ipairs(TITAN_LEGENDARY_UPGRADE_ITEM_IDS) do
+        local count
+        if C_Item and C_Item.GetItemCount then
+            count = C_Item.GetItemCount(itemID, true)
+        elseif GetItemCount then
+            count = GetItemCount(itemID, true)
+        end
+        if count and count > 0 then
+            local link = select(2, GetItemInfo(itemID))
+            items[#items + 1] = {
+                itemID = itemID,
+                link = link,
+                count = count,
+                iconFileID = GetItemIconFile(itemID),
+                quality = LEGENDARY_ITEM_QUALITY,
+            }
+        end
+    end
+    return items
 end
 
 local COLOR = {
@@ -121,6 +454,30 @@ local function GetVisibleRaids()
         end
     end
     return raids
+end
+
+local function CalculateRaidColumnWidths(raids, availableWidth)
+    local widths = {}
+    if #raids == 0 then
+        return widths, 0
+    end
+
+    local compactWidth = 0
+    for _, raid in ipairs(raids) do
+        compactWidth = compactWidth + raid.compactWidth
+    end
+
+    local extraPerRaid = max(0, availableWidth - compactWidth) / #raids
+    local assignedWidth = 0
+    for index, raid in ipairs(raids) do
+        local columnWidth = raid.compactWidth + extraPerRaid
+        if index == #raids and availableWidth >= compactWidth then
+            columnWidth = availableWidth - assignedWidth
+        end
+        widths[raid.id] = columnWidth
+        assignedWidth = assignedWidth + columnWidth
+    end
+    return widths, assignedWidth
 end
 
 local currentCharacter = {
@@ -201,9 +558,26 @@ local function ClearExpiredRaidData()
                 if type(character) == "table" then
                     character.name = type(character.name) == "string" and character.name or characterName
                     character.specIndex = tonumber(character.specIndex)
+                    character.level = tonumber(character.level)
                     character.itemLevel = tonumber(character.itemLevel)
                     character.order = tonumber(character.order)
                     character.lastRecordedAt = tonumber(character.lastRecordedAt)
+                    character.isHidden = character.isHidden and true or nil
+                    character.professions = type(character.professions) == "table" and character.professions or {}
+                    character.legendaryItems = MergeItemSnapshots(
+                        type(character.legendaryItems) == "table" and character.legendaryItems or {}
+                    )
+                    character.bankLegendaryItems = MergeItemSnapshots(
+                        type(character.bankLegendaryItems) == "table" and character.bankLegendaryItems or {}
+                    )
+                    character.legendaryUpgradeItems = type(character.legendaryUpgradeItems) == "table"
+                        and character.legendaryUpgradeItems or {}
+                    for _, item in ipairs(character.legendaryUpgradeItems) do
+                        if type(item) == "table" and IsLegendaryUpgradeItem(item.itemID) then
+                            item.quality = LEGENDARY_ITEM_QUALITY
+                        end
+                    end
+                    character.trinkets = type(character.trinkets) == "table" and character.trinkets or {}
                     if resetAll then
                         character.instances = {}
                     elseif type(character.instances) == "table" then
@@ -282,6 +656,10 @@ end
 local function RefreshCurrentCharacterIdentity()
     currentCharacter.name = GetCurrentCharacterName()
     currentCharacter.classFile = select(2, UnitClass("player"))
+    local level = UnitLevel("player")
+    if level and level > 0 then
+        currentCharacter.level = level
+    end
     local overallItemLevel, equippedItemLevel = GetAverageItemLevel()
     currentCharacter.itemLevel = equippedItemLevel or overallItemLevel
 
@@ -312,6 +690,7 @@ local function GetOrCreateCurrentCharacterStore()
     stored.name = characterName
     stored.classFile = currentCharacter.classFile
     stored.specIndex = currentCharacter.specIndex
+    stored.level = currentCharacter.level or stored.level
     stored.itemLevel = currentCharacter.itemLevel
     stored.instances = type(stored.instances) == "table" and stored.instances or {}
     return stored
@@ -324,6 +703,16 @@ local function CaptureCurrentResources()
     end
 
     stored.money = GetMoney and GetMoney() or stored.money
+    local professions = CaptureCurrentProfessions()
+    if professions then
+        stored.professions = professions
+    end
+    stored.trinkets = CaptureEquippedTrinkets()
+    stored.legendaryUpgradeItems = CaptureLegendaryUpgradeItems()
+    stored.legendaryItems = MergeItemSnapshots(
+        CaptureEquippedAndBagLegendaries(),
+        stored.bankLegendaryItems
+    )
     if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
         local info = C_CurrencyInfo.GetCurrencyInfo(TITAN_EMBER_CURRENCY_ID)
         -- 登录早期可能暂时拿不到货币资料；此时保留旧快照，不能用 0 覆盖。
@@ -349,18 +738,60 @@ local function CaptureCurrentResources()
     end
 end
 
+local function CaptureCurrentBankLegendaries()
+    if not BANK_CONTAINER then
+        return
+    end
+    local stored = GetOrCreateCurrentCharacterStore()
+    if not stored then
+        return
+    end
+
+    local items = {}
+    CollectLegendaryFromContainer(BANK_CONTAINER, items)
+    local purchasedBankBags = GetNumBankSlots and GetNumBankSlots() or NUM_BANKBAGSLOTS or 0
+    for bankBagIndex = 1, purchasedBankBags do
+        CollectLegendaryFromContainer(NUM_BAG_SLOTS + bankBagIndex, items)
+    end
+    stored.bankLegendaryItems = MergeItemSnapshots(items)
+    stored.bankResourcesUpdatedAt = GetServerTime()
+    CaptureCurrentResources()
+end
+
+local resourceRefreshSerial = 0
+
+local function CaptureAvailableResources()
+    if BankFrame and BankFrame:IsShown() then
+        CaptureCurrentBankLegendaries()
+    else
+        CaptureCurrentResources()
+    end
+end
+
+local function ScheduleResourceRefresh(delay)
+    resourceRefreshSerial = resourceRefreshSerial + 1
+    local serial = resourceRefreshSerial
+    BG.After(delay or 0.2, function()
+        if serial ~= resourceRefreshSerial then
+            return
+        end
+        CaptureAvailableResources()
+    end)
+end
+
 local function GetCharacterSpecIcon(character)
     local classIcons = BG.talentIcon and BG.talentIcon[character.classFile]
     return classIcons and character.specIndex and classIcons[character.specIndex] or nil
 end
 
-local function GetCharacterDisplayName(character)
+local function GetCharacterDisplayName(character, valueType)
     local color = character.classFile and select(4, GetClassColor(character.classFile)) or "ffffffff"
     local specIcon = GetCharacterSpecIcon(character)
     local text = specIcon and ("|T" .. specIcon .. ":14:14:0:0|t ") or ""
     text = text .. "|c" .. color .. character.name .. "|r"
-    if character.itemLevel and character.itemLevel > 0 then
-        text = text .. " |cffb3b3b3(" .. floor(character.itemLevel + 0.5) .. ")|r"
+    local value = valueType == "level" and character.level or character.itemLevel
+    if value and value > 0 then
+        text = text .. " |cffb3b3b3(" .. floor(value + 0.5) .. ")|r"
     end
     return text
 end
@@ -379,6 +810,7 @@ local function BuildCharacterRows(realmID)
                     name = stored.name or name,
                     classFile = stored.classFile,
                     specIndex = stored.specIndex,
+                    level = tonumber(stored.level),
                     itemLevel = stored.itemLevel,
                     order = tonumber(stored.order) or math.huge,
                     lastRecordedAt = stored.lastRecordedAt,
@@ -389,9 +821,16 @@ local function BuildCharacterRows(realmID)
                     titanEmberIconFileID = stored.titanEmberIconFileID,
                     titanShards = tonumber(stored.titanShards),
                     titanShardIconFileID = stored.titanShardIconFileID,
+                    professions = type(stored.professions) == "table" and stored.professions or {},
+                    legendaryItems = type(stored.legendaryItems) == "table" and stored.legendaryItems or {},
+                    legendaryUpgradeItems = type(stored.legendaryUpgradeItems) == "table"
+                        and stored.legendaryUpgradeItems or {},
+                    trinkets = type(stored.trinkets) == "table" and stored.trinkets or {},
                     resourcesUpdatedAt = tonumber(stored.resourcesUpdatedAt),
+                    bankResourcesUpdatedAt = tonumber(stored.bankResourcesUpdatedAt),
                     instances = type(stored.instances) == "table" and stored.instances or {},
                     ready = true,
+                    isHidden = stored.isHidden and true or false,
                     isCurrent = realmID == currentRealmID and name == currentName,
                 }
                 character.displayName = GetCharacterDisplayName(character)
@@ -410,7 +849,24 @@ local function BuildCharacterRows(realmID)
 end
 
 local function GetCharacterRows()
-    return BuildCharacterRows(GetCurrentRealmID())
+    local visibleCharacters = {}
+    for _, character in ipairs(BuildCharacterRows(GetCurrentRealmID())) do
+        if not character.isHidden then
+            visibleCharacters[#visibleCharacters + 1] = character
+        end
+    end
+    return visibleCharacters
+end
+
+local function GetRaidCharacterRows(characters)
+    local raidCharacters = {}
+    for _, character in ipairs(characters) do
+        -- 旧快照可能暂时没有等级；只有明确低于 80 级时才过滤，避免升级数据上线后整表突然消失。
+        if not character.level or character.level >= RAID_MIN_LEVEL then
+            raidCharacters[#raidCharacters + 1] = character
+        end
+    end
+    return raidCharacters
 end
 
 local function FormatResetTime(seconds)
@@ -919,8 +1375,130 @@ local function CreateHoverFrame()
         return text
     end
 
+    local function GetItemQualityColor(quality)
+        local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+        if color then
+            return color.r, color.g, color.b
+        end
+    end
+
+    local function CreateItemTile(cell)
+        local tile = CreateFrame("Frame", nil, cell, "BackdropTemplate")
+        tile:SetSize(ITEM_TILE_SIZE, ITEM_TILE_SIZE)
+        tile:SetFrameLevel(hoverFrame:GetFrameLevel() + 20)
+        tile:EnableMouse(true)
+        tile:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        tile:SetBackdropColor(0.02, 0.02, 0.02, 1)
+
+        local icon = tile:CreateTexture(nil, "ARTWORK")
+        icon:SetPoint("TOPLEFT", 1, -1)
+        icon:SetPoint("BOTTOMRIGHT", -1, 1)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        tile.icon = icon
+
+        local valueText = tile:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+        valueText:SetPoint("TOPLEFT", 1, -1)
+        valueText:SetJustifyH("LEFT")
+        valueText:SetFont(BIAOGE_TEXT_FONT, 10, "OUTLINE")
+        tile.valueText = valueText
+        tile:SetScript("OnEnter", function(self)
+            ShowItemTooltip(self, self.item)
+        end)
+        tile:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+        return tile
+    end
+
+    local function RenderItemStrip(cell, tiles, items, valueKey, forcedQuality, valuePrefix)
+        items = items or {}
+        local visibleCount, startX, iconSize, gap = CalculateItemStripLayout(cell:GetWidth(), #items)
+        for index = 1, visibleCount do
+            local tile = tiles[index]
+            if not tile then
+                tile = CreateItemTile(cell)
+                tiles[index] = tile
+            end
+
+            local item = items[index]
+            tile.item = item
+            tile:ClearAllPoints()
+            tile:SetPoint("LEFT", cell, "LEFT", startX + (index - 1) * (iconSize + gap), 0)
+            tile.icon:SetTexture(item.iconFileID)
+            local quality, valueText = GetItemTileDisplay(item, valueKey, forcedQuality, valuePrefix)
+            local red, green, blue = GetItemQualityColor(quality)
+            if red then
+                tile:SetBackdropBorderColor(red, green, blue, 1)
+                tile.valueText:SetTextColor(red, green, blue)
+                tile.valueText:SetText(valueText)
+            else
+                -- 物品品质尚未加载时不猜颜色，等 GET_ITEM_INFO_RECEIVED 后再刷新。
+                tile:SetBackdropBorderColor(0, 0, 0, 0)
+                tile.valueText:SetText("")
+            end
+            tile:Show()
+        end
+        for index = visibleCount + 1, #tiles do
+            tiles[index]:Hide()
+        end
+    end
+
     local function SetCellColor(cell, color)
         cell:SetBackdropColor(unpack(color))
+    end
+
+    local function CreateRowHoverOverlay(cell, overlays)
+        local overlay = cell:CreateTexture(nil, "ARTWORK", nil, -8)
+        overlay:SetPoint("TOPLEFT", 1, -1)
+        overlay:SetPoint("BOTTOMRIGHT", -1, 1)
+        overlay:SetColorTexture(0.95, 0.62, 0.2, 1)
+        overlay:SetAlpha(0)
+        overlays[#overlays + 1] = overlay
+    end
+
+    local function SetRowHoverAlpha(controller, alpha)
+        controller.hoverAlpha = alpha
+        for _, overlay in ipairs(controller.hoverOverlays) do
+            overlay:SetAlpha(alpha)
+        end
+    end
+
+    local function AnimateRowHover(controller, targetAlpha)
+        controller.hoverStartAlpha = controller.hoverAlpha or 0
+        controller.hoverTargetAlpha = targetAlpha
+        controller.hoverElapsed = 0
+        controller:SetScript("OnUpdate", function(self, elapsed)
+            self.hoverElapsed = self.hoverElapsed + elapsed
+            local progress = min(1, self.hoverElapsed / 0.1)
+            local eased = 1 - (1 - progress) * (1 - progress)
+            SetRowHoverAlpha(
+                self,
+                self.hoverStartAlpha + (self.hoverTargetAlpha - self.hoverStartAlpha) * eased
+            )
+            if progress >= 1 then
+                self:SetScript("OnUpdate", nil)
+            end
+        end)
+    end
+
+    local function CreateRowHoverController(overlays)
+        local controller = CreateFrame("Frame", nil, hoverFrame)
+        controller:SetFrameLevel(hoverFrame:GetFrameLevel() + 10)
+        controller:EnableMouse(true)
+        controller.hoverOverlays = overlays
+        controller.hoverAlpha = 0
+        controller:SetScript("OnEnter", function(self)
+            hoverHideSerial = hoverHideSerial + 1
+            AnimateRowHover(self, 0.16)
+        end)
+        controller:SetScript("OnLeave", function(self)
+            AnimateRowHover(self, 0)
+        end)
+        return controller
     end
 
     local function ShowButtonTooltip(button)
@@ -1035,7 +1613,7 @@ local function CreateHoverFrame()
     raidTitleAccent:SetPoint("BOTTOMLEFT", 5, 5)
     raidTitleAccent:SetWidth(3)
     raidTitleAccent:SetColorTexture(unpack(COLOR.gold))
-    local raidTitle = CreateCellText(raidTitleCell, "GameFontNormal", 13, COLOR.gold, "LEFT")
+    local raidTitle = CreateCellText(raidTitleCell, "GameFontNormal", 12, COLOR.gold, "LEFT")
     raidTitle:ClearAllPoints()
     raidTitle:SetPoint("LEFT", 14, 0)
     raidTitle:SetPoint("RIGHT", -7, 0)
@@ -1055,10 +1633,38 @@ local function CreateHoverFrame()
     resourceAccent:SetPoint("BOTTOMLEFT", 5, 5)
     resourceAccent:SetWidth(3)
     resourceAccent:SetColorTexture(unpack(COLOR.gold))
-    local resourceTitle = CreateCellText(resourceTitleCell, "GameFontNormal", 13, COLOR.gold, "LEFT")
+    local resourceTitle = CreateCellText(resourceTitleCell, "GameFontNormal", 12, COLOR.gold, "LEFT")
     resourceTitle:ClearAllPoints()
     resourceTitle:SetPoint("LEFT", 14, 0)
     resourceTitle:SetPoint("RIGHT", -7, 0)
+
+    local professionHeader = CreateTableCell(hoverFrame, COLOR.headerStrong, { top = true })
+    professionHeader:SetSize(ui.professionWidth, ui.resourceGroupHeight + ui.resourceSubHeaderHeight)
+    local professionHeaderText = CreateCellText(professionHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    professionHeaderText:SetText(L["专业"])
+
+    local equipmentHeader = CreateTableCell(hoverFrame, COLOR.headerStrong, { top = true })
+    equipmentHeader:SetSize(
+        ui.legendaryWidth + ui.upgradeWidth + ui.trinketWidth,
+        ui.resourceGroupHeight
+    )
+    local equipmentHeaderText = CreateCellText(equipmentHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    equipmentHeaderText:SetText(L["装备"])
+
+    local legendaryHeader = CreateTableCell(hoverFrame, COLOR.header)
+    legendaryHeader:SetSize(ui.legendaryWidth, ui.resourceSubHeaderHeight)
+    local legendaryHeaderText = CreateCellText(legendaryHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    legendaryHeaderText:SetText(L["橙装"])
+
+    local upgradeHeader = CreateTableCell(hoverFrame, COLOR.header)
+    upgradeHeader:SetSize(ui.upgradeWidth, ui.resourceSubHeaderHeight)
+    local upgradeHeaderText = CreateCellText(upgradeHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    upgradeHeaderText:SetText(L["升级物品"])
+
+    local trinketHeader = CreateTableCell(hoverFrame, COLOR.header)
+    trinketHeader:SetSize(ui.trinketWidth, ui.resourceSubHeaderHeight)
+    local trinketHeaderText = CreateCellText(trinketHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    trinketHeaderText:SetText(L["饰品"])
 
     local commonHeader = CreateTableCell(hoverFrame, COLOR.headerStrong, { top = true })
     commonHeader:SetSize(ui.goldWidth + ui.emberWidth + ui.shardWidth, ui.resourceGroupHeight)
@@ -1080,41 +1686,11 @@ local function CreateHoverFrame()
     local shardHeaderText = CreateCellText(shardHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     shardHeaderText:SetText(L["泰坦碎片"])
 
-    local legendaryHeader = CreateTableCell(hoverFrame, COLOR.headerStrong, { top = true })
-    local legendaryHeaderText = CreateCellText(legendaryHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
-    legendaryHeaderText:SetText(L["橙装进度"])
-
     local footerText = hoverFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     footerText:SetJustifyH("LEFT")
     footerText:SetWordWrap(false)
     footerText:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
     footerText:SetTextColor(0.58, 0.52, 0.43)
-
-    local function ShowResourceTooltip(cell)
-        local character = cell.character
-        if not character then
-            return
-        end
-        GameTooltip:SetOwner(cell, "ANCHOR_BOTTOM")
-        GameTooltip:ClearLines()
-        GameTooltip:AddLine(cell.resourceName .. "（" .. character.name .. "）", 1, 0.82, 0)
-        if cell.resourceType == "ember" and character.titanEmbersWeeklyMax
-            and character.titanEmbersWeeklyMax > 0 then
-            GameTooltip:AddDoubleLine(
-                L["本周已获取"],
-                format("%d/%d", character.titanEmbersEarnedThisWeek or 0, character.titanEmbersWeeklyMax),
-                0.75, 0.75, 0.75, 1, 1, 1
-            )
-        end
-        if character.resourcesUpdatedAt then
-            GameTooltip:AddDoubleLine(
-                L["最后记录"],
-                date("%m-%d %H:%M", character.resourcesUpdatedAt),
-                0.75, 0.75, 0.75, 0.75, 0.75, 0.75
-            )
-        end
-        GameTooltip:Show()
-    end
 
     local function EnsureRow(rowIndex)
         if rows[rowIndex] then
@@ -1123,54 +1699,64 @@ local function CreateHoverFrame()
 
         local row = {
             raidCells = {},
+            raidHoverOverlays = {},
+            resourceHoverOverlays = {},
         }
 
         row.raidNameCell = CreateTableCell(hoverFrame, nil, { left = true })
         row.raidNameCell:SetSize(ui.nameWidth, ui.rowHeight)
         row.raidName = CreateCellText(row.raidNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
+        CreateRowHoverOverlay(row.raidNameCell, row.raidHoverOverlays)
 
         for _, raid in ipairs(RAIDS) do
             local cell = CreateStatusDisplay(hoverFrame, raid.compactWidth, ui.rowHeight, 15, 11, true)
-            cell:EnableMouse(true)
             cell.raid = raid
-            cell:SetScript("OnEnter", ShowLockoutTooltip)
-            cell:SetScript("OnLeave", GameTooltip_Hide)
+            CreateRowHoverOverlay(cell, row.raidHoverOverlays)
             row.raidCells[raid.id] = cell
         end
 
         row.resourceNameCell = CreateTableCell(hoverFrame, nil, { left = true })
         row.resourceNameCell:SetSize(ui.nameWidth, ui.rowHeight)
         row.resourceName = CreateCellText(row.resourceNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
+        CreateRowHoverOverlay(row.resourceNameCell, row.resourceHoverOverlays)
+
+        row.professionCell = CreateTableCell(hoverFrame)
+        row.professionCell:SetSize(ui.professionWidth, ui.rowHeight)
+        row.profession = CreateCellText(row.professionCell, "GameFontHighlightSmall", 11, nil, "CENTER")
+        CreateRowHoverOverlay(row.professionCell, row.resourceHoverOverlays)
+
+        row.legendaryCell = CreateTableCell(hoverFrame)
+        row.legendaryCell:SetSize(ui.legendaryWidth, ui.rowHeight)
+        row.legendaryTiles = {}
+        CreateRowHoverOverlay(row.legendaryCell, row.resourceHoverOverlays)
+
+        row.upgradeCell = CreateTableCell(hoverFrame)
+        row.upgradeCell:SetSize(ui.upgradeWidth, ui.rowHeight)
+        row.upgradeTiles = {}
+        CreateRowHoverOverlay(row.upgradeCell, row.resourceHoverOverlays)
+
+        row.trinketCell = CreateTableCell(hoverFrame)
+        row.trinketCell:SetSize(ui.trinketWidth, ui.rowHeight)
+        row.trinketTiles = {}
+        CreateRowHoverOverlay(row.trinketCell, row.resourceHoverOverlays)
 
         row.goldCell = CreateTableCell(hoverFrame)
         row.goldCell:SetSize(ui.goldWidth, ui.rowHeight)
         row.gold = CreateCellText(row.goldCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
-        row.goldCell.resourceType = "gold"
-        row.goldCell.resourceName = L["金币"]
-        row.goldCell:EnableMouse(true)
-        row.goldCell:SetScript("OnEnter", ShowResourceTooltip)
-        row.goldCell:SetScript("OnLeave", GameTooltip_Hide)
+        CreateRowHoverOverlay(row.goldCell, row.resourceHoverOverlays)
 
         row.emberCell = CreateTableCell(hoverFrame)
         row.emberCell:SetSize(ui.emberWidth, ui.rowHeight)
         row.ember = CreateCellText(row.emberCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
-        row.emberCell.resourceType = "ember"
-        row.emberCell.resourceName = L["泰坦余烬"]
-        row.emberCell:EnableMouse(true)
-        row.emberCell:SetScript("OnEnter", ShowResourceTooltip)
-        row.emberCell:SetScript("OnLeave", GameTooltip_Hide)
+        CreateRowHoverOverlay(row.emberCell, row.resourceHoverOverlays)
 
         row.shardCell = CreateTableCell(hoverFrame)
         row.shardCell:SetSize(ui.shardWidth, ui.rowHeight)
         row.shard = CreateCellText(row.shardCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
-        row.shardCell.resourceType = "shard"
-        row.shardCell.resourceName = L["泰坦碎片"]
-        row.shardCell:EnableMouse(true)
-        row.shardCell:SetScript("OnEnter", ShowResourceTooltip)
-        row.shardCell:SetScript("OnLeave", GameTooltip_Hide)
+        CreateRowHoverOverlay(row.shardCell, row.resourceHoverOverlays)
 
-        row.legendaryCell = CreateTableCell(hoverFrame)
-        row.legendaryCell:SetHeight(ui.rowHeight)
+        row.raidHover = CreateRowHoverController(row.raidHoverOverlays)
+        row.resourceHover = CreateRowHoverController(row.resourceHoverOverlays)
 
         rows[rowIndex] = row
         return row
@@ -1180,6 +1766,18 @@ local function CreateHoverFrame()
     totalNameCell:SetSize(ui.nameWidth, ui.rowHeight)
     local totalName = CreateCellText(totalNameCell, "GameFontNormal", 12, COLOR.gold, "CENTER")
     totalName:SetText(L["合计"])
+
+    local totalProfessionCell = CreateTableCell(hoverFrame, COLOR.header)
+    totalProfessionCell:SetSize(ui.professionWidth, ui.rowHeight)
+
+    local totalLegendaryCell = CreateTableCell(hoverFrame, COLOR.header)
+    totalLegendaryCell:SetSize(ui.legendaryWidth, ui.rowHeight)
+
+    local totalUpgradeCell = CreateTableCell(hoverFrame, COLOR.header)
+    totalUpgradeCell:SetSize(ui.upgradeWidth, ui.rowHeight)
+
+    local totalTrinketCell = CreateTableCell(hoverFrame, COLOR.header)
+    totalTrinketCell:SetSize(ui.trinketWidth, ui.rowHeight)
 
     local totalGoldCell = CreateTableCell(hoverFrame, COLOR.header)
     totalGoldCell:SetSize(ui.goldWidth, ui.rowHeight)
@@ -1193,23 +1791,29 @@ local function CreateHoverFrame()
     totalShardCell:SetSize(ui.shardWidth, ui.rowHeight)
     local totalShard = CreateCellText(totalShardCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
 
-    local totalLegendaryCell = CreateTableCell(hoverFrame, COLOR.header)
-    totalLegendaryCell:SetHeight(ui.rowHeight)
-
     updateHoverFrame = function()
-        local characters = GetCharacterRows()
+        local resourceCharacters = GetCharacterRows()
+        local raidCharacters = GetRaidCharacterRows(resourceCharacters)
         local visibleRaids = GetVisibleRaids()
-        local rowCount = max(1, #characters)
-        local raidsWidth = 0
+        local raidRowCount = max(1, #raidCharacters)
+        local resourceRowCount = max(1, #resourceCharacters)
+        local compactRaidsWidth = 0
         for _, raid in ipairs(visibleRaids) do
-            raidsWidth = raidsWidth + raid.compactWidth
+            compactRaidsWidth = compactRaidsWidth + raid.compactWidth
         end
 
-        width = max(660, ui.padding * 2 + ui.nameWidth + raidsWidth)
+        local equipmentWidth = ui.legendaryWidth + ui.upgradeWidth + ui.trinketWidth
+        local commonWidth = ui.goldWidth + ui.emberWidth + ui.shardWidth
+        local resourceWidth = ui.nameWidth + ui.professionWidth + equipmentWidth + commonWidth
+        width = max(660, ui.padding * 2 + ui.nameWidth + compactRaidsWidth, ui.padding * 2 + resourceWidth)
+        local raidColumnWidths, raidsWidth = CalculateRaidColumnWidths(
+            visibleRaids,
+            width - ui.padding * 2 - ui.nameWidth
+        )
         hoverFrame:SetWidth(width)
         topBar:SetWidth(width - ui.padding * 2)
-        raidTitle:SetFormattedText(L["本周团本 CD · %d个角色"], #characters)
-        resourceTitle:SetFormattedText(L["角色资源总览 · %d个角色"], #characters)
+        raidTitle:SetText(L["本周团本 CD（装等）"])
+        resourceTitle:SetText(L["角色资源（等级）"])
 
         for _, header in pairs(headers) do
             header:Hide()
@@ -1217,10 +1821,11 @@ local function CreateHoverFrame()
         local raidOffsetX = ui.padding + ui.nameWidth
         for _, raid in ipairs(visibleRaids) do
             local header = headers[raid.id]
+            header:SetWidth(raidColumnWidths[raid.id])
             header:ClearAllPoints()
             header:SetPoint("TOPLEFT", raidOffsetX, -(ui.padding + ui.topBarHeight))
             header:Show()
-            raidOffsetX = raidOffsetX + raid.compactWidth
+            raidOffsetX = raidOffsetX + raidColumnWidths[raid.id]
         end
 
         local resetTime = GetRaidResetTime()
@@ -1239,49 +1844,59 @@ local function CreateHoverFrame()
         ))
 
         local raidRowsTop = ui.padding + ui.topBarHeight + ui.raidHeaderHeight
-        resourceTop = raidRowsTop + rowCount * ui.rowHeight + ui.sectionGap
+        resourceTop = raidRowsTop + raidRowCount * ui.rowHeight + ui.sectionGap
         resourceRowsTop = resourceTop + ui.resourceGroupHeight + ui.resourceSubHeaderHeight
-        local legendaryWidth = width - ui.padding * 2 - ui.nameWidth
-            - ui.goldWidth - ui.emberWidth - ui.shardWidth
 
         resourceTitleCell:ClearAllPoints()
         resourceTitleCell:SetPoint("TOPLEFT", ui.padding, -resourceTop)
+
+        local professionX = ui.padding + ui.nameWidth
+        professionHeader:ClearAllPoints()
+        professionHeader:SetPoint("TOPLEFT", professionX, -resourceTop)
+
+        local equipmentX = professionX + ui.professionWidth
+        equipmentHeader:ClearAllPoints()
+        equipmentHeader:SetPoint("TOPLEFT", equipmentX, -resourceTop)
+        legendaryHeader:ClearAllPoints()
+        legendaryHeader:SetPoint("TOPLEFT", equipmentX, -(resourceTop + ui.resourceGroupHeight))
+        upgradeHeader:ClearAllPoints()
+        upgradeHeader:SetPoint(
+            "TOPLEFT",
+            equipmentX + ui.legendaryWidth,
+            -(resourceTop + ui.resourceGroupHeight)
+        )
+        trinketHeader:ClearAllPoints()
+        trinketHeader:SetPoint(
+            "TOPLEFT",
+            equipmentX + ui.legendaryWidth + ui.upgradeWidth,
+            -(resourceTop + ui.resourceGroupHeight)
+        )
+
+        local commonX = equipmentX + equipmentWidth
         commonHeader:ClearAllPoints()
-        commonHeader:SetPoint("TOPLEFT", ui.padding + ui.nameWidth, -resourceTop)
+        commonHeader:SetPoint("TOPLEFT", commonX, -resourceTop)
         goldHeader:ClearAllPoints()
-        goldHeader:SetPoint("TOPLEFT", ui.padding + ui.nameWidth, -(resourceTop + ui.resourceGroupHeight))
+        goldHeader:SetPoint("TOPLEFT", commonX, -(resourceTop + ui.resourceGroupHeight))
         emberHeader:ClearAllPoints()
-        emberHeader:SetPoint("TOPLEFT", ui.padding + ui.nameWidth + ui.goldWidth, -(resourceTop + ui.resourceGroupHeight))
+        emberHeader:SetPoint("TOPLEFT", commonX + ui.goldWidth, -(resourceTop + ui.resourceGroupHeight))
         shardHeader:ClearAllPoints()
         shardHeader:SetPoint(
             "TOPLEFT",
-            ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth,
+            commonX + ui.goldWidth + ui.emberWidth,
             -(resourceTop + ui.resourceGroupHeight)
         )
-        legendaryHeader:ClearAllPoints()
-        legendaryHeader:SetPoint(
-            "TOPLEFT",
-            ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth + ui.shardWidth,
-            -resourceTop
-        )
-        legendaryHeader:SetSize(legendaryWidth, ui.resourceGroupHeight + ui.resourceSubHeaderHeight)
 
-        local goldTotal = 0
-        local emberTotal = 0
-        local shardTotal = 0
-        local latestResourceRecord
-        for rowIndex, character in ipairs(characters) do
+        for rowIndex, character in ipairs(raidCharacters) do
             local row = EnsureRow(rowIndex)
             local rowColor = character.isCurrent and COLOR.current
                 or (rowIndex % 2 == 0 and COLOR.rowEven or COLOR.rowOdd)
             local rowY = raidRowsTop + (rowIndex - 1) * ui.rowHeight
-            local resourceRowY = resourceRowsTop + (rowIndex - 1) * ui.rowHeight
 
             row.raidNameCell:Show()
             row.raidNameCell:ClearAllPoints()
             row.raidNameCell:SetPoint("TOPLEFT", ui.padding, -rowY)
             SetCellColor(row.raidNameCell, rowColor)
-            row.raidName:SetText(GetCharacterDisplayName(character))
+            row.raidName:SetText(GetCharacterDisplayName(character, "itemLevel"))
 
             for _, cell in pairs(row.raidCells) do
                 cell:Hide()
@@ -1289,6 +1904,7 @@ local function CreateHoverFrame()
             local cellOffsetX = ui.padding + ui.nameWidth
             for _, raid in ipairs(visibleRaids) do
                 local cell = row.raidCells[raid.id]
+                cell:SetWidth(raidColumnWidths[raid.id])
                 cell:ClearAllPoints()
                 cell:SetPoint("TOPLEFT", cellOffsetX, -rowY)
                 cell.character = character
@@ -1301,18 +1917,77 @@ local function CreateHoverFrame()
                     true
                 )
                 cell:Show()
-                cellOffsetX = cellOffsetX + raid.compactWidth
+                cellOffsetX = cellOffsetX + raidColumnWidths[raid.id]
             end
+            row.raidHover:ClearAllPoints()
+            row.raidHover:SetPoint("TOPLEFT", ui.padding, -rowY)
+            row.raidHover:SetSize(ui.nameWidth + raidsWidth, ui.rowHeight)
+            row.raidHover:Show()
+        end
+
+        local goldTotal = 0
+        local emberTotal = 0
+        local shardTotal = 0
+        local latestResourceRecord
+        for rowIndex, character in ipairs(resourceCharacters) do
+            local row = EnsureRow(rowIndex)
+            local rowColor = character.isCurrent and COLOR.current
+                or (rowIndex % 2 == 0 and COLOR.rowEven or COLOR.rowOdd)
+            local resourceRowY = resourceRowsTop + (rowIndex - 1) * ui.rowHeight
+            local professionX = ui.padding + ui.nameWidth
+            local legendaryX = professionX + ui.professionWidth
+            local upgradeX = legendaryX + ui.legendaryWidth
+            local trinketX = upgradeX + ui.upgradeWidth
+            local goldX = trinketX + ui.trinketWidth
+            local emberX = goldX + ui.goldWidth
+            local shardX = emberX + ui.emberWidth
 
             row.resourceNameCell:Show()
             row.resourceNameCell:ClearAllPoints()
             row.resourceNameCell:SetPoint("TOPLEFT", ui.padding, -resourceRowY)
             SetCellColor(row.resourceNameCell, rowColor)
-            row.resourceName:SetText(GetCharacterDisplayName(character))
+            row.resourceName:SetText(GetCharacterDisplayName(character, "level"))
+
+            row.professionCell:Show()
+            row.professionCell:ClearAllPoints()
+            row.professionCell:SetPoint("TOPLEFT", professionX, -resourceRowY)
+            SetCellColor(row.professionCell, rowColor)
+            row.profession:SetText(FormatProfessionStrip(character.professions))
+
+            row.legendaryCell:Show()
+            row.legendaryCell:ClearAllPoints()
+            row.legendaryCell:SetPoint("TOPLEFT", legendaryX, -resourceRowY)
+            SetCellColor(row.legendaryCell, rowColor)
+            RenderItemStrip(
+                row.legendaryCell,
+                row.legendaryTiles,
+                character.legendaryItems,
+                "itemLevel",
+                LEGENDARY_ITEM_QUALITY
+            )
+
+            row.upgradeCell:Show()
+            row.upgradeCell:ClearAllPoints()
+            row.upgradeCell:SetPoint("TOPLEFT", upgradeX, -resourceRowY)
+            SetCellColor(row.upgradeCell, rowColor)
+            RenderItemStrip(
+                row.upgradeCell,
+                row.upgradeTiles,
+                character.legendaryUpgradeItems,
+                "count",
+                LEGENDARY_ITEM_QUALITY,
+                "×"
+            )
+
+            row.trinketCell:Show()
+            row.trinketCell:ClearAllPoints()
+            row.trinketCell:SetPoint("TOPLEFT", trinketX, -resourceRowY)
+            SetCellColor(row.trinketCell, rowColor)
+            RenderItemStrip(row.trinketCell, row.trinketTiles, character.trinkets, "itemLevel")
 
             row.goldCell:Show()
             row.goldCell:ClearAllPoints()
-            row.goldCell:SetPoint("TOPLEFT", ui.padding + ui.nameWidth, -resourceRowY)
+            row.goldCell:SetPoint("TOPLEFT", goldX, -resourceRowY)
             row.goldCell.character = character
             SetCellColor(row.goldCell, rowColor)
             local gold = character.money and floor(character.money / 10000) or nil
@@ -1320,31 +1995,22 @@ local function CreateHoverFrame()
 
             row.emberCell:Show()
             row.emberCell:ClearAllPoints()
-            row.emberCell:SetPoint("TOPLEFT", ui.padding + ui.nameWidth + ui.goldWidth, -resourceRowY)
+            row.emberCell:SetPoint("TOPLEFT", emberX, -resourceRowY)
             row.emberCell.character = character
             SetCellColor(row.emberCell, rowColor)
             row.ember:SetText(FormatResourceNumber(character.titanEmbers))
 
             row.shardCell:Show()
             row.shardCell:ClearAllPoints()
-            row.shardCell:SetPoint(
-                "TOPLEFT",
-                ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth,
-                -resourceRowY
-            )
+            row.shardCell:SetPoint("TOPLEFT", shardX, -resourceRowY)
             row.shardCell.character = character
             SetCellColor(row.shardCell, rowColor)
             row.shard:SetText(FormatResourceNumber(character.titanShards))
 
-            row.legendaryCell:Show()
-            row.legendaryCell:ClearAllPoints()
-            row.legendaryCell:SetPoint(
-                "TOPLEFT",
-                ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth + ui.shardWidth,
-                -resourceRowY
-            )
-            row.legendaryCell:SetSize(legendaryWidth, ui.rowHeight)
-            SetCellColor(row.legendaryCell, rowColor)
+            row.resourceHover:ClearAllPoints()
+            row.resourceHover:SetPoint("TOPLEFT", ui.padding, -resourceRowY)
+            row.resourceHover:SetSize(resourceWidth, ui.rowHeight)
+            row.resourceHover:Show()
 
             goldTotal = goldTotal + (gold or 0)
             emberTotal = emberTotal + (character.titanEmbers or 0)
@@ -1355,39 +2021,56 @@ local function CreateHoverFrame()
             end
         end
 
-        for rowIndex = #characters + 1, #rows do
+        for rowIndex = #raidCharacters + 1, #rows do
             local row = rows[rowIndex]
             row.raidNameCell:Hide()
-            row.resourceNameCell:Hide()
-            row.goldCell:Hide()
-            row.emberCell:Hide()
-            row.shardCell:Hide()
-            row.legendaryCell:Hide()
+            row.raidHover:Hide()
+            row.raidHover:SetScript("OnUpdate", nil)
+            SetRowHoverAlpha(row.raidHover, 0)
             for _, cell in pairs(row.raidCells) do
                 cell:Hide()
             end
         end
 
-        local totalY = resourceRowsTop + rowCount * ui.rowHeight
+        for rowIndex = #resourceCharacters + 1, #rows do
+            local row = rows[rowIndex]
+            row.resourceNameCell:Hide()
+            row.professionCell:Hide()
+            row.legendaryCell:Hide()
+            row.upgradeCell:Hide()
+            row.trinketCell:Hide()
+            row.goldCell:Hide()
+            row.emberCell:Hide()
+            row.shardCell:Hide()
+            row.resourceHover:Hide()
+            row.resourceHover:SetScript("OnUpdate", nil)
+            SetRowHoverAlpha(row.resourceHover, 0)
+        end
+
+        local totalY = resourceRowsTop + resourceRowCount * ui.rowHeight
+        local professionX = ui.padding + ui.nameWidth
+        local legendaryX = professionX + ui.professionWidth
+        local upgradeX = legendaryX + ui.legendaryWidth
+        local trinketX = upgradeX + ui.upgradeWidth
+        local goldX = trinketX + ui.trinketWidth
+        local emberX = goldX + ui.goldWidth
+        local shardX = emberX + ui.emberWidth
         totalNameCell:ClearAllPoints()
         totalNameCell:SetPoint("TOPLEFT", ui.padding, -totalY)
-        totalGoldCell:ClearAllPoints()
-        totalGoldCell:SetPoint("TOPLEFT", ui.padding + ui.nameWidth, -totalY)
-        totalEmberCell:ClearAllPoints()
-        totalEmberCell:SetPoint("TOPLEFT", ui.padding + ui.nameWidth + ui.goldWidth, -totalY)
-        totalShardCell:ClearAllPoints()
-        totalShardCell:SetPoint(
-            "TOPLEFT",
-            ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth,
-            -totalY
-        )
+        totalProfessionCell:ClearAllPoints()
+        totalProfessionCell:SetPoint("TOPLEFT", professionX, -totalY)
         totalLegendaryCell:ClearAllPoints()
-        totalLegendaryCell:SetPoint(
-            "TOPLEFT",
-            ui.padding + ui.nameWidth + ui.goldWidth + ui.emberWidth + ui.shardWidth,
-            -totalY
-        )
-        totalLegendaryCell:SetSize(legendaryWidth, ui.rowHeight)
+        totalLegendaryCell:SetPoint("TOPLEFT", legendaryX, -totalY)
+        totalUpgradeCell:ClearAllPoints()
+        totalUpgradeCell:SetPoint("TOPLEFT", upgradeX, -totalY)
+        totalTrinketCell:ClearAllPoints()
+        totalTrinketCell:SetPoint("TOPLEFT", trinketX, -totalY)
+        totalGoldCell:ClearAllPoints()
+        totalGoldCell:SetPoint("TOPLEFT", goldX, -totalY)
+        totalEmberCell:ClearAllPoints()
+        totalEmberCell:SetPoint("TOPLEFT", emberX, -totalY)
+        totalShardCell:ClearAllPoints()
+        totalShardCell:SetPoint("TOPLEFT", shardX, -totalY)
         totalGold:SetText(FormatResourceAmount(goldTotal, GetCoinIconFile()))
         totalEmber:SetText(FormatResourceAmount(emberTotal, GetCurrencyIconFile(TITAN_EMBER_CURRENCY_ID)))
         totalShard:SetText(FormatResourceAmount(shardTotal, GetCurrencyIconFile(TITAN_SHARD_CURRENCY_ID)))
@@ -1495,6 +2178,22 @@ function BG.GetRaidLockoutStoredCharacters(realmID)
     return BuildCharacterRows(realmID or GetCurrentRealmID())
 end
 
+function BG.SetRaidLockoutCharacterHidden(realmID, characterName, isHidden)
+    realmID = realmID or GetCurrentRealmID()
+    local realm = GetRealmStore(realmID, false)
+    local character = realm and realm.characters[characterName]
+    if type(character) ~= "table" then
+        return false
+    end
+
+    character.isHidden = isHidden and true or nil
+    BG.RefreshRaidLockoutDisplays()
+    if BG.RefreshRaidLockoutCharacterOptions then
+        BG.RefreshRaidLockoutCharacterOptions()
+    end
+    return true
+end
+
 function BG.DeleteRaidLockoutCharacter(realmID, characterName)
     realmID = realmID or GetCurrentRealmID()
     local realm = GetRealmStore(realmID, false)
@@ -1562,8 +2261,29 @@ BG.RegisterEvent("ENCOUNTER_END", function(_, _, _, _, _, _, success)
     end
 end)
 
-BG.RegisterEvent({ "CURRENCY_DISPLAY_UPDATE", "PLAYER_MONEY" }, function()
-    BG.After(0.2, CaptureCurrentResources)
+BG.RegisterEvent({
+    "CURRENCY_DISPLAY_UPDATE",
+    "PLAYER_EQUIPMENT_CHANGED",
+    "PLAYER_LEVEL_UP",
+    "PLAYER_MONEY",
+    "SKILL_LINES_CHANGED",
+}, function()
+    ScheduleResourceRefresh(0.2)
+end)
+
+BG.RegisterEvent("BAG_UPDATE_DELAYED", function()
+    ScheduleResourceRefresh(0.2)
+end)
+
+BG.RegisterEvent({ "BANKFRAME_OPENED", "PLAYERBANKSLOTS_CHANGED", "PLAYERBANKBAGSLOTS_CHANGED" }, function()
+    ScheduleResourceRefresh(0.2)
+end)
+
+BG.RegisterEvent("GET_ITEM_INFO_RECEIVED", function(_, _, _, success)
+    if not success then
+        return
+    end
+    ScheduleResourceRefresh(0.1)
 end)
 
 BG.Init2(function()
@@ -1572,6 +2292,6 @@ BG.Init2(function()
     SLASH_BGFORGERAIDLOCKOUT2 = "/bgraid"
 
     ClearExpiredRaidData()
-    BG.After(0.5, CaptureCurrentResources)
+    ScheduleResourceRefresh(0.5)
     RequestCurrentRaidInfo()
 end)

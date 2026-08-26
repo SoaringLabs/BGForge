@@ -263,7 +263,7 @@ BG.Init(function()
         characterHelp:SetPoint("TOPLEFT", characterTitle, "BOTTOMLEFT", 0, -8)
         characterHelp:SetWidth(700)
         characterHelp:SetJustifyH("LEFT")
-        characterHelp:SetText(L["这里只删除团本CD列表记录，不影响拍卖、账本或其他插件数据。"])
+        characterHelp:SetText(L["隐藏只影响团本CD和角色资源总览，可随时恢复；删除仍只删除本地总览记录，不影响拍卖、账本或其他插件数据。"])
 
         local emptyText = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         emptyText:SetPoint("TOPLEFT", 15, -258)
@@ -301,7 +301,7 @@ BG.Init(function()
             end
 
             local row = CreateFrame("Frame", nil, raidLockout)
-            row:SetSize(430, 28)
+            row:SetSize(530, 28)
             row:SetPoint("TOPLEFT", 15, -250 - (index - 1) * 30)
 
             local name = row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -324,6 +324,16 @@ BG.Init(function()
             end)
             row.deleteButton = deleteButton
 
+            local visibilityButton = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            visibilityButton:SetSize(88, 22)
+            visibilityButton:SetPoint("RIGHT", deleteButton, "LEFT", -8, 0)
+            visibilityButton:SetScript("OnClick", function(self)
+                if BG.SetRaidLockoutCharacterHidden then
+                    BG.SetRaidLockoutCharacterHidden(self.realmID, self.characterName, not self.isHidden)
+                end
+            end)
+            row.visibilityButton = visibilityButton
+
             characterRows[index] = row
             return row
         end
@@ -331,13 +341,26 @@ BG.Init(function()
         local function UpdateCharacterManager()
             local characters = BG.GetRaidLockoutStoredCharacters
                 and BG.GetRaidLockoutStoredCharacters(GetRealmID()) or {}
-            characterTitle:SetFormattedText(L["已记录角色（%d）"], #characters)
+            local hiddenCount = 0
+            for _, character in ipairs(characters) do
+                hiddenCount = hiddenCount + (character.isHidden and 1 or 0)
+            end
+            characterTitle:SetFormattedText(L["已记录角色（%d，隐藏%d）"], #characters, hiddenCount)
             emptyText:SetShown(#characters == 0)
 
             for index, character in ipairs(characters) do
                 local row = EnsureCharacterRow(index)
                 row:Show()
-                row.name:SetText(character.displayName or character.name)
+                local displayName = character.displayName or character.name
+                if character.isHidden then
+                    displayName = displayName .. " |cff808080" .. L["（已隐藏）"] .. "|r"
+                end
+                row.name:SetText(displayName)
+                row.name:SetAlpha(character.isHidden and 0.6 or 1)
+                row.visibilityButton:SetText(character.isHidden and L["恢复显示"] or L["隐藏"])
+                row.visibilityButton.realmID = GetRealmID()
+                row.visibilityButton.characterName = character.name
+                row.visibilityButton.isHidden = character.isHidden
                 row.deleteButton.realmID = GetRealmID()
                 row.deleteButton.characterName = character.name
                 row.deleteButton.displayName = character.displayName or character.name
