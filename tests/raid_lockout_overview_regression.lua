@@ -72,6 +72,17 @@ local function ResetEnvironment()
         end,
     }
     C_CurrencyInfo = nil
+    C_DateAndTime = {
+        GetSecondsUntilWeeklyReset = function()
+            return 604800
+        end,
+    }
+    C_QuestLog = {
+        IsQuestFlaggedCompleted = function()
+            return false
+        end,
+    }
+    C_Timer = nil
 
     local events = {}
     local BG = {
@@ -557,6 +568,81 @@ local function TestItemTilesUseNativeGameTooltip()
     assert(calls.itemID == 265340, "item ID fallback did not use GameTooltip:SetItemByID")
 end
 
+local function TestWeeklyQuestColumnFollowsVault()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    local getColumns = FindUpvalue(createHoverFrame, "GetVisibleLockoutColumns")
+    assert(getColumns, "weekly lockout-column builder is missing")
+
+    local columns = getColumns()
+    assert(columns[#columns].isWeeklyQuest and columns[#columns].id == "weeklyQuest",
+        "weekly quest must be the last lockout column")
+    assert(columns[#columns - 1].id == 624,
+        "weekly quest must appear immediately after Vault of Archavon")
+
+    local choices = BG.GetRaidLockoutDisplayChoices()
+    local weeklyChoice = choices[#choices]
+    assert(weeklyChoice.id == "weeklyQuest"
+        and weeklyChoice.name == "周常"
+        and weeklyChoice.optionKey == "raidLockoutShow_weeklyQuest",
+        "weekly quest must be exposed as the last configurable display module")
+
+    local calculateWidths = FindUpvalue(createHoverFrame, "CalculateRaidColumnWidths")
+    local widths, totalWidth = calculateWidths(columns, 744)
+    assert(math.abs(totalWidth - 744) < 0.001 and widths.weeklyQuest > 58,
+        "adding the weekly quest column must still fill the existing compact-table width")
+
+    BiaoGe = {
+        options = {
+            raidLockoutShow_weeklyQuest = 0,
+        },
+    }
+    columns = getColumns()
+    assert(columns[#columns].id == 624,
+        "disabling the weekly display option must remove it from both overview layouts")
+end
+
+local function TestWeeklyQuestTurnInStoresMinimalSnapshot()
+    local _, events = ResetEnvironment()
+    assert(events.QUEST_TURNED_IN, "QUEST_TURNED_IN handler is missing")
+
+    events.QUEST_TURNED_IN(nil, nil, 93975)
+    local weeklyQuest = GetStoredCharacter().weeklyQuest
+    assert(weeklyQuest and weeklyQuest.status == "completed" and weeklyQuest.questID == 93975,
+        "a matching rotating weekly quest was not recorded as completed")
+    assert(weeklyQuest.resetAt == 1700604800 and weeklyQuest.updatedAt == 1700000000,
+        "weekly quest snapshot did not use the official weekly reset boundary")
+    assert(weeklyQuest.player == nil and weeklyQuest.colorplayer == nil,
+        "weekly quest snapshot must not restore redundant original-BiaoGe identity fields")
+
+    events.QUEST_TURNED_IN(nil, nil, 123456)
+    assert(GetStoredCharacter().weeklyQuest.questID == 93975,
+        "an unrelated quest overwrote the weekly quest slot")
+end
+
+local function TestWeeklyQuestLoginBackfillAndIndependentExpiry()
+    local BG, events = ResetEnvironment()
+    C_QuestLog.IsQuestFlaggedCompleted = function(questID)
+        return questID == 96312
+    end
+
+    local captureWeeklyQuest = FindUpvalue(events.QUEST_TURNED_IN, "CaptureCurrentWeeklyQuest")
+    assert(captureWeeklyQuest, "weekly quest backfill function is missing")
+    assert(captureWeeklyQuest(), "weekly quest backfill did not run")
+    assert(GetStoredCharacter().weeklyQuest.questID == 96312,
+        "login backfill did not scan the rotating weekly quest pool")
+
+    GetServerTime = function()
+        return 1700604801
+    end
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    local getVisibleRows = FindUpvalue(createHoverFrame, "GetCharacterRows")
+    assert(getVisibleRows, "character-row builder is missing")
+    getVisibleRows()
+    assert(GetStoredCharacter().weeklyQuest == nil,
+        "expired weekly quest snapshot survived its own reset boundary")
+end
+
 local tests = {
     fallback = TestSkillLineFallbackCapturesPrimaryProfessions,
     preserve = TestUnavailableProfessionDataDoesNotEraseSnapshot,
@@ -571,6 +657,9 @@ local tests = {
     item_quality = TestItemTileDisplayUsesRequestedQualitySemantics,
     character_visibility = TestCharacterVisibilityCanBeRestored,
     native_tooltip = TestItemTilesUseNativeGameTooltip,
+    weekly_column = TestWeeklyQuestColumnFollowsVault,
+    weekly_turnin = TestWeeklyQuestTurnInStoresMinimalSnapshot,
+    weekly_backfill = TestWeeklyQuestLoginBackfillAndIndependentExpiry,
 }
 
 if arg[1] then
@@ -585,6 +674,9 @@ else
         "item_quality",
         "character_visibility",
         "native_tooltip",
+        "weekly_column",
+        "weekly_turnin",
+        "weekly_backfill",
     }) do
         tests[testName]()
     end

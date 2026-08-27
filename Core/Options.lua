@@ -188,7 +188,7 @@ BG.Init(function()
 
         biaoge = BG.OptionsCreateTab("Options_biaoge", L["表格"])
         autoAuction = BG.OptionsCreateTab("Options_autoAuction", L["自动拍卖"])
-        raidLockout = BG.OptionsCreateTab("Options_raidLockout", L["团本CD展示"])
+        raidLockout = BG.OptionsCreateTab("Options_raidLockout", L["角色总览"])
         -- Lite: 恢复「其他功能」页（2026-08-24 按 BiaoGe v2.3.5 还原，仅保留有模块支撑的配置项）
         others = BG.OptionsCreateTab("Options_others", L["其他功能"])
 
@@ -203,26 +203,26 @@ BG.Init(function()
         end)
     end
 
-    -- 团本 CD 展示
+    -- 角色总览
     do
         raidLockout:SetSize(1, 320)
 
         local title = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         title:SetPoint("TOPLEFT", 15, -15)
-        title:SetText(L["团本CD展示设置"])
+        title:SetText(L["CD展示设置"])
         title:SetTextColor(0, 0.75, 1)
 
         local text = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -14)
         text:SetWidth(700)
         text:SetJustifyH("LEFT")
-        text:SetText(L["勾选要在小界面和大界面中展示的副本。"])
+        text:SetText(L["勾选要展示的副本模块"])
 
         local choices = BG.GetRaidLockoutDisplayChoices and BG.GetRaidLockoutDisplayChoices() or {}
         local columnWidth = 175
         for index, choice in ipairs(choices) do
             local optionKey = choice.optionKey
-            local raidName = choice.name
+            local moduleName = choice.name
             if BiaoGe.options[optionKey] == nil then
                 BiaoGe.options[optionKey] = 1
             end
@@ -233,7 +233,7 @@ BG.Init(function()
             checkbox:SetPoint("TOPLEFT", 15 + column * columnWidth, -72 - row * 34)
             checkbox:SetSize(28, 28)
             checkbox.Text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            checkbox.Text:SetText(raidName)
+            checkbox.Text:SetText(moduleName)
             checkbox.Text:SetWordWrap(false)
             checkbox.Text:SetWidth(columnWidth - 35)
             checkbox:SetHitRectInsets(0, -(columnWidth - 35), 0, 0)

@@ -2954,9 +2954,8 @@ do
     L["角色列表"] = true
     L["%d个角色"] = true
     L["查看团本CD"] = true
-    L["团本CD展示"] = true
-    L["团本CD展示设置"] = true
-    L["勾选要在小界面和大界面中展示的副本。"] = true
+    L["CD展示设置"] = true
+    L["勾选要展示的副本模块"] = true
     L["已记录角色（%d）"] = true
     L["已记录角色（%d，隐藏%d）"] = true
     L["暂无已记录角色"] = true
@@ -2972,6 +2971,7 @@ do
     L["本周团本 CD · %d个角色"] = true
     L["角色资源总览 · %d个角色"] = true
     L["本周团本 CD（装等）"] = true
+    L["本周 CD（装等）"] = true
     L["角色资源（等级）"] = true
     L["橙装"] = true
     L["饰品"] = true
