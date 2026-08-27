@@ -6,7 +6,7 @@ local ldb = LibStub:GetLibrary("LibDataBroker-1.1", true)
 if not ldb then return end
 
 
-local plugin = ldb:NewDataObject(AddonName, { text = "BGForge", type = "data source", icon = "Interface\\AddOns\\BGForge\\Media\\icon\\icon.tga" })
+local plugin = ldb:NewDataObject(AddonName, { text = "BGForge", type = "data source", icon = "Interface\\AddOns\\BGForge\\Media\\icon\\icon-128.tga" })
 
 function plugin:OnClick(button) --function plugin.OnClick(self, button)
     if button == "LeftButton" then

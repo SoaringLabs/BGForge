@@ -271,6 +271,21 @@ local function TestEquipmentUsesIconTilesWithTopLeftValues()
     assert(startX > 0, "equipment icons should be centered in their cell")
 end
 
+local function TestProfessionsUseMatchingIconTilesWithFixedColor()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local getDisplay = FindUpvalue(createHoverFrame, "GetProfessionTileDisplay")
+    local tileColor = FindUpvalue(createHoverFrame, "PROFESSION_TILE_COLOR")
+    assert(getDisplay, "profession icon-tile display is missing")
+    assert(tileColor and #tileColor == 4, "profession tiles must use one fixed border/text color")
+
+    local iconFileID, rankText = getDisplay({ iconFileID = 136243, rank = 450 })
+    assert(iconFileID == 136243 and rankText == "450",
+        "profession tiles must show the profession icon with its rank in the corner")
+    assert(getDisplay({ rank = 450 }) == nil, "professions without an icon should not render an empty tile")
+end
+
 local function TestCollapsedSkillHeadersExpandOnceWithoutEventLoop()
     local BG, events = ResetEnvironment()
     GetProfessions = nil
@@ -549,6 +564,7 @@ local tests = {
     incomplete_primary = TestIncompletePrimaryAPIUsesSkillLineFallback,
     raid_width = TestRaidColumnsFillAvailableWidth,
     item_tiles = TestEquipmentUsesIconTilesWithTopLeftValues,
+    profession_tiles = TestProfessionsUseMatchingIconTilesWithFixedColor,
     collapsed_headers = TestCollapsedSkillHeadersExpandOnceWithoutEventLoop,
     debounce = TestResourceRefreshEventsAreDebounced,
     legendary_classification = TestUpgradeItemsAreExcludedFromFinishedLegendaries,
@@ -562,6 +578,7 @@ if arg[1] then
 else
     for _, testName in ipairs({
         "fallback", "preserve", "primary", "incomplete_primary", "raid_width", "item_tiles",
+        "profession_tiles",
         "collapsed_headers",
         "debounce",
         "legendary_classification",

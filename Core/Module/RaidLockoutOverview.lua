@@ -58,6 +58,7 @@ local TITAN_PRIMARY_PROFESSION_INFO = {
 local ITEM_TILE_SIZE = 22
 local ITEM_TILE_GAP = 2
 local ITEM_TILE_PADDING = 4
+local PROFESSION_TILE_COLOR = { 0.84, 0.55, 0.18, 1 }
 
 local SMALL_UI = {
     padding = 10,
@@ -156,22 +157,11 @@ local function GetResourceIconMarkup(iconFile)
     return " |T" .. iconFile .. ":13:13:0:0:64:64:4:60:4:60|t"
 end
 
-local function GetCompactIconMarkup(iconFile)
-    if not iconFile then
-        return ""
+local function GetProfessionTileDisplay(profession)
+    if not profession or not profession.iconFileID then
+        return
     end
-    return " |T" .. iconFile .. ":16:16:0:0:64:64:4:60:4:60|t"
-end
-
-local function FormatProfessionStrip(professions)
-    local values = {}
-    for _, profession in ipairs(professions or {}) do
-        if profession.iconFileID then
-            values[#values + 1] = tostring(profession.rank or 0)
-                .. GetCompactIconMarkup(profession.iconFileID)
-        end
-    end
-    return table.concat(values, "  ")
+    return profession.iconFileID, tostring(profession.rank or 0)
 end
 
 local function FormatResourceAmount(amount, iconFile)
@@ -1447,6 +1437,40 @@ local function CreateHoverFrame()
         end
     end
 
+    local function RenderProfessionStrip(cell, tiles, professions)
+        local visibleProfessions = {}
+        for _, profession in ipairs(professions or {}) do
+            if profession.iconFileID then
+                visibleProfessions[#visibleProfessions + 1] = profession
+            end
+        end
+
+        local visibleCount, startX, iconSize, gap = CalculateItemStripLayout(
+            cell:GetWidth(),
+            #visibleProfessions
+        )
+        for index = 1, visibleCount do
+            local tile = tiles[index]
+            if not tile then
+                tile = CreateItemTile(cell)
+                tiles[index] = tile
+            end
+
+            local iconFileID, rankText = GetProfessionTileDisplay(visibleProfessions[index])
+            tile.item = nil
+            tile:ClearAllPoints()
+            tile:SetPoint("LEFT", cell, "LEFT", startX + (index - 1) * (iconSize + gap), 0)
+            tile.icon:SetTexture(iconFileID)
+            tile:SetBackdropBorderColor(unpack(PROFESSION_TILE_COLOR))
+            tile.valueText:SetTextColor(unpack(PROFESSION_TILE_COLOR))
+            tile.valueText:SetText(rankText)
+            tile:Show()
+        end
+        for index = visibleCount + 1, #tiles do
+            tiles[index]:Hide()
+        end
+    end
+
     local function SetCellColor(cell, color)
         cell:SetBackdropColor(unpack(color))
     end
@@ -1563,7 +1587,7 @@ local function CreateHoverFrame()
     local logo = topBar:CreateTexture(nil, "ARTWORK")
     logo:SetSize(22, 22)
     logo:SetPoint("LEFT", 8, 0)
-    logo:SetTexture("Interface\\AddOns\\BGForge\\Media\\icon\\icon.tga")
+    logo:SetTexture("Interface\\AddOns\\BGForge\\Media\\icon\\icon-128.tga")
 
     local title = topBar:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("LEFT", logo, "RIGHT", 7, 0)
@@ -1722,7 +1746,7 @@ local function CreateHoverFrame()
 
         row.professionCell = CreateTableCell(hoverFrame)
         row.professionCell:SetSize(ui.professionWidth, ui.rowHeight)
-        row.profession = CreateCellText(row.professionCell, "GameFontHighlightSmall", 11, nil, "CENTER")
+        row.professionTiles = {}
         CreateRowHoverOverlay(row.professionCell, row.resourceHoverOverlays)
 
         row.legendaryCell = CreateTableCell(hoverFrame)
@@ -1952,7 +1976,7 @@ local function CreateHoverFrame()
             row.professionCell:ClearAllPoints()
             row.professionCell:SetPoint("TOPLEFT", professionX, -resourceRowY)
             SetCellColor(row.professionCell, rowColor)
-            row.profession:SetText(FormatProfessionStrip(character.professions))
+            RenderProfessionStrip(row.professionCell, row.professionTiles, character.professions)
 
             row.legendaryCell:Show()
             row.legendaryCell:ClearAllPoints()

@@ -11,10 +11,12 @@ Finalized on 2026-08-27 from the user-approved rounded app-icon concept.
 - `bgforge-logo-square-64.png`: small UI preview.
 - `bgforge-logo-square-32.png`: game add-on icon preview.
 - `bgforge-logo-square-32.tga`: World of Warcraft-ready 32 px uncompressed RGBA TGA.
+- `Media/icon/icon-128.tga`: World of Warcraft runtime icon generated from the approved 128 px export.
 - `bgforge-logo-square-source.png`: original 1254 px generated source.
 - `original-icon-32.tga`: backup of the original runtime icon.
 
-The live asset at `Media/icon/icon.tga` has been replaced with `bgforge-logo-square-32.tga`.
+The live UI now references `Media/icon/icon-128.tga`. The previous 32 px `Media/icon/icon.tga`
+is retained as a compatibility fallback but is no longer referenced by BGForge.
 
 ## Production decisions
 
@@ -45,4 +47,5 @@ a5a58d0080ce3129dcf260e5a3d230bf97b9034f8de2519151e57037b0ea65a7  bgforge-logo-s
 e8572d47792b3fd75958deb8cae7febe24cd7bd26716622d077a769c24df6b9f  bgforge-logo-square-64.png
 2303a655c2fb2648cf894672140586e995af5f45cd336a008fcb6af35e4065ff  bgforge-logo-square-source.png
 0ebe20b193fee46f4b6b40283e046bccfe286ab6e71c096dbad2f99876a58572  original-icon-32.tga
+c4b8c3032dd5e5cd20c764ef61c18e3967c26e3c122eee97e908168a2297e761  ../../../Media/icon/icon-128.tga
 ```

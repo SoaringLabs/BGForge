@@ -1,7 +1,7 @@
 ## Interface: 11508, 11509, 20506, 30405, 38002, 40402, 50503, 50504, 50505, 120005, 120007, 120100
 ## Title: |cff00BFFF<BGForge> 团本事务台|r
 ## Notes: 基于 BGLite 开发的团本拍卖增强插件。命令：/bgf、/bglite 或 /gbg
-## IconTexture: Interface\AddOns\BGForge\Media\icon\icon.tga
+## IconTexture: Interface\AddOns\BGForge\Media\icon\icon-128.tga
 ## Author: Soaring Labs
 ## X-Original-Addon: BGLite
 ## X-Upstream-Version: 2.4.0
