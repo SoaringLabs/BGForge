@@ -59,6 +59,8 @@ local ITEM_TILE_SIZE = 22
 local ITEM_TILE_GAP = 2
 local ITEM_TILE_PADDING = 4
 local PROFESSION_TILE_COLOR = { 0.84, 0.55, 0.18, 1 }
+local RESOURCE_NUMBER_FONT = "Interface\\AddOns\\BGForge\\Media\\Fonts\\RobotoCondensed-Medium.ttf"
+local RESOURCE_NUMBER_FONT_SIZE = 12
 
 local SMALL_UI = {
     padding = 10,
@@ -1365,6 +1367,12 @@ local function CreateHoverFrame()
         return text
     end
 
+    local function CreateResourceNumberText(cell)
+        local text = CreateCellText(cell, nil, nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+        text:SetFont(RESOURCE_NUMBER_FONT, RESOURCE_NUMBER_FONT_SIZE, "OUTLINE")
+        return text
+    end
+
     local function GetItemQualityColor(quality)
         local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
         if color then
@@ -1766,17 +1774,17 @@ local function CreateHoverFrame()
 
         row.goldCell = CreateTableCell(hoverFrame)
         row.goldCell:SetSize(ui.goldWidth, ui.rowHeight)
-        row.gold = CreateCellText(row.goldCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+        row.gold = CreateResourceNumberText(row.goldCell)
         CreateRowHoverOverlay(row.goldCell, row.resourceHoverOverlays)
 
         row.emberCell = CreateTableCell(hoverFrame)
         row.emberCell:SetSize(ui.emberWidth, ui.rowHeight)
-        row.ember = CreateCellText(row.emberCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+        row.ember = CreateResourceNumberText(row.emberCell)
         CreateRowHoverOverlay(row.emberCell, row.resourceHoverOverlays)
 
         row.shardCell = CreateTableCell(hoverFrame)
         row.shardCell:SetSize(ui.shardWidth, ui.rowHeight)
-        row.shard = CreateCellText(row.shardCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+        row.shard = CreateResourceNumberText(row.shardCell)
         CreateRowHoverOverlay(row.shardCell, row.resourceHoverOverlays)
 
         row.raidHover = CreateRowHoverController(row.raidHoverOverlays)
@@ -1805,15 +1813,15 @@ local function CreateHoverFrame()
 
     local totalGoldCell = CreateTableCell(hoverFrame, COLOR.header)
     totalGoldCell:SetSize(ui.goldWidth, ui.rowHeight)
-    local totalGold = CreateCellText(totalGoldCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+    local totalGold = CreateResourceNumberText(totalGoldCell)
 
     local totalEmberCell = CreateTableCell(hoverFrame, COLOR.header)
     totalEmberCell:SetSize(ui.emberWidth, ui.rowHeight)
-    local totalEmber = CreateCellText(totalEmberCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+    local totalEmber = CreateResourceNumberText(totalEmberCell)
 
     local totalShardCell = CreateTableCell(hoverFrame, COLOR.header)
     totalShardCell:SetSize(ui.shardWidth, ui.rowHeight)
-    local totalShard = CreateCellText(totalShardCell, "NumberFontNormal", nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+    local totalShard = CreateResourceNumberText(totalShardCell)
 
     updateHoverFrame = function()
         local resourceCharacters = GetCharacterRows()
