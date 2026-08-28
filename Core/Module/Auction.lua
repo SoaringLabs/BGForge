@@ -312,29 +312,383 @@ BG.Init(function()
     -- 团长开始拍卖UI
     do
         BiaoGe.Auction.duration = BiaoGe.Auction.duration or 40
-        BiaoGe.Auction.mod = BiaoGe.Auction.mod or "normal"
-        if BiaoGe.Auction.mod == 'roll' or BiaoGe.Auction.mod == 'anonymous' then
-            BiaoGe.Auction.mod = 'normal'
-        end
+        -- 官方已禁用匿名拍卖，因此不再保留可切换的拍卖模式。
+        BiaoGe.Auction.mod = "normal"
         BiaoGe.Auction.aotoSendLate = BiaoGe.Auction.aotoSendLate or 3
-        BiaoGe.Auction.gen = BiaoGe.Auction.gen or 1
+        if BiaoGe.Auction.gen ~= 1 and BiaoGe.Auction.gen ~= 2 then
+            BiaoGe.Auction.gen = 2
+        end
         BiaoGe.Auction.resetThreshold = BiaoGe.Auction.resetThreshold or 20
 
-        local mods = {
-            normal = L["常规模式"],
-            -- roll = L["Roll点"],
-        }
         local gens = {
             [1] = L["第一代拍卖"],
             [2] = L["第二代拍卖"],
         }
-        if not mods[BiaoGe.Auction.mod] then
-            BiaoGe.Auction.mod = "normal"
-        end
         local mainFrameWidth = 250
-        local mainFrameHeight = 217
+        local mainFrameHeight = 173
         local maxCount = 10
         local errorMsg = L['错误：同时拍卖的数量不能超过%s个']:format(maxCount)
+
+        -- 拍卖版本属于整张拍卖表，放在主表顶栏统一切换。入口和切换权限仅限团长。
+        do
+            local PANEL_WIDTH = 304
+            local PANEL_HEIGHT = 366
+            local SELECT_WIDTH = 126
+            local SELECT_HEIGHT = 20
+            local SECTION_TITLE_SIZE = 16
+            local COLOR_GOLD = { 0.95, 0.63, 0.16 }
+            local COLOR_BORDER = { 0.42, 0.28, 0.10 }
+            local COLOR_MUTED = { 0.58, 0.56, 0.51 }
+            local COLOR_TEXT = { 0.90, 0.88, 0.80 }
+
+            local function IsAuctionVersionLeader()
+                return IsInRaid(1) and UnitIsGroupLeader("player")
+            end
+
+            local function CreateText(parent, size, color, text)
+                local fontString = parent:CreateFontString(nil, "ARTWORK")
+                fontString:SetFont(BIAOGE_TEXT_FONT, size, "OUTLINE")
+                fontString:SetTextColor(unpack(color))
+                fontString:SetText(text)
+                fontString:SetJustifyH("LEFT")
+                return fontString
+            end
+
+            local function CreateDivider(parent, y)
+                local line = parent:CreateTexture(nil, "ARTWORK")
+                line:SetPoint("TOPLEFT", 14, y)
+                line:SetPoint("TOPRIGHT", -14, y)
+                line:SetHeight(1)
+                line:SetColorTexture(COLOR_BORDER[1], COLOR_BORDER[2], COLOR_BORDER[3], 0.75)
+                return line
+            end
+
+            local button = CreateFrame("Button", nil, BG.MainFrame, "BackdropTemplate")
+            button:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8X8",
+                edgeFile = "Interface\\Buttons\\WHITE8X8",
+                edgeSize = 1,
+            })
+            button:SetBackdropColor(0.025, 0.075, 0.085, 0.98)
+            button:SetBackdropBorderColor(COLOR_BORDER[1], COLOR_BORDER[2], COLOR_BORDER[3], 1)
+            button:SetSize(SELECT_WIDTH, SELECT_HEIGHT)
+            button:SetPoint("RIGHT", BG.MainFrame.CloseButton, "LEFT", -2, 0)
+
+            local text = button:CreateFontString(nil, "ARTWORK")
+            text:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
+            text:SetTextColor(unpack(COLOR_GOLD))
+            text:SetPoint("LEFT", 10, 0)
+            text:SetPoint("RIGHT", -25, 0)
+            text:SetJustifyH("LEFT")
+
+            local arrow = button:CreateFontString(nil, "ARTWORK")
+            arrow:SetFont(BIAOGE_TEXT_FONT, 10, "OUTLINE")
+            arrow:SetTextColor(unpack(COLOR_GOLD))
+            arrow:SetPoint("RIGHT", -8, 0)
+            arrow:SetText("▼")
+
+            local highlight = button:CreateTexture(nil, "HIGHLIGHT")
+            highlight:SetPoint("TOPLEFT", 1, -1)
+            highlight:SetPoint("BOTTOMRIGHT", -1, 1)
+            highlight:SetColorTexture(1, 0.72, 0.25, 0.12)
+
+            local panel = CreateFrame("Frame", nil, BG.MainFrame, "BackdropTemplate")
+            panel:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8X8",
+                edgeFile = "Interface\\Buttons\\WHITE8X8",
+                edgeSize = 1,
+            })
+            panel:SetBackdropColor(0.015, 0.055, 0.065, 0.99)
+            panel:SetBackdropBorderColor(COLOR_BORDER[1], COLOR_BORDER[2], COLOR_BORDER[3], 1)
+            panel:SetSize(PANEL_WIDTH, PANEL_HEIGHT)
+            -- 下拉层的右边框始终和顶部选择框的右边框对齐。
+            panel:SetPoint("TOPRIGHT", button, "BOTTOMRIGHT", 0, -2)
+            panel:SetFrameLevel(button:GetFrameLevel() + 20)
+            panel:EnableMouse(true)
+            panel:Hide()
+
+            local title = CreateText(panel, SECTION_TITLE_SIZE, COLOR_GOLD, L["拍卖版本"])
+            title:SetPoint("TOPLEFT", 14, -12)
+
+            local description = CreateText(panel, 12, COLOR_MUTED,
+                L["仅团长可见并切换。需要暂停/恢复拍卖等功能时，请选择第二代拍卖"])
+            description:SetPoint("TOPLEFT", 14, -35)
+            description:SetSize(PANEL_WIDTH - 28, 40)
+            description:SetJustifyV("TOP")
+            description:SetWordWrap(true)
+
+            CreateDivider(panel, -80)
+
+            local optionRows = {}
+            local HidePanel
+            local function CreateOptionRow(gen, y)
+                local row = CreateFrame("Button", nil, panel)
+                row:SetPoint("TOPLEFT", 8, y)
+                row:SetPoint("TOPRIGHT", -8, y)
+                row:SetHeight(27)
+
+                local selectedBackground = row:CreateTexture(nil, "BACKGROUND")
+                selectedBackground:SetAllPoints()
+                selectedBackground:SetColorTexture(0.02, 0.25, 0.29, 0.48)
+
+                local selectedBar = row:CreateTexture(nil, "ARTWORK")
+                selectedBar:SetPoint("TOPLEFT", 0, 0)
+                selectedBar:SetPoint("BOTTOMLEFT", 0, 0)
+                selectedBar:SetWidth(3)
+                selectedBar:SetColorTexture(unpack(COLOR_GOLD))
+
+                local rowText = CreateText(row, 13, COLOR_TEXT, gens[gen])
+                rowText:SetPoint("LEFT", 14, 0)
+
+                local check = row:CreateTexture(nil, "ARTWORK")
+                check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+                check:SetSize(22, 22)
+                check:SetPoint("RIGHT", -9, 0)
+
+                local rowHighlight = row:CreateTexture(nil, "HIGHLIGHT")
+                rowHighlight:SetAllPoints()
+                rowHighlight:SetColorTexture(1, 0.72, 0.25, 0.08)
+
+                row:SetScript("OnClick", function()
+                    if BG.SetAuctionGen and BG.SetAuctionGen(gen) then
+                        HidePanel()
+                        BG.PlaySound(1)
+                    end
+                end)
+
+                optionRows[gen] = {
+                    background = selectedBackground,
+                    bar = selectedBar,
+                    check = check,
+                    text = rowText,
+                }
+            end
+            CreateOptionRow(1, -86)
+            CreateOptionRow(2, -114)
+
+            CreateDivider(panel, -146)
+
+            local featureTitle = CreateText(panel, SECTION_TITLE_SIZE, COLOR_GOLD, L["第二代拍卖新增"])
+            featureTitle:SetPoint("TOPLEFT", 14, -157)
+
+            local featureDot1 = CreateText(panel, 10, COLOR_GOLD, "●")
+            featureDot1:SetPoint("TOPLEFT", 16, -181)
+            local feature1 = CreateText(panel, 12, COLOR_TEXT, L["暂停 / 恢复拍卖"])
+            feature1:SetPoint("LEFT", featureDot1, "RIGHT", 7, 0)
+
+            local featureDot2 = CreateText(panel, 10, COLOR_GOLD, "●")
+            featureDot2:SetPoint("TOPLEFT", 16, -204)
+            local feature2 = CreateText(panel, 12, COLOR_TEXT, L["自定义出价后的倒计时重置阈值"])
+            feature2:SetPoint("LEFT", featureDot2, "RIGHT", 7, 0)
+
+            local featureDetail = CreateText(panel, 11, COLOR_MUTED,
+                L["第一代固定 20 秒 · 第二代最低可设 10 秒"])
+            featureDetail:SetPoint("TOPLEFT", 35, -224)
+
+            CreateDivider(panel, -246)
+
+            local compatibilityTitle = CreateText(panel, SECTION_TITLE_SIZE, COLOR_GOLD, L["团队兼容检测"])
+            compatibilityTitle:SetPoint("TOPLEFT", 14, -257)
+
+            local compatibilityText = CreateText(panel, 12, COLOR_TEXT, "")
+            compatibilityText:SetPoint("TOPLEFT", 14, -280)
+
+            local progressBackground = panel:CreateTexture(nil, "BACKGROUND")
+            progressBackground:SetPoint("TOPLEFT", 14, -301)
+            progressBackground:SetSize(PANEL_WIDTH - 28, 7)
+            progressBackground:SetColorTexture(0.10, 0.12, 0.12, 1)
+
+            local progress = CreateFrame("StatusBar", nil, panel)
+            progress:SetPoint("TOPLEFT", progressBackground, "TOPLEFT", 1, -1)
+            progress:SetPoint("BOTTOMRIGHT", progressBackground, "BOTTOMRIGHT", -1, 1)
+            progress:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+            progress:SetStatusBarColor(COLOR_GOLD[1], COLOR_GOLD[2], COLOR_GOLD[3], 0.9)
+
+            local suggestion = CreateText(panel, 11, COLOR_MUTED, L["当有团员不支持时，建议使用第一代拍卖"])
+            suggestion:SetPoint("TOPLEFT", 14, -316)
+
+            CreateDivider(panel, -332)
+
+            local footerIcon = panel:CreateTexture(nil, "ARTWORK")
+            footerIcon:SetTexture("Interface\\FriendsFrame\\InformationIcon")
+            footerIcon:SetDesaturated(true)
+            footerIcon:SetVertexColor(0.72, 0.68, 0.58, 1)
+            footerIcon:SetSize(16, 16)
+            footerIcon:SetPoint("BOTTOMLEFT", 14, 10)
+            local footer = CreateText(panel, 11, COLOR_MUTED, L["需团员使用基于 BGLite 的版本"])
+            footer:SetPoint("LEFT", footerIcon, "RIGHT", 6, 0)
+
+            local function UpdateSelection()
+                text:SetText(gens[BiaoGe.Auction.gen])
+                for gen, row in pairs(optionRows) do
+                    local selected = gen == BiaoGe.Auction.gen
+                    row.background:SetShown(selected)
+                    row.bar:SetShown(selected)
+                    row.check:SetShown(selected)
+                    if selected then
+                        row.text:SetTextColor(1, 1, 1)
+                    else
+                        row.text:SetTextColor(unpack(COLOR_TEXT))
+                    end
+                end
+            end
+
+            local function UpdateCompatibility()
+                local supportedNames = {}
+                local supported = 0
+                local total = IsInRaid(1) and GetNumGroupMembers() or 0
+                if total > 0 then
+                    local playerName = BG.GSN(BG.playerName)
+                    supportedNames[playerName] = true
+                    for name in pairs(BG.raidBiaoGeVersion or {}) do
+                        name = BG.GSN(name)
+                        if BG.raidRosterName and BG.raidRosterName[name]
+                            and BG.raidBiaoGeNewVersion and BG.raidBiaoGeNewVersion[name] then
+                            supportedNames[name] = true
+                        end
+                    end
+                    for _ in pairs(supportedNames) do
+                        supported = supported + 1
+                    end
+                end
+                progress:SetMinMaxValues(0, max(total, 1))
+                progress:SetValue(supported)
+                if total > 0 and supported >= total then
+                    compatibilityText:SetText(format("|cff33ff40%d / %d|r %s",
+                        supported, total, L["名团员支持第二代拍卖"]))
+                    progress:SetStatusBarColor(0.20, 0.85, 0.25, 0.9)
+                else
+                    compatibilityText:SetText(format("|cffff4033%d / %d|r %s",
+                        supported, total, L["名团员支持第二代拍卖"]))
+                    progress:SetStatusBarColor(0.90, 0.18, 0.12, 0.9)
+                end
+                compatibilityText:SetTextColor(1, 1, 1)
+            end
+
+            local fadeIn = panel:CreateAnimationGroup()
+            local fadeInAlpha = fadeIn:CreateAnimation("Alpha")
+            fadeInAlpha:SetFromAlpha(0)
+            fadeInAlpha:SetToAlpha(1)
+            fadeInAlpha:SetDuration(0.14)
+            fadeInAlpha:SetSmoothing("OUT")
+            fadeIn:SetScript("OnFinished", function()
+                panel:SetAlpha(1)
+            end)
+
+            local fadeOut = panel:CreateAnimationGroup()
+            local fadeOutAlpha = fadeOut:CreateAnimation("Alpha")
+            fadeOutAlpha:SetFromAlpha(1)
+            fadeOutAlpha:SetToAlpha(0)
+            fadeOutAlpha:SetDuration(0.11)
+            fadeOutAlpha:SetSmoothing("IN")
+            fadeOut:SetScript("OnFinished", function()
+                if panel.isClosing then
+                    panel.isClosing = nil
+                    panel:SetAlpha(1)
+                    panel:Hide()
+                end
+            end)
+
+            local function ShowPanel()
+                fadeOut:Stop()
+                fadeIn:Stop()
+                panel.isClosing = nil
+                panel:SetAlpha(0)
+                panel:Show()
+                fadeIn:Play()
+            end
+
+            HidePanel = function(immediate)
+                fadeIn:Stop()
+                fadeOut:Stop()
+                if not panel:IsShown() then
+                    panel:SetAlpha(1)
+                    return
+                end
+                if immediate then
+                    panel.isClosing = nil
+                    panel:SetAlpha(1)
+                    panel:Hide()
+                else
+                    panel.isClosing = true
+                    fadeOut:Play()
+                end
+            end
+
+            local function UpdateVisibility()
+                if IsAuctionVersionLeader() then
+                    button:Show()
+                else
+                    HidePanel(true)
+                    button:Hide()
+                end
+            end
+
+            function BG.SetAuctionGen(gen)
+                if not IsAuctionVersionLeader() or (gen ~= 1 and gen ~= 2) then
+                    return false
+                end
+                BiaoGe.Auction.gen = gen
+                UpdateSelection()
+                if BG.StartAucitonFrame and BG.StartAucitonFrame.UpdateFrame then
+                    BG.StartAucitonFrame:UpdateFrame()
+                end
+                if BG.UpdateAuctionOptionsGenState then
+                    BG.UpdateAuctionOptionsGenState()
+                end
+                return true
+            end
+
+            button:SetScript("OnClick", function()
+                if not IsAuctionVersionLeader() then
+                    HidePanel(true)
+                    button:Hide()
+                    return
+                end
+                UpdateSelection()
+                UpdateCompatibility()
+                if panel:IsShown() and not panel.isClosing then
+                    HidePanel()
+                else
+                    ShowPanel()
+                end
+                BG.PlaySound(1)
+            end)
+            panel:SetScript("OnShow", function()
+                if not IsAuctionVersionLeader() then
+                    HidePanel(true)
+                    return
+                end
+                arrow:SetText("▲")
+                UpdateSelection()
+                UpdateCompatibility()
+            end)
+            panel:SetScript("OnHide", function()
+                arrow:SetText("▼")
+            end)
+
+            BG.MainFrame:HookScript("OnShow", UpdateVisibility)
+            BG.MainFrame:HookScript("OnMouseDown", function()
+                HidePanel()
+            end)
+            BG.MainFrame:HookScript("OnHide", function()
+                HidePanel(true)
+            end)
+            BG.RegisterEvent({ "GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED", "PLAYER_ENTERING_WORLD" }, function()
+                BG.After(0.5, function()
+                    UpdateVisibility()
+                    if panel:IsShown() then
+                        UpdateCompatibility()
+                    end
+                end)
+            end)
+
+            BG.ButtonAuctionVersion = button
+            BG.AuctionVersionPanel = panel
+            BG.RefreshAuctionVersionCompatibility = UpdateCompatibility
+            UpdateSelection()
+            UpdateVisibility()
+        end
 
         function BG.SendStartAuctionMsg(isGen2, itemID, money, duration, mod, link, resetThreshold)
             local channel, text
@@ -506,20 +860,6 @@ BG.Init(function()
                 mainFrame.Text5:SetTextColor(0.5, 0.5, 0.5)
             end
         end
-
-        hooksecurefunc(LibBG, "ToggleDropDownMenu", function(_, _, _, dropDown)
-            local _dropDown = BG.StartAucitonFrame and BG.StartAucitonFrame.dropDown2
-            if _dropDown and dropDown == _dropDown then
-                if L_DropDownList1:IsVisible() then
-                    Addon_OnEnter(BG.StartAucitonFrame, _, BiaoGeTooltip2)
-                else
-                    BiaoGeTooltip2:Hide()
-                end
-            end
-        end)
-        L_DropDownList1:HookScript('OnHide', function(self)
-            BiaoGeTooltip2:Hide()
-        end)
 
         function BG.StartAuction(link, bt, isNotAuctioned, notAlt, isRightButton, noSound, callback)
             if BiaoGe.options["autoAuctionStart"] ~= 1 and not notAlt then return end
@@ -708,108 +1048,12 @@ BG.Init(function()
 
             local width = 90
             local textWidth = width + 12
-            local dropDownWidth = width + 2
-
-            -- 拍卖版本
-            do
-                local t = mainFrame:CreateFontString()
-                t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-                t:SetSize(textWidth, 20)
-                t:SetPoint("TOPLEFT", mainFrame.itemFrame, "BOTTOMLEFT", 10, -2)
-                t:SetJustifyH("LEFT")
-                t:SetWordWrap(false)
-                t:SetText(L["|cffFFD100拍卖版本|r"])
-                mainFrame.Text1 = t
-
-                local dropDown2 = LibBG:Create_UIDropDownMenu(nil, mainFrame)
-                dropDown2:SetScale(0.95)
-                dropDown2:SetPoint("TOPLEFT", mainFrame.Text1, "BOTTOMLEFT", -17, 2)
-                LibBG:UIDropDownMenu_SetText(dropDown2, gens[BiaoGe.Auction.gen])
-                dropDown2.Text:SetJustifyH("LEFT")
-                LibBG:UIDropDownMenu_SetWidth(dropDown2, dropDownWidth)
-                LibBG:UIDropDownMenu_SetAnchor(dropDown2, 0, 0, "BOTTOM", dropDown2, "TOP")
-                mainFrame.dropDown2 = dropDown2
-                BG.dropDownToggle(dropDown2)
-                LibBG:UIDropDownMenu_Initialize(dropDown2, function(self, level)
-                    ClearAllFocus(mainFrame)
-                    if IsInRaid(1) then
-                        local counts = { [1] = 0, [2] = 0 }
-                        for name, ver in pairs(BG.raidAuctionVersion) do
-                            name = BG.GSN(name)
-                            if BG.raidRosterName[name] then
-                                counts[1] = counts[1] + 1
-                            end
-                        end
-                        for name, ver in pairs(BG.raidBiaoGeVersion) do
-                            name = BG.GSN(name)
-                            if BG.raidRosterName[name] and BG.raidBiaoGeNewVersion[name] then
-                                counts[2] = counts[2] + 1
-                            end
-                        end
-                        for gen, name in pairs(gens) do
-                            local info = LibBG:UIDropDownMenu_CreateInfo()
-                            info.text = format('%s|cff00ff00（%s/%s）|r'
-                            , name, counts[gen], GetNumGroupMembers())
-                            info.arg1 = gen
-                            info.func = function(self, arg1, arg2)
-                                BiaoGe.Auction.gen = arg1
-                                LibBG:UIDropDownMenu_SetText(dropDown2, gens[BiaoGe.Auction.gen])
-                                UpdateFrame()
-                            end
-                            info.checked = info.arg1 == BiaoGe.Auction.gen
-                            if gen == 2 then
-                                info.tooltipTitle = L['第二代拍卖']
-                                info.tooltipText = L['需要团员的BGForge版本高于v2.0.0，否则团员无法看见拍卖框。']
-                                info.tooltipOnButton = true
-                            end
-                            LibBG:UIDropDownMenu_AddButton(info)
-                        end
-                    end
-                end)
-            end
-
-            -- 拍卖模式
-            do
-                local t = f:CreateFontString()
-                t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-                t:SetSize(textWidth, 20)
-                t:SetJustifyH("LEFT")
-                t:SetText(L["|cffFFD100拍卖模式|r"])
-                t:SetPoint("LEFT", mainFrame.Text1, "RIGHT", 18, 0)
-                mainFrame.Text2 = t
-
-                local dropDown = LibBG:Create_UIDropDownMenu(nil, mainFrame)
-                dropDown:SetScale(0.95)
-                dropDown:SetPoint("TOPLEFT", mainFrame.Text2, "BOTTOMLEFT", -17, 2)
-                LibBG:UIDropDownMenu_SetText(dropDown, mods[BiaoGe.Auction.mod])
-                dropDown.Text:SetJustifyH("LEFT")
-                LibBG:UIDropDownMenu_SetWidth(dropDown, dropDownWidth)
-                LibBG:UIDropDownMenu_SetAnchor(dropDown, 0, 0, "BOTTOM", dropDown, "TOP")
-                mainFrame.dropDown = dropDown
-                BG.dropDownToggle(dropDown)
-                LibBG:UIDropDownMenu_Initialize(dropDown, function(self, level)
-                    ClearAllFocus(mainFrame)
-                    for mod, name in pairs(mods) do
-                        local info = LibBG:UIDropDownMenu_CreateInfo()
-                        info.text = name
-                        info.arg1 = mod
-                        info.func = function(self, arg1, arg2)
-                            BiaoGe.Auction.mod = arg1
-                            LibBG:UIDropDownMenu_SetText(dropDown, mods[BiaoGe.Auction.mod])
-                            UpdateFrame()
-                        end
-                        info.checked = info.arg1 == BiaoGe.Auction.mod
-                        LibBG:UIDropDownMenu_AddButton(info)
-                    end
-                end)
-            end
-
             -- 拍卖时长、起拍价
             do
                 local t = mainFrame:CreateFontString()
                 t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
                 t:SetSize(textWidth, 20)
-                t:SetPoint("TOPLEFT", mainFrame.Text1, "BOTTOMLEFT", 0, -24)
+                t:SetPoint("TOPLEFT", mainFrame.itemFrame, "BOTTOMLEFT", 10, -2)
                 t:SetJustifyH("LEFT")
                 t:SetWordWrap(false)
                 t:SetText(L["|cffFFD100拍卖时长(秒)"])
@@ -858,7 +1102,7 @@ BG.Init(function()
                 t:SetSize(textWidth, 20)
                 t:SetJustifyH("LEFT")
                 t:SetText(L["重置阈值(秒)"])
-                t:SetPoint("TOPLEFT", mainFrame.Text2, "BOTTOMLEFT", 0, -24)
+                t:SetPoint("LEFT", mainFrame.Text3, "RIGHT", 18, 0)
                 mainFrame.Text5 = t
                 local edit3 = CreateFrame("EditBox", nil, mainFrame, BG.editTemplate)
                 edit3:SetSize(textWidth, 20)
@@ -1193,9 +1437,13 @@ BG.Init(function()
             local name = strmatch(msg, leave)
             if name then
                 BG.raidBiaoGeVersion[name] = nil
+                BG.raidBiaoGeNewVersion[name] = nil
                 BG.raidAuctionVersion[name] = nil
                 UpdateAddonFrame(addon)
                 UpdateAddonFrame(auction)
+                if BG.RefreshAuctionVersionCompatibility then
+                    BG.RefreshAuctionVersionCompatibility()
+                end
             end
         end)
         BG.RegisterEvent("CHAT_MSG_ADDON", function(self, event, ...)
@@ -1213,10 +1461,11 @@ BG.Init(function()
                 elseif strfind(msg, "MyVer") then
                     local _, version = strsplit("-", msg)
                     BG.raidBiaoGeVersion[sender] = version
-                    if BG.GetVerNum(version) >= 20000 then
-                        BG.raidBiaoGeNewVersion[sender] = true
-                    end
+                    BG.raidBiaoGeNewVersion[sender] = BG.GetVerNum(version) >= 20000 and true or nil
                     UpdateAddonFrame(addon)
+                    if BG.RefreshAuctionVersionCompatibility then
+                        BG.RefreshAuctionVersionCompatibility()
+                    end
                     if BG.StartAucitonFrame then
                         BG.StartAucitonFrame:UpdateFrame()
                     end

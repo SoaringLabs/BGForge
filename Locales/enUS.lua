@@ -2980,5 +2980,15 @@ do -- Mail history
     L["再次点击可关闭装备过滤。"] = "Click again to disable gear filtering."
     L["点击启用该装备过滤方案。"] = "Click to enable this gear-filter scheme."
     L["战网账号绑定装备始终保持高亮。"] = "Battle.net Account Bound gear always remains highlighted."
+    L["拍卖版本"] = "Auction Version"
+    L["仅团长可见并切换。需要暂停/恢复拍卖等功能时，请选择第二代拍卖"] = "Only the raid leader can see and switch this. Choose Second-Gen Auction when you need pause/resume features."
+    L["第二代拍卖新增"] = "New in Second-Gen Auction"
+    L["暂停 / 恢复拍卖"] = "Pause / Resume Auctions"
+    L["自定义出价后的倒计时重置阈值"] = "Custom countdown reset threshold after a bid"
+    L["第一代固定 20 秒 · 第二代最低可设 10 秒"] = "First-Gen: fixed 20 sec · Second-Gen: minimum 10 sec"
+    L["团队兼容检测"] = "Raid Compatibility"
+    L["名团员支持第二代拍卖"] = "raid members support Second-Gen Auction"
+    L["当有团员不支持时，建议使用第一代拍卖"] = "If any member is unsupported, use First-Gen Auction"
+    L["需团员使用基于 BGLite 的版本"] = "Raid members must use a BGLite-based version"
 
 end

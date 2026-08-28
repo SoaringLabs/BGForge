@@ -2334,24 +2334,10 @@ BG.Init(function()
 
         -- 团长拍卖面板
         do
-            local gens = {
-                [1] = L["第一代拍卖"],
-                [2] = L["第二代拍卖"],
-            }
-            local mods = {
-                normal = L["常规模式"],
-            }
-
             -- 控制第一代/第二代切换时启用/禁用关联控件
-            local modDropDown, modText, resetText, resetEdit
+            local resetText, resetEdit
             local function UpdateGen2State()
                 local isGen2 = BiaoGe.Auction.gen == 2
-                if modDropDown then
-                    -- 重建下拉菜单以更新 info.disabled 状态
-                    if modDropDown.open then
-                        LibBG:CloseDropDownMenus()
-                    end
-                end
                 if resetText then
                     resetText:SetTextColor(isGen2 and 1 or 0.5, isGen2 and 1 or 0.5, isGen2 and 1 or 0.5)
                 end
@@ -2367,88 +2353,7 @@ BG.Init(function()
                     end
                 end
             end
-
-            -- 拍卖版本
-            do
-                local key = "gen"
-
-                local t = autoAuction:CreateFontString()
-                t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-                t:SetPoint("TOPLEFT", autoAuction, "TOPLEFT", 15, -h)
-                t:SetTextColor(1, 1, 1)
-                t:SetText(L["拍卖版本："])
-
-                local dropDown = LibBG:Create_UIDropDownMenu(nil, autoAuction)
-                dropDown:SetPoint("LEFT", t, "RIGHT", -10, -2)
-                LibBG:UIDropDownMenu_SetWidth(dropDown, 120)
-                LibBG:UIDropDownMenu_SetText(dropDown, gens[BiaoGe.Auction[key]])
-                LibBG:UIDropDownMenu_SetAnchor(dropDown, 0, 0, "TOP", dropDown, "BOTTOM")
-                BG.dropDownToggle(dropDown)
-
-                LibBG:UIDropDownMenu_Initialize(dropDown, function(self, level)
-                    for gen, genName in pairs(gens) do
-                        local info = LibBG:UIDropDownMenu_CreateInfo()
-                        info.text = genName
-                        info.arg1 = gen
-                        info.func = function()
-                            BiaoGe.Auction[key] = gen
-                            LibBG:UIDropDownMenu_SetText(dropDown, gens[BiaoGe.Auction[key]])
-                            UpdateGen2State()
-                        end
-                        info.checked = gen == BiaoGe.Auction[key]
-                        if gen == 2 then
-                            info.tooltipTitle = L['第二代拍卖']
-                            info.tooltipText = L['需要团员的BGForge版本高于v2.0.0，否则团员无法看见拍卖框。']
-                            info.tooltipOnButton = true
-                        end
-                        LibBG:UIDropDownMenu_AddButton(info)
-                    end
-                end)
-                dropDown:SetScript('OnShow', function()
-                    LibBG:UIDropDownMenu_SetText(dropDown, gens[BiaoGe.Auction[key]])
-                    UpdateGen2State()
-                end)
-            end
-
-            -- 拍卖模式
-            do
-                local key = "mod"
-
-                local t = autoAuction:CreateFontString()
-                t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-                t:SetPoint("TOPLEFT", autoAuction, "TOPLEFT", 300, -h)
-                t:SetTextColor(1, 1, 1)
-                t:SetText(L["拍卖模式："])
-                modText = t
-
-                local dropDown = LibBG:Create_UIDropDownMenu(nil, autoAuction)
-                dropDown:SetPoint("LEFT", t, "RIGHT", -10, -2)
-                LibBG:UIDropDownMenu_SetWidth(dropDown, 120)
-                LibBG:UIDropDownMenu_SetText(dropDown, mods[BiaoGe.Auction[key]])
-                LibBG:UIDropDownMenu_SetAnchor(dropDown, 0, 0, "TOP", dropDown, "BOTTOM")
-                BG.dropDownToggle(dropDown)
-                modDropDown = dropDown
-
-                LibBG:UIDropDownMenu_Initialize(dropDown, function(self, level)
-                    for modKey, modName in pairs(mods) do
-                        local info = LibBG:UIDropDownMenu_CreateInfo()
-                        info.text = modName
-                        info.arg1 = modKey
-                        info.func = function()
-                            BiaoGe.Auction[key] = modKey
-                            LibBG:UIDropDownMenu_SetText(dropDown, mods[BiaoGe.Auction[key]])
-                        end
-                        info.checked = modKey == BiaoGe.Auction[key]
-                        LibBG:UIDropDownMenu_AddButton(info)
-                    end
-                end)
-
-                dropDown:SetScript('OnShow', function()
-                    LibBG:UIDropDownMenu_SetText(dropDown, mods[BiaoGe.Auction[key]])
-                    UpdateGen2State()
-                end)
-            end
-            h = h + 30
+            BG.UpdateAuctionOptionsGenState = UpdateGen2State
 
             -- 拍卖时长
             do
@@ -2492,7 +2397,9 @@ BG.Init(function()
                 edit:SetMaxLetters(3)
                 BG.SetEditBaseClass(edit, true)
                 edit:SetScript("OnTextChanged", function(self)
-                    BiaoGe.Auction[name] = self:GetText()
+                    if BiaoGe.Auction.gen == 2 then
+                        BiaoGe.Auction[name] = self:GetText()
+                    end
                 end)
                 edit:SetScript("OnShow", function(self)
                     edit:SetText(BiaoGe.Auction[name])
