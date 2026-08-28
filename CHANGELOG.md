@@ -26,6 +26,10 @@
 
 - 修复全角色总览渲染函数超过 Titan Lua upvalue 上限，导致悬浮窗和团本 CD 设置无法加载的问题。
 
+### 界面预览
+
+![BGForge v0.3.0 全角色总览](docs/images/v0.3.0-character-overview.png)
+
 ## v0.2.0 - 2026-08-27
 
 ### 新增
