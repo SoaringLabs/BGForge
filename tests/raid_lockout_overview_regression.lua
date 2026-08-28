@@ -9,6 +9,7 @@ local function ResetEnvironment()
     SlashCmdList = {}
 
     floor = math.floor
+    ceil = math.ceil
     max = math.max
     min = math.min
     sort = table.sort
@@ -288,6 +289,55 @@ local function TestRaidColumnsFillAvailableWidth()
     assert(resourceWidths.profession > ui.professionWidth
         and resourceWidths.shard > ui.shardWidth,
         "the extra resource-table width was not distributed across its columns")
+end
+
+local function TestWideFontHeadersExpandColumns()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local calculateMinimums = FindUpvalue(createHoverFrame, "CalculateMeasuredColumnMinimums")
+    assert(calculateMinimums, "runtime header-width measurement is missing")
+    local calculateWidths = FindUpvalue(createHoverFrame, "CalculateRaidColumnWidths")
+    assert(calculateWidths, "dynamic raid-column width calculation is missing")
+
+    local columns = {
+        { id = 1, name = "太阳井", compactWidth = 50 },
+        { id = 2, name = "纳克萨玛斯", compactWidth = 70 },
+    }
+    local measuredWidths = {
+        ["太阳井"] = 45,
+        ["纳克萨玛斯"] = 75,
+    }
+    local minimums, minimumTotal = calculateMinimums(columns, function(text)
+        return measuredWidths[text]
+    end)
+
+    assert(minimums[1] >= 63,
+        "wide three-character font would still be truncated by the 50-point column")
+    assert(minimums[2] >= 93,
+        "wide five-character font would still be truncated by the 70-point column")
+
+    local widths, totalWidth = calculateWidths(columns, minimumTotal, minimums)
+    assert(math.abs(totalWidth - minimumTotal) < 0.001,
+        "measured minimum widths changed the compact table extent")
+    assert(widths[1] >= minimums[1] and widths[2] >= minimums[2],
+        "column layout ignored the measured font widths")
+end
+
+local function TestWideTablesUseScreenBoundedViewport()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local calculateViewport = FindUpvalue(createHoverFrame, "CalculateHorizontalViewport")
+    assert(calculateViewport, "screen-bounded horizontal viewport calculation is missing")
+
+    local viewportWidth, overflow = calculateViewport(1200, 1024)
+    assert(viewportWidth == 992 and overflow == 208,
+        "wide tables must preserve their content width behind a screen-bounded viewport")
+
+    viewportWidth, overflow = calculateViewport(900, 1024)
+    assert(viewportWidth == 900 and overflow == 0,
+        "tables that fit the screen must not enable horizontal overflow")
 end
 
 local function TestEquipmentUsesIconTilesWithTopLeftValues()
@@ -790,6 +840,8 @@ local tests = {
     primary = TestPrimaryProfessionAPICapturesExpectedFields,
     incomplete_primary = TestIncompletePrimaryAPIUsesSkillLineFallback,
     raid_width = TestRaidColumnsFillAvailableWidth,
+    wide_font_headers = TestWideFontHeadersExpandColumns,
+    wide_table_viewport = TestWideTablesUseScreenBoundedViewport,
     item_tiles = TestEquipmentUsesIconTilesWithTopLeftValues,
     profession_tiles = TestProfessionsUseMatchingIconTilesWithFixedColor,
     collapsed_headers = TestCollapsedSkillHeadersExpandOnceWithoutEventLoop,
@@ -808,7 +860,9 @@ if arg[1] then
     assert(tests[arg[1]], "unknown test: " .. tostring(arg[1]))()
 else
     for _, testName in ipairs({
-        "fallback", "preserve", "primary", "incomplete_primary", "raid_width", "item_tiles",
+        "fallback", "preserve", "primary", "incomplete_primary", "raid_width",
+        "wide_font_headers", "item_tiles",
+        "wide_table_viewport",
         "profession_tiles",
         "collapsed_headers",
         "debounce",

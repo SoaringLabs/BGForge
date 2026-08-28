@@ -135,6 +135,9 @@ local ITEM_TILE_PADDING = 4
 local PROFESSION_TILE_COLOR = { 0.84, 0.55, 0.18, 1 }
 local RESOURCE_NUMBER_FONT = "Interface\\AddOns\\BGForge\\Media\\Fonts\\RobotoCondensed-Medium.ttf"
 local RESOURCE_NUMBER_FONT_SIZE = 12
+local HEADER_HORIZONTAL_PADDING = 14
+local HEADER_WIDTH_SAFETY = 4
+local SCREEN_EDGE_MARGIN = 32
 
 local SMALL_UI = {
     padding = 10,
@@ -154,6 +157,7 @@ local SMALL_UI = {
     emberWidth = 88,
     shardWidth = 88,
     footerHeight = 30,
+    horizontalScrollHeight = 16,
 }
 
 local function CalculateItemStripLayout(cellWidth, itemCount)
@@ -552,7 +556,28 @@ local function GetVisibleQuestGroups(columns)
     return groups
 end
 
-local function CalculateRaidColumnWidths(raids, availableWidth)
+local function CalculateMeasuredColumnMinimums(columns, measureText)
+    local widths = {}
+    local totalWidth = 0
+    for _, column in ipairs(columns) do
+        local measuredWidth = tonumber(measureText(column.name)) or 0
+        local minimumWidth = max(
+            column.compactWidth or 0,
+            ceil(measuredWidth + HEADER_HORIZONTAL_PADDING + HEADER_WIDTH_SAFETY)
+        )
+        widths[column.id] = minimumWidth
+        totalWidth = totalWidth + minimumWidth
+    end
+    return widths, totalWidth
+end
+
+local function CalculateHorizontalViewport(contentWidth, screenWidth)
+    local maximumWidth = max(320, (screenWidth or contentWidth) - SCREEN_EDGE_MARGIN)
+    local viewportWidth = min(contentWidth, maximumWidth)
+    return viewportWidth, max(0, contentWidth - viewportWidth)
+end
+
+local function CalculateRaidColumnWidths(raids, availableWidth, minimumWidths)
     local widths = {}
     if #raids == 0 then
         return widths, 0
@@ -560,13 +585,14 @@ local function CalculateRaidColumnWidths(raids, availableWidth)
 
     local compactWidth = 0
     for _, raid in ipairs(raids) do
-        compactWidth = compactWidth + raid.compactWidth
+        compactWidth = compactWidth + (minimumWidths and minimumWidths[raid.id] or raid.compactWidth)
     end
 
     local extraPerRaid = max(0, availableWidth - compactWidth) / #raids
     local assignedWidth = 0
     for index, raid in ipairs(raids) do
-        local columnWidth = raid.compactWidth + extraPerRaid
+        local minimumWidth = minimumWidths and minimumWidths[raid.id] or raid.compactWidth
+        local columnWidth = minimumWidth + extraPerRaid
         if index == #raids and availableWidth >= compactWidth then
             columnWidth = availableWidth - assignedWidth
         end
@@ -1672,6 +1698,7 @@ local function CreateHoverFrame()
     local width = 720
     local resourceTop = 0
     local resourceRowsTop = 0
+    local contentFrame
 
     local function CreateTableCell(parent, backgroundColor, borders)
         local cell = CreateFrame("Frame", nil, parent, "BackdropTemplate")
@@ -1877,7 +1904,7 @@ local function CreateHoverFrame()
     end
 
     local function CreateRowHoverController(overlays)
-        local controller = CreateFrame("Frame", nil, hoverFrame)
+        local controller = CreateFrame("Frame", nil, contentFrame)
         controller:SetFrameLevel(hoverFrame:GetFrameLevel() + 10)
         controller:EnableMouse(true)
         controller.hoverOverlays = overlays
@@ -1947,6 +1974,62 @@ local function CreateHoverFrame()
     })
     innerBorder:SetBackdropBorderColor(0.3, 0.22, 0.12, 0.82)
 
+    local contentScroll = CreateFrame("ScrollFrame", nil, hoverFrame)
+    contentScroll:EnableMouseWheel(true)
+
+    contentFrame = CreateFrame("Frame", nil, contentScroll)
+    contentFrame:SetSize(width, 1)
+    contentFrame:SetPoint("TOPLEFT")
+    contentScroll:SetScrollChild(contentFrame)
+
+    local horizontalScrollBar = CreateFrame("Slider", nil, hoverFrame)
+    horizontalScrollBar:SetOrientation("HORIZONTAL")
+    horizontalScrollBar:SetHeight(12)
+    horizontalScrollBar:SetPoint("BOTTOMLEFT", ui.padding, ui.padding)
+    horizontalScrollBar:SetPoint("BOTTOMRIGHT", -ui.padding, ui.padding)
+    horizontalScrollBar:SetMinMaxValues(0, 0)
+    horizontalScrollBar:SetValue(0)
+    horizontalScrollBar:SetValueStep(1)
+    horizontalScrollBar:EnableMouseWheel(true)
+
+    local scrollTrack = horizontalScrollBar:CreateTexture(nil, "BACKGROUND")
+    scrollTrack:SetPoint("LEFT", 0, 0)
+    scrollTrack:SetPoint("RIGHT", 0, 0)
+    scrollTrack:SetHeight(3)
+    scrollTrack:SetColorTexture(0.35, 0.25, 0.12, 0.8)
+
+    horizontalScrollBar:SetThumbTexture("Interface\\Buttons\\WHITE8X8")
+    local scrollThumb = horizontalScrollBar:GetThumbTexture()
+    scrollThumb:SetSize(32, 8)
+    scrollThumb:SetColorTexture(0.95, 0.62, 0.2, 0.9)
+
+    horizontalScrollBar:SetScript("OnValueChanged", function(_, value)
+        contentScroll:SetHorizontalScroll(value)
+    end)
+    local function ScrollHorizontally(_, delta)
+        if not horizontalScrollBar:IsShown() then
+            return
+        end
+        local minimum, maximum = horizontalScrollBar:GetMinMaxValues()
+        local value = horizontalScrollBar:GetValue() - delta * 40
+        horizontalScrollBar:SetValue(max(minimum, min(maximum, value)))
+    end
+    horizontalScrollBar:SetScript("OnMouseWheel", ScrollHorizontally)
+    contentScroll:SetScript("OnMouseWheel", ScrollHorizontally)
+    horizontalScrollBar:Hide()
+
+    local headerMeasureText = hoverFrame:CreateFontString(nil, "ARTWORK")
+    headerMeasureText:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
+    headerMeasureText:SetWordWrap(false)
+    headerMeasureText:SetAlpha(0)
+    local function MeasureHeaderText(text)
+        headerMeasureText:SetText(text or "")
+        if headerMeasureText.GetUnboundedStringWidth then
+            return headerMeasureText:GetUnboundedStringWidth()
+        end
+        return headerMeasureText:GetStringWidth()
+    end
+
     local topBar = CreateTableCell(hoverFrame, COLOR.panelTop, { left = true, top = true })
     topBar:SetPoint("TOPLEFT", ui.padding, -ui.padding)
     topBar:SetSize(width - ui.padding * 2, ui.topBarHeight)
@@ -1997,8 +2080,8 @@ local function CreateHoverFrame()
     resetText:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
     resetText:SetTextColor(0.72, 0.66, 0.55)
 
-    local raidTitleCell = CreateTableCell(hoverFrame, COLOR.headerStrong, { left = true })
-    raidTitleCell:SetPoint("TOPLEFT", ui.padding, -(ui.padding + ui.topBarHeight))
+    local raidTitleCell = CreateTableCell(contentFrame, COLOR.headerStrong, { left = true })
+    raidTitleCell:SetPoint("TOPLEFT", ui.padding, 0)
     raidTitleCell:SetSize(ui.nameWidth, ui.raidHeaderGroupHeight + ui.raidHeaderSubHeight)
     local raidTitleAccent = raidTitleCell:CreateTexture(nil, "ARTWORK")
     raidTitleAccent:SetPoint("TOPLEFT", 5, -5)
@@ -2011,7 +2094,7 @@ local function CreateHoverFrame()
     raidTitle:SetPoint("RIGHT", -7, 0)
 
     for _, column in ipairs(LOCKOUT_COLUMNS) do
-        local header = CreateTableCell(hoverFrame, COLOR.header)
+        local header = CreateTableCell(contentFrame, COLOR.header)
         header:SetSize(
             column.compactWidth,
             column.groupID and ui.raidHeaderSubHeight
@@ -2022,7 +2105,7 @@ local function CreateHoverFrame()
         headers[column.id] = header
     end
     for _, group in ipairs(QUEST_HEADER_GROUPS) do
-        local header = CreateTableCell(hoverFrame, COLOR.headerStrong)
+        local header = CreateTableCell(contentFrame, COLOR.headerStrong)
         header:SetSize(1, ui.raidHeaderGroupHeight)
         local text = CreateCellText(header, "GameFontNormal", 12, COLOR.gold, "CENTER")
         text:SetText(group.name)
@@ -2030,7 +2113,7 @@ local function CreateHoverFrame()
         groupHeaders[group.id] = header
     end
 
-    local resourceTitleCell = CreateTableCell(hoverFrame, COLOR.headerStrong, { left = true, top = true })
+    local resourceTitleCell = CreateTableCell(contentFrame, COLOR.headerStrong, { left = true, top = true })
     resourceTitleCell:SetSize(ui.nameWidth, ui.resourceGroupHeight + ui.resourceSubHeaderHeight)
     local resourceAccent = resourceTitleCell:CreateTexture(nil, "ARTWORK")
     resourceAccent:SetPoint("TOPLEFT", 5, -5)
@@ -2042,12 +2125,12 @@ local function CreateHoverFrame()
     resourceTitle:SetPoint("LEFT", 14, 0)
     resourceTitle:SetPoint("RIGHT", -7, 0)
 
-    local professionHeader = CreateTableCell(hoverFrame, COLOR.headerStrong, { top = true })
+    local professionHeader = CreateTableCell(contentFrame, COLOR.headerStrong, { top = true })
     professionHeader:SetSize(ui.professionWidth, ui.resourceGroupHeight + ui.resourceSubHeaderHeight)
     local professionHeaderText = CreateCellText(professionHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     professionHeaderText:SetText(L["专业"])
 
-    local equipmentHeader = CreateTableCell(hoverFrame, COLOR.headerStrong, { top = true })
+    local equipmentHeader = CreateTableCell(contentFrame, COLOR.headerStrong, { top = true })
     equipmentHeader:SetSize(
         ui.legendaryWidth + ui.upgradeWidth + ui.trinketWidth,
         ui.resourceGroupHeight
@@ -2055,42 +2138,42 @@ local function CreateHoverFrame()
     local equipmentHeaderText = CreateCellText(equipmentHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     equipmentHeaderText:SetText(L["装备"])
 
-    local legendaryHeader = CreateTableCell(hoverFrame, COLOR.header)
+    local legendaryHeader = CreateTableCell(contentFrame, COLOR.header)
     legendaryHeader:SetSize(ui.legendaryWidth, ui.resourceSubHeaderHeight)
     local legendaryHeaderText = CreateCellText(legendaryHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     legendaryHeaderText:SetText(L["橙装"])
 
-    local upgradeHeader = CreateTableCell(hoverFrame, COLOR.header)
+    local upgradeHeader = CreateTableCell(contentFrame, COLOR.header)
     upgradeHeader:SetSize(ui.upgradeWidth, ui.resourceSubHeaderHeight)
     local upgradeHeaderText = CreateCellText(upgradeHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     upgradeHeaderText:SetText(L["升级物品"])
 
-    local trinketHeader = CreateTableCell(hoverFrame, COLOR.header)
+    local trinketHeader = CreateTableCell(contentFrame, COLOR.header)
     trinketHeader:SetSize(ui.trinketWidth, ui.resourceSubHeaderHeight)
     local trinketHeaderText = CreateCellText(trinketHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     trinketHeaderText:SetText(L["饰品"])
 
-    local commonHeader = CreateTableCell(hoverFrame, COLOR.headerStrong, { top = true })
+    local commonHeader = CreateTableCell(contentFrame, COLOR.headerStrong, { top = true })
     commonHeader:SetSize(ui.goldWidth + ui.emberWidth + ui.shardWidth, ui.resourceGroupHeight)
     local commonHeaderText = CreateCellText(commonHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     commonHeaderText:SetText(L["通用资源"])
 
-    local goldHeader = CreateTableCell(hoverFrame, COLOR.header)
+    local goldHeader = CreateTableCell(contentFrame, COLOR.header)
     goldHeader:SetSize(ui.goldWidth, ui.resourceSubHeaderHeight)
     local goldHeaderText = CreateCellText(goldHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     goldHeaderText:SetText(L["金币"])
 
-    local emberHeader = CreateTableCell(hoverFrame, COLOR.header)
+    local emberHeader = CreateTableCell(contentFrame, COLOR.header)
     emberHeader:SetSize(ui.emberWidth, ui.resourceSubHeaderHeight)
     local emberHeaderText = CreateCellText(emberHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     emberHeaderText:SetText(L["泰坦余烬"])
 
-    local shardHeader = CreateTableCell(hoverFrame, COLOR.header)
+    local shardHeader = CreateTableCell(contentFrame, COLOR.header)
     shardHeader:SetSize(ui.shardWidth, ui.resourceSubHeaderHeight)
     local shardHeaderText = CreateCellText(shardHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     shardHeaderText:SetText(L["泰坦碎片"])
 
-    local footerText = hoverFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local footerText = contentFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     footerText:SetJustifyH("LEFT")
     footerText:SetWordWrap(false)
     footerText:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
@@ -2107,54 +2190,54 @@ local function CreateHoverFrame()
             resourceHoverOverlays = {},
         }
 
-        row.raidNameCell = CreateTableCell(hoverFrame, nil, { left = true })
+        row.raidNameCell = CreateTableCell(contentFrame, nil, { left = true })
         row.raidNameCell:SetSize(ui.nameWidth, ui.rowHeight)
         row.raidName = CreateCellText(row.raidNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
         CreateRowHoverOverlay(row.raidNameCell, row.raidHoverOverlays)
 
         for _, column in ipairs(LOCKOUT_COLUMNS) do
-            local cell = CreateStatusDisplay(hoverFrame, column.compactWidth, ui.rowHeight, 15, 11, true)
+            local cell = CreateStatusDisplay(contentFrame, column.compactWidth, ui.rowHeight, 15, 11, true)
             cell.column = column
             CreateRowHoverOverlay(cell, row.raidHoverOverlays)
             row.raidCells[column.id] = cell
         end
 
-        row.resourceNameCell = CreateTableCell(hoverFrame, nil, { left = true })
+        row.resourceNameCell = CreateTableCell(contentFrame, nil, { left = true })
         row.resourceNameCell:SetSize(ui.nameWidth, ui.rowHeight)
         row.resourceName = CreateCellText(row.resourceNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
         CreateRowHoverOverlay(row.resourceNameCell, row.resourceHoverOverlays)
 
-        row.professionCell = CreateTableCell(hoverFrame)
+        row.professionCell = CreateTableCell(contentFrame)
         row.professionCell:SetSize(ui.professionWidth, ui.rowHeight)
         row.professionTiles = {}
         CreateRowHoverOverlay(row.professionCell, row.resourceHoverOverlays)
 
-        row.legendaryCell = CreateTableCell(hoverFrame)
+        row.legendaryCell = CreateTableCell(contentFrame)
         row.legendaryCell:SetSize(ui.legendaryWidth, ui.rowHeight)
         row.legendaryTiles = {}
         CreateRowHoverOverlay(row.legendaryCell, row.resourceHoverOverlays)
 
-        row.upgradeCell = CreateTableCell(hoverFrame)
+        row.upgradeCell = CreateTableCell(contentFrame)
         row.upgradeCell:SetSize(ui.upgradeWidth, ui.rowHeight)
         row.upgradeTiles = {}
         CreateRowHoverOverlay(row.upgradeCell, row.resourceHoverOverlays)
 
-        row.trinketCell = CreateTableCell(hoverFrame)
+        row.trinketCell = CreateTableCell(contentFrame)
         row.trinketCell:SetSize(ui.trinketWidth, ui.rowHeight)
         row.trinketTiles = {}
         CreateRowHoverOverlay(row.trinketCell, row.resourceHoverOverlays)
 
-        row.goldCell = CreateTableCell(hoverFrame)
+        row.goldCell = CreateTableCell(contentFrame)
         row.goldCell:SetSize(ui.goldWidth, ui.rowHeight)
         row.gold = CreateResourceNumberText(row.goldCell)
         CreateRowHoverOverlay(row.goldCell, row.resourceHoverOverlays)
 
-        row.emberCell = CreateTableCell(hoverFrame)
+        row.emberCell = CreateTableCell(contentFrame)
         row.emberCell:SetSize(ui.emberWidth, ui.rowHeight)
         row.ember = CreateResourceNumberText(row.emberCell)
         CreateRowHoverOverlay(row.emberCell, row.resourceHoverOverlays)
 
-        row.shardCell = CreateTableCell(hoverFrame)
+        row.shardCell = CreateTableCell(contentFrame)
         row.shardCell:SetSize(ui.shardWidth, ui.rowHeight)
         row.shard = CreateResourceNumberText(row.shardCell)
         CreateRowHoverOverlay(row.shardCell, row.resourceHoverOverlays)
@@ -2166,32 +2249,32 @@ local function CreateHoverFrame()
         return row
     end
 
-    local totalNameCell = CreateTableCell(hoverFrame, COLOR.header, { left = true })
+    local totalNameCell = CreateTableCell(contentFrame, COLOR.header, { left = true })
     totalNameCell:SetSize(ui.nameWidth, ui.rowHeight)
     local totalName = CreateCellText(totalNameCell, "GameFontNormal", 12, COLOR.gold, "CENTER")
     totalName:SetText(L["合计"])
 
-    local totalProfessionCell = CreateTableCell(hoverFrame, COLOR.header)
+    local totalProfessionCell = CreateTableCell(contentFrame, COLOR.header)
     totalProfessionCell:SetSize(ui.professionWidth, ui.rowHeight)
 
-    local totalLegendaryCell = CreateTableCell(hoverFrame, COLOR.header)
+    local totalLegendaryCell = CreateTableCell(contentFrame, COLOR.header)
     totalLegendaryCell:SetSize(ui.legendaryWidth, ui.rowHeight)
 
-    local totalUpgradeCell = CreateTableCell(hoverFrame, COLOR.header)
+    local totalUpgradeCell = CreateTableCell(contentFrame, COLOR.header)
     totalUpgradeCell:SetSize(ui.upgradeWidth, ui.rowHeight)
 
-    local totalTrinketCell = CreateTableCell(hoverFrame, COLOR.header)
+    local totalTrinketCell = CreateTableCell(contentFrame, COLOR.header)
     totalTrinketCell:SetSize(ui.trinketWidth, ui.rowHeight)
 
-    local totalGoldCell = CreateTableCell(hoverFrame, COLOR.header)
+    local totalGoldCell = CreateTableCell(contentFrame, COLOR.header)
     totalGoldCell:SetSize(ui.goldWidth, ui.rowHeight)
     local totalGold = CreateResourceNumberText(totalGoldCell)
 
-    local totalEmberCell = CreateTableCell(hoverFrame, COLOR.header)
+    local totalEmberCell = CreateTableCell(contentFrame, COLOR.header)
     totalEmberCell:SetSize(ui.emberWidth, ui.rowHeight)
     local totalEmber = CreateResourceNumberText(totalEmberCell)
 
-    local totalShardCell = CreateTableCell(hoverFrame, COLOR.header)
+    local totalShardCell = CreateTableCell(contentFrame, COLOR.header)
     totalShardCell:SetSize(ui.shardWidth, ui.rowHeight)
     local totalShard = CreateResourceNumberText(totalShardCell)
 
@@ -2201,6 +2284,8 @@ local function CreateHoverFrame()
     local renderContext = {
         color = COLOR,
         calculateColumnWidths = CalculateRaidColumnWidths,
+        calculateHorizontalViewport = CalculateHorizontalViewport,
+        calculateMeasuredColumnMinimums = CalculateMeasuredColumnMinimums,
         calculateResourceColumnWidths = CalculateResourceColumnWidths,
         ensureRow = EnsureRow,
         formatResetTime = FormatResetTime,
@@ -2218,6 +2303,7 @@ local function CreateHoverFrame()
         getVisibleQuestGroups = GetVisibleQuestGroups,
         legendaryItemQuality = LEGENDARY_ITEM_QUALITY,
         locale = L,
+        measureHeaderText = MeasureHeaderText,
         renderItemStrip = RenderItemStrip,
         renderProfessionStrip = RenderProfessionStrip,
         setCellColor = SetCellColor,
@@ -2234,10 +2320,10 @@ local function CreateHoverFrame()
         local visibleColumns = renderContext.getVisibleColumns()
         local raidRowCount = max(1, #raidCharacters)
         local resourceRowCount = max(1, #resourceCharacters)
-        local compactColumnsWidth = 0
-        for _, column in ipairs(visibleColumns) do
-            compactColumnsWidth = compactColumnsWidth + column.compactWidth
-        end
+        local columnMinimums, compactColumnsWidth = renderContext.calculateMeasuredColumnMinimums(
+            visibleColumns,
+            renderContext.measureHeaderText
+        )
 
         local compactEquipmentWidth = ui.legendaryWidth + ui.upgradeWidth + ui.trinketWidth
         local compactCommonWidth = ui.goldWidth + ui.emberWidth + ui.shardWidth
@@ -2248,9 +2334,14 @@ local function CreateHoverFrame()
             ui.padding * 2 + ui.nameWidth + compactColumnsWidth,
             ui.padding * 2 + compactResourceWidth
         )
+        local viewportWidth, horizontalOverflow = renderContext.calculateHorizontalViewport(
+            width,
+            UIParent:GetWidth()
+        )
         local columnWidths, lockoutsWidth = renderContext.calculateColumnWidths(
             visibleColumns,
-            width - ui.padding * 2 - ui.nameWidth
+            width - ui.padding * 2 - ui.nameWidth,
+            columnMinimums
         )
         local resourceColumnWidths, resourceColumnsWidth = renderContext.calculateResourceColumnWidths(
             ui,
@@ -2266,8 +2357,22 @@ local function CreateHoverFrame()
         local equipmentWidth = legendaryWidth + upgradeWidth + trinketWidth
         local commonWidth = goldWidth + emberWidth + shardWidth
         local resourceWidth = ui.nameWidth + resourceColumnsWidth
-        hoverFrame:SetWidth(width)
-        topBar:SetWidth(width - ui.padding * 2)
+        hoverFrame:SetWidth(viewportWidth)
+        topBar:SetWidth(viewportWidth - ui.padding * 2)
+        contentScroll:ClearAllPoints()
+        contentScroll:SetPoint("TOPLEFT", hoverFrame, "TOPLEFT", 0, -(ui.padding + ui.topBarHeight))
+        contentScroll:SetWidth(viewportWidth)
+        contentFrame:SetWidth(width)
+        horizontalScrollBar:SetMinMaxValues(0, horizontalOverflow)
+        if horizontalOverflow > 0 then
+            local trackWidth = max(1, viewportWidth - ui.padding * 2)
+            scrollThumb:SetWidth(max(32, trackWidth * viewportWidth / width))
+            horizontalScrollBar:Show()
+            horizontalScrollBar:SetValue(min(horizontalScrollBar:GetValue(), horizontalOverflow))
+        else
+            horizontalScrollBar:SetValue(0)
+            horizontalScrollBar:Hide()
+        end
         raidTitle:SetText(renderContext.locale["副本与任务（装等）"])
         resourceTitle:SetText(renderContext.locale["角色资源（等级）"])
 
@@ -2291,8 +2396,7 @@ local function CreateHoverFrame()
             header:SetPoint(
                 "TOPLEFT",
                 raidOffsetX,
-                -(ui.padding + ui.topBarHeight
-                    + (column.groupID and ui.raidHeaderGroupHeight or 0))
+                -(column.groupID and ui.raidHeaderGroupHeight or 0)
             )
             header:Show()
             raidOffsetX = raidOffsetX + columnWidths[column.id]
@@ -2305,7 +2409,7 @@ local function CreateHoverFrame()
             end
             header:SetWidth(groupWidth)
             header:ClearAllPoints()
-            header:SetPoint("TOPLEFT", columnX[group.columns[1].id], -(ui.padding + ui.topBarHeight))
+            header:SetPoint("TOPLEFT", columnX[group.columns[1].id], 0)
             header:Show()
         end
 
@@ -2330,7 +2434,7 @@ local function CreateHoverFrame()
             renderContext.getCurrencyIconFile(renderContext.titanShardCurrencyID)
         ))
 
-        local raidRowsTop = ui.padding + ui.topBarHeight + ui.raidHeaderGroupHeight + ui.raidHeaderSubHeight
+        local raidRowsTop = ui.raidHeaderGroupHeight + ui.raidHeaderSubHeight
         resourceTop = raidRowsTop + raidRowCount * ui.rowHeight + ui.sectionGap
         resourceRowsTop = resourceTop + ui.resourceGroupHeight + ui.resourceSubHeaderHeight
 
@@ -2606,7 +2710,13 @@ local function CreateHoverFrame()
             footerText:SetText(renderContext.locale["资源尚未记录"])
         end
 
-        hoverFrame:SetHeight(totalY + ui.rowHeight + ui.footerHeight + ui.padding)
+        local contentHeight = totalY + ui.rowHeight + ui.footerHeight
+        contentFrame:SetHeight(contentHeight)
+        contentScroll:SetHeight(contentHeight)
+        hoverFrame:SetHeight(
+            ui.padding + ui.topBarHeight + contentHeight + ui.padding
+                + (horizontalOverflow > 0 and ui.horizontalScrollHeight or 0)
+        )
     end
 
     updateHoverFrame()
