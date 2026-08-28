@@ -5,6 +5,18 @@
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)，日志格式参考
 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## 未发布
+
+### 新增
+
+- 自动拍卖设置重新提供“被过滤的装备自动折叠”；启用后，任一当前装备过滤方案命中的拍卖装备会自动折叠，关注、心愿和战网账号绑定装备保持展开。
+
+### 界面预览
+
+![开启被过滤装备自动折叠](docs/images/auto-collapse-filtered-auction-setting.png)
+
+![拍卖中自动折叠被过滤装备](docs/images/auto-collapse-filtered-auction.png)
+
 ## v0.3.0 - 2026-08-28
 
 ### 新增

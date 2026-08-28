@@ -1625,10 +1625,7 @@ BG.Init(function()
             ShowTooltipGlow(f)
         end
         if BG.SpecGearFilter then
-            local link = f.link or (f.itemID and ("item:" .. f.itemID))
-            if link then
-                BG.SpecGearFilter.ApplyToCell(f.itemFrame or f, link)
-            end
+            BG.SpecGearFilter.ApplyToAuctionFrame(f, hasGZ or hasHope)
         end
         tinsert(BG.auctionLogFrame.auctioning, f.itemID)
         BG.UpdateAuctioning()

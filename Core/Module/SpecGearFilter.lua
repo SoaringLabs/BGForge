@@ -417,7 +417,7 @@ local function UpdateButtons()
     end
 end
 
-function SpecGearFilter.ApplyToCell(cell, explicitLink)
+function SpecGearFilter.ApplyToCell(cell, explicitLink, onApplied)
     if not cell or not cell.SetAlpha then return end
 
     cell._bgForgeSpecGearFilterRequest = (cell._bgForgeSpecGearFilterRequest or 0) + 1
@@ -430,6 +430,7 @@ function SpecGearFilter.ApplyToCell(cell, explicitLink)
 
     if not scheme or type(link) ~= "string" or not link:find("item:", 1, true) then
         cell:SetAlpha(ALPHA_ALLOWED)
+        if onApplied then onApplied(false) end
         return
     end
 
@@ -437,6 +438,7 @@ function SpecGearFilter.ApplyToCell(cell, explicitLink)
     local itemID = itemString and GetItemInfoInstant(itemString)
     if not itemID then
         cell:SetAlpha(ALPHA_ALLOWED)
+        if onApplied then onApplied(false) end
         return
     end
     cell:SetAlpha(ALPHA_ALLOWED)
@@ -448,7 +450,9 @@ function SpecGearFilter.ApplyToCell(cell, explicitLink)
         if currentLink ~= link or SelectedKey() ~= key then return end
 
         local metadata = ReadMetadata(link)
-        cell:SetAlpha(ShouldFilter(metadata, scheme, className) and ALPHA_FILTERED or ALPHA_ALLOWED)
+        local filtered = ShouldFilter(metadata, scheme, className)
+        cell:SetAlpha(filtered and ALPHA_FILTERED or ALPHA_ALLOWED)
+        if onApplied then onApplied(filtered) end
     end
 
     if metadataCache[itemString] then
@@ -467,6 +471,28 @@ function SpecGearFilter.ApplyToCell(cell, explicitLink)
     else
         ApplyLoadedItem()
     end
+end
+
+function SpecGearFilter.ApplyToAuctionFrame(auctionFrame, keepExpanded)
+    if not auctionFrame then return end
+    if keepExpanded ~= nil then
+        auctionFrame._bgForgeSpecGearFilterKeepExpanded = keepExpanded and true or false
+    end
+
+    local target = auctionFrame.itemFrame or auctionFrame
+    local link = auctionFrame.link or (auctionFrame.itemID and ("item:" .. auctionFrame.itemID))
+    if not link then return end
+
+    SpecGearFilter.ApplyToCell(target, link, function(filtered)
+        if not filtered or BiaoGe.options.autoAuctionFold ~= 1 then return end
+        if auctionFrame._bgForgeSpecGearFilterKeepExpanded then return end
+        if auctionFrame.IsEnd or auctionFrame.IsSmallWindow then return end
+        if not auctionFrame.hide or type(auctionFrame.hide.Click) ~= "function" then return end
+
+        auctionFrame.notClick = true
+        auctionFrame.hide:Click()
+        auctionFrame.notClick = false
+    end)
 end
 
 function SpecGearFilter.RefreshCurrentTable()
@@ -495,11 +521,7 @@ function SpecGearFilter.RefreshCurrentTable()
 
     if BGA and BGA.Frames then
         for _, auctionFrame in pairs(BGA.Frames) do
-            local target = auctionFrame.itemFrame or auctionFrame
-            local link = auctionFrame.link or (auctionFrame.itemID and ("item:" .. auctionFrame.itemID))
-            if link then
-                SpecGearFilter.ApplyToCell(target, link)
-            end
+            SpecGearFilter.ApplyToAuctionFrame(auctionFrame)
         end
     end
 end

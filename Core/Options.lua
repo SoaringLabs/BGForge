@@ -2521,6 +2521,7 @@ BG.Init(function()
                 autoCreateBill           = { L["自动生成表格账单"], L["当一个装备拍卖成功时，会根据拍卖记录，自动填写表格里该装备所对应的买家和金额。"], " ",
                     L["启用该功能时，交易记账会被自动禁用，以免记账冲突。"], " ",
                     L["注意：如果你是团长或物品分配者，该功能不会生效。团长或物品分配者仍会使用更为可靠的交易记账。"] },
+                autoAuctionFold          = { L["被过滤的装备自动折叠"], L["启用装备过滤时，如果拍卖的装备不合适你，自动折叠。"] },
                 autoAuctionUp            = { L["拍卖竞价窗口自动往上吸附"], L["当靠前的窗口消失时，后面的窗口会自动往上吸附。"] },
                 aotoSendLate             = { L["自动出价的延迟时间随机"], L["启用自动出价时，当别人出价后，默认是自己会延迟0.5秒后才自动出价。"], " ",
                     format(L["现在可以修改这个延迟时间，并在一定范围内随机（%s秒-X秒）。X最低为%s秒，最高为%s秒。"], 1, 1, 5) },
@@ -2553,6 +2554,7 @@ BG.Init(function()
                 { name = "autoAuctionHappySay", default = 1, condition = function() return not BG.IsTitan end },
                 { name = "autoAuctionAutoEndTips", default = 1, },
                 { name = "autoCreateBill", default = 1, callback = { BG.UpdateAutoCreateBillButton } },
+                { name = "autoAuctionFold", default = 0, isnew = true, callback = { BG.SpecGearFilter.RefreshCurrentTable } },
                 { name = "autoAuctionUp", default = 0, },
                 {
                     name = "aotoSendLate",

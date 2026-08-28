@@ -21,8 +21,13 @@ if ! rg -q 'SpecGearFilter\.ApplyToCell' Core/Module/AuctionLog.lua; then
     exit 1
 fi
 
-if ! rg -q 'SpecGearFilter\.ApplyToCell' Core/Module/Auction.lua; then
-    echo "active auction does not apply SpecGearFilter when a bid frame is created" >&2
+if ! rg -q 'SpecGearFilter\.ApplyToAuctionFrame' Core/Module/Auction.lua; then
+    echo "active auction does not apply SpecGearFilter auto-collapse when a bid frame is created" >&2
+    exit 1
+fi
+
+if ! rg -q 'autoAuctionFold.*default = 0' Core/Options.lua; then
+    echo "filtered auction auto-collapse option is missing or not disabled by default" >&2
     exit 1
 fi
 

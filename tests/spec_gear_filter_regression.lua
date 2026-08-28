@@ -198,10 +198,101 @@ local function TestPublicInterfaceAndMigration()
 
     local keys = {}
     for key in pairs(env.module) do keys[key] = true end
-    AssertTrue(keys.CreateUI and keys.ApplyToCell and keys.RefreshCurrentTable, "public methods should exist")
+    AssertTrue(keys.CreateUI and keys.ApplyToCell and keys.ApplyToAuctionFrame and keys.RefreshCurrentTable,
+        "public methods should exist")
     local count = 0
     for _ in pairs(keys) do count = count + 1 end
-    AssertEqual(count, 3, "module should expose only three methods")
+    AssertEqual(count, 4, "module should expose only four methods")
+end
+
+local function TestFilterResultCallback()
+    local env = ResetEnvironment("WARRIOR", "arms_fury")
+    local filtered
+    env.module.ApplyToCell(NewCell(ItemLink(100)), nil, function(result)
+        filtered = result
+    end)
+    AssertEqual(filtered, true, "callback should report filtered items")
+
+    env.module.ApplyToCell(NewCell(ItemLink(101)), nil, function(result)
+        filtered = result
+    end)
+    AssertEqual(filtered, false, "callback should report allowed items")
+
+    BiaoGe.options.specGearFilterByClass.WARRIOR = nil
+    env.module.ApplyToCell(NewCell(ItemLink(100)), nil, function(result)
+        filtered = result
+    end)
+    AssertEqual(filtered, false, "callback should report false while filtering is disabled")
+end
+
+local function NewAuctionFrame(itemID)
+    local frame = {
+        itemID = itemID,
+        link = ItemLink(itemID),
+        itemFrame = NewCell(ItemLink(itemID)),
+        collapseCount = 0,
+    }
+    frame.hide = {
+        Click = function()
+            AssertEqual(frame.notClick, true, "automatic collapse should suppress normal click side effects")
+            frame.IsSmallWindow = true
+            frame.collapseCount = frame.collapseCount + 1
+        end,
+    }
+    return frame
+end
+
+local function TestAuctionAutoCollapse()
+    local env = ResetEnvironment("WARRIOR", "arms_fury")
+    BiaoGe.options.autoAuctionFold = 1
+
+    local filtered = NewAuctionFrame(100)
+    env.module.ApplyToAuctionFrame(filtered, false)
+    AssertEqual(filtered.collapseCount, 1, "filtered auction should collapse")
+    AssertEqual(filtered.notClick, false, "automatic collapse should restore click state")
+
+    env.module.ApplyToAuctionFrame(filtered)
+    AssertEqual(filtered.collapseCount, 1, "an already collapsed auction should not toggle open")
+
+    local allowed = NewAuctionFrame(101)
+    env.module.ApplyToAuctionFrame(allowed, false)
+    AssertEqual(allowed.collapseCount, 0, "allowed auction should stay expanded")
+
+    local followed = NewAuctionFrame(100)
+    env.module.ApplyToAuctionFrame(followed, true)
+    AssertEqual(followed.collapseCount, 0, "followed or wishlisted auction should stay expanded")
+
+    local accountBound = NewAuctionFrame(111)
+    env.module.ApplyToAuctionFrame(accountBound, false)
+    AssertEqual(accountBound.collapseCount, 0, "account-bound auction should stay expanded")
+
+    BiaoGe.options.autoAuctionFold = 0
+    local optionDisabled = NewAuctionFrame(100)
+    env.module.ApplyToAuctionFrame(optionDisabled, false)
+    AssertEqual(optionDisabled.collapseCount, 0, "disabled auto-collapse option should keep auctions expanded")
+
+    BiaoGe.options.autoAuctionFold = 1
+    BiaoGe.options.specGearFilterByClass.WARRIOR = nil
+    local filterDisabled = NewAuctionFrame(100)
+    env.module.ApplyToAuctionFrame(filterDisabled, false)
+    AssertEqual(filterDisabled.collapseCount, 0, "disabled gear filter should keep auctions expanded")
+end
+
+local function TestAsyncAuctionAutoCollapse()
+    local env = ResetEnvironment("WARRIOR", "arms_fury", true)
+    BiaoGe.options.autoAuctionFold = 1
+
+    local filtered = NewAuctionFrame(100)
+    env.module.ApplyToAuctionFrame(filtered, false)
+    AssertEqual(filtered.collapseCount, 0, "auction should wait for uncached item metadata")
+    env.pendingLoads[1].callback()
+    AssertEqual(filtered.collapseCount, 1, "auction should collapse after item metadata loads")
+
+    local stale = NewAuctionFrame(102)
+    env.module.ApplyToAuctionFrame(stale, false)
+    BiaoGe.options.specGearFilterByClass.WARRIOR = nil
+    env.pendingLoads[2].callback()
+    AssertEqual(stale.collapseCount, 0, "stale filter result should not collapse an auction")
 end
 
 local function TestRulesAndExemption()
@@ -392,6 +483,9 @@ local function TestCurrentTableScope()
 end
 
 TestPublicInterfaceAndMigration()
+TestFilterResultCallback()
+TestAuctionAutoCollapse()
+TestAsyncAuctionAutoCollapse()
 TestRulesAndExemption()
 TestTankRules()
 TestDisabledAndInvalidSchemes()
