@@ -18,29 +18,78 @@ local RAIDS = {
     { id = 624, name = L["宝库"], compactWidth = 42 },
 }
 
--- “周常”是一个内容槽位，不是团本实例。候选池沿用原版 BiaoGe 已验证的轮换任务，
--- 但完成快照只保存在 BGForge 当前本机角色记录中。
-local WEEKLY_QUEST_COLUMN = {
-    id = "weeklyQuest",
-    name = L["周常"],
-    compactWidth = 58,
-    isWeeklyQuest = true,
+-- 任务候选池沿用原版 BiaoGe 已验证的 Titan/WLK 定义，但完成快照只保存
+-- 在 BGForge 当前本机角色记录中。专业日常只记录完成，不采集专业技能。
+local QUEST_HEADER_GROUPS = {
+    { id = "weekly", name = L["周常"] },
+    { id = "professionDaily", name = L["专业日常"] },
 }
-local WEEKLY_QUEST_IDS = {
-    24579, 24580, 24581, 24582, 24583, 24584,
-    24585, 24586, 24587, 24588, 24589, 24590,
-    93975, 94577, 94579, 95037, 96312,
+local QUEST_COLUMNS = {
+    {
+        id = "raidWeekly",
+        name = L["团本周常"],
+        compactWidth = 60,
+        groupID = "weekly",
+        resetType = "weekly",
+        questIDs = {
+            24579, 24580, 24581, 24582, 24583, 24584,
+            24585, 24586, 24587, 24588, 24589, 24590,
+            93975, 94577, 94579, 95037, 96312,
+        },
+    },
+    {
+        id = "zulGurubWeekly",
+        name = L["祖格周常"],
+        compactWidth = 60,
+        groupID = "weekly",
+        resetType = "weekly",
+        questIDs = { 98183 },
+    },
+    {
+        id = "jewelcraftingDaily",
+        name = L["珠宝"],
+        compactWidth = 44,
+        groupID = "professionDaily",
+        resetType = "daily",
+        questIDs = { 12959, 12962, 12961, 12958, 12963, 12960 },
+    },
+    {
+        id = "cookingDaily",
+        name = L["烹饪"],
+        compactWidth = 44,
+        groupID = "professionDaily",
+        resetType = "daily",
+        questIDs = { 13114, 13116, 13113, 13115, 13112, 13102, 13100, 13107, 13101, 13103 },
+    },
+    {
+        id = "fishingDaily",
+        name = L["钓鱼"],
+        compactWidth = 44,
+        groupID = "professionDaily",
+        resetType = "daily",
+        questIDs = { 13836, 13833, 13834, 13832, 13830 },
+    },
 }
-local weeklyQuestIDSet = {}
-for _, questID in ipairs(WEEKLY_QUEST_IDS) do
-    weeklyQuestIDSet[questID] = true
+
+local questColumnByID = {}
+local questColumnByQuestID = {}
+for _, column in ipairs(QUEST_COLUMNS) do
+    column.isQuest = true
+    column.questIDSet = {}
+    questColumnByID[column.id] = column
+    for _, questID in ipairs(column.questIDs) do
+        column.questIDSet[questID] = true
+        questColumnByQuestID[questID] = column
+    end
 end
 
 local LOCKOUT_COLUMNS = {}
 for _, raid in ipairs(RAIDS) do
     LOCKOUT_COLUMNS[#LOCKOUT_COLUMNS + 1] = raid
 end
-LOCKOUT_COLUMNS[#LOCKOUT_COLUMNS + 1] = WEEKLY_QUEST_COLUMN
+for _, column in ipairs(QUEST_COLUMNS) do
+    LOCKOUT_COLUMNS[#LOCKOUT_COLUMNS + 1] = column
+end
 
 local raidByID = {}
 for _, raid in ipairs(RAIDS) do
@@ -48,6 +97,7 @@ for _, raid in ipairs(RAIDS) do
 end
 
 local RAID_OPTION_PREFIX = "raidLockoutShow_"
+local QUEST_GROUP_OPTION_PREFIX = "raidLockoutShowGroup_"
 local DATA_VERSION = 1
 local DATA_KEY = "BGForgeRaidLockouts"
 local RAID_MIN_LEVEL = 80
@@ -91,7 +141,8 @@ local SMALL_UI = {
     topBarHeight = 36,
     nameWidth = 160,
     rowHeight = 24,
-    raidHeaderHeight = 30,
+    raidHeaderGroupHeight = 22,
+    raidHeaderSubHeight = 22,
     sectionGap = 8,
     resourceGroupHeight = 22,
     resourceSubHeaderHeight = 22,
@@ -456,9 +507,15 @@ local function GetLockoutOptionKey(columnID)
     return RAID_OPTION_PREFIX .. columnID
 end
 
+local function GetQuestGroupOptionKey(groupID)
+    return QUEST_GROUP_OPTION_PREFIX .. groupID
+end
+
 local function IsLockoutColumnVisible(column)
     local options = BiaoGe and BiaoGe.options
-    local value = options and options[GetLockoutOptionKey(column.id)]
+    local optionKey = column.groupID
+        and GetQuestGroupOptionKey(column.groupID) or GetLockoutOptionKey(column.id)
+    local value = options and options[optionKey]
     return value == nil or value == 1
 end
 
@@ -470,6 +527,29 @@ local function GetVisibleLockoutColumns()
         end
     end
     return columns
+end
+
+local function GetVisibleQuestGroups(columns)
+    local visibleByGroup = {}
+    for _, column in ipairs(columns or {}) do
+        if column.groupID then
+            visibleByGroup[column.groupID] = visibleByGroup[column.groupID] or {}
+            visibleByGroup[column.groupID][#visibleByGroup[column.groupID] + 1] = column
+        end
+    end
+
+    local groups = {}
+    for _, definition in ipairs(QUEST_HEADER_GROUPS) do
+        local groupColumns = visibleByGroup[definition.id]
+        if groupColumns and #groupColumns > 0 then
+            groups[#groups + 1] = {
+                id = definition.id,
+                name = definition.name,
+                columns = groupColumns,
+            }
+        end
+    end
+    return groups
 end
 
 local function CalculateRaidColumnWidths(raids, availableWidth)
@@ -491,6 +571,35 @@ local function CalculateRaidColumnWidths(raids, availableWidth)
             columnWidth = availableWidth - assignedWidth
         end
         widths[raid.id] = columnWidth
+        assignedWidth = assignedWidth + columnWidth
+    end
+    return widths, assignedWidth
+end
+
+local function CalculateResourceColumnWidths(ui, availableWidth)
+    local definitions = {
+        { id = "profession", width = ui.professionWidth },
+        { id = "legendary", width = ui.legendaryWidth },
+        { id = "upgrade", width = ui.upgradeWidth },
+        { id = "trinket", width = ui.trinketWidth },
+        { id = "gold", width = ui.goldWidth },
+        { id = "ember", width = ui.emberWidth },
+        { id = "shard", width = ui.shardWidth },
+    }
+    local compactWidth = 0
+    for _, definition in ipairs(definitions) do
+        compactWidth = compactWidth + definition.width
+    end
+
+    local extraPerColumn = max(0, availableWidth - compactWidth) / #definitions
+    local widths = {}
+    local assignedWidth = 0
+    for index, definition in ipairs(definitions) do
+        local columnWidth = definition.width + extraPerColumn
+        if index == #definitions and availableWidth >= compactWidth then
+            columnWidth = availableWidth - assignedWidth
+        end
+        widths[definition.id] = columnWidth
         assignedWidth = assignedWidth + columnWidth
     end
     return widths, assignedWidth
@@ -563,24 +672,22 @@ local function GetRealmStore(realmID, create)
     return realm
 end
 
-local function NormalizeWeeklyQuestSnapshot(snapshot, now)
+local function NormalizeQuestCompletionSnapshot(snapshot, column, now)
     if type(snapshot) ~= "table" then
         return
     end
 
     local resetAt = tonumber(snapshot.resetAt)
-    local status = snapshot.status
-    if not resetAt or now >= resetAt or (status ~= "completed" and status ~= "incomplete") then
+    if not resetAt or now >= resetAt or not column then
         return
     end
 
-    local questID = status == "completed" and tonumber(snapshot.questID) or nil
-    if status == "completed" and not weeklyQuestIDSet[questID] then
+    local questID = tonumber(snapshot.questID)
+    if snapshot.status == "incomplete" or not column.questIDSet[questID] then
         return
     end
 
     return {
-        status = status,
         questID = questID,
         resetAt = resetAt,
         updatedAt = tonumber(snapshot.updatedAt),
@@ -619,10 +726,32 @@ local function ClearExpiredRaidData()
                         end
                     end
                     character.trinkets = type(character.trinkets) == "table" and character.trinkets or {}
-                    local hadWeeklyQuest = character.weeklyQuest ~= nil
-                    character.weeklyQuest = NormalizeWeeklyQuestSnapshot(character.weeklyQuest, now)
-                    if hadWeeklyQuest and not character.weeklyQuest then
+                    character.questCompletions = type(character.questCompletions) == "table"
+                        and character.questCompletions or {}
+                    if character.weeklyQuest ~= nil then
+                        local migrated = NormalizeQuestCompletionSnapshot(
+                            character.weeklyQuest,
+                            questColumnByID.raidWeekly,
+                            now
+                        )
+                        if migrated and not character.questCompletions.raidWeekly then
+                            character.questCompletions.raidWeekly = migrated
+                        end
+                        character.weeklyQuest = nil
                         changed = true
+                    end
+                    for columnID, snapshot in pairs(character.questCompletions) do
+                        local normalized = NormalizeQuestCompletionSnapshot(
+                            snapshot,
+                            questColumnByID[columnID],
+                            now
+                        )
+                        if normalized then
+                            character.questCompletions[columnID] = normalized
+                        else
+                            character.questCompletions[columnID] = nil
+                            changed = true
+                        end
                     end
                     if resetAll then
                         character.instances = {}
@@ -742,12 +871,24 @@ local function GetOrCreateCurrentCharacterStore()
     return stored
 end
 
-local function GetWeeklyResetAt(now)
-    if not C_DateAndTime or not C_DateAndTime.GetSecondsUntilWeeklyReset then
+local function GetQuestResetAt(resetType, now)
+    local getSeconds
+    if C_DateAndTime then
+        if resetType == "daily" then
+            getSeconds = C_DateAndTime.GetSecondsUntilDailyReset
+        else
+            getSeconds = C_DateAndTime.GetSecondsUntilWeeklyReset
+        end
+    end
+    if not getSeconds then
+        if resetType == "daily" and BG.GetNextDayTime then
+            local seconds, resetAt = BG.GetNextDayTime()
+            return tonumber(resetAt) or (tonumber(seconds) and now + tonumber(seconds) or nil)
+        end
         return
     end
 
-    local seconds = tonumber(C_DateAndTime.GetSecondsUntilWeeklyReset())
+    local seconds = tonumber(getSeconds())
     if not seconds or seconds <= 0 then
         return
     end
@@ -762,9 +903,10 @@ local function RefreshLockoutDisplays()
     end
 end
 
-local function CaptureCurrentWeeklyQuest(turnedInQuestID)
+local function CaptureCurrentQuestProgress(turnedInQuestID)
     turnedInQuestID = tonumber(turnedInQuestID)
-    if turnedInQuestID and not weeklyQuestIDSet[turnedInQuestID] then
+    local turnedInColumn = turnedInQuestID and questColumnByQuestID[turnedInQuestID] or nil
+    if turnedInQuestID and not turnedInColumn then
         return false
     end
 
@@ -774,31 +916,51 @@ local function CaptureCurrentWeeklyQuest(turnedInQuestID)
     end
 
     local now = GetServerTime()
-    local resetAt = GetWeeklyResetAt(now)
-    if not resetAt then
+    stored.questCompletions = type(stored.questCompletions) == "table" and stored.questCompletions or {}
+
+    if turnedInColumn then
+        local resetAt = GetQuestResetAt(turnedInColumn.resetType, now)
+        if not resetAt then
+            return false
+        end
+        stored.questCompletions[turnedInColumn.id] = {
+            questID = turnedInQuestID,
+            resetAt = resetAt,
+            updatedAt = now,
+        }
+        RefreshLockoutDisplays()
+        return true
+    end
+
+    if not C_QuestLog or not C_QuestLog.IsQuestFlaggedCompleted then
         return false
     end
 
-    local completedQuestID = turnedInQuestID
-    if not completedQuestID then
-        if not C_QuestLog or not C_QuestLog.IsQuestFlaggedCompleted then
-            return false
-        end
-        for _, questID in ipairs(WEEKLY_QUEST_IDS) do
+    local changed = false
+    for _, column in ipairs(QUEST_COLUMNS) do
+        local completedQuestID
+        for _, questID in ipairs(column.questIDs) do
             if C_QuestLog.IsQuestFlaggedCompleted(questID) then
                 completedQuestID = questID
                 break
             end
         end
+        if completedQuestID then
+            local resetAt = GetQuestResetAt(column.resetType, now)
+            if resetAt then
+                stored.questCompletions[column.id] = {
+                    questID = completedQuestID,
+                    resetAt = resetAt,
+                    updatedAt = now,
+                }
+                changed = true
+            end
+        end
     end
 
-    stored.weeklyQuest = {
-        status = completedQuestID and "completed" or "incomplete",
-        questID = completedQuestID,
-        resetAt = resetAt,
-        updatedAt = now,
-    }
-    RefreshLockoutDisplays()
+    if changed then
+        RefreshLockoutDisplays()
+    end
     return true
 end
 
@@ -935,7 +1097,8 @@ local function BuildCharacterRows(realmID)
                     resourcesUpdatedAt = tonumber(stored.resourcesUpdatedAt),
                     bankResourcesUpdatedAt = tonumber(stored.bankResourcesUpdatedAt),
                     instances = type(stored.instances) == "table" and stored.instances or {},
-                    weeklyQuest = type(stored.weeklyQuest) == "table" and stored.weeklyQuest or nil,
+                    questCompletions = type(stored.questCompletions) == "table"
+                        and stored.questCompletions or {},
                     ready = true,
                     isHidden = stored.isHidden and true or false,
                     isCurrent = realmID == currentRealmID and name == currentName,
@@ -1063,7 +1226,7 @@ local function UpdateStatusDisplay(status, character, lockout, compact, blankWhe
     end
 end
 
-local function UpdateWeeklyQuestStatusDisplay(status, character)
+local function UpdateQuestStatusDisplay(status, character, column)
     status.check:Hide()
     status.text:SetText("")
 
@@ -1076,8 +1239,8 @@ local function UpdateWeeklyQuestStatusDisplay(status, character)
     end
 
     if character.ready
-        and character.weeklyQuest
-        and character.weeklyQuest.status == "completed"
+        and character.questCompletions
+        and character.questCompletions[column.id]
     then
         status.check:Show()
         if status.background then
@@ -1279,8 +1442,13 @@ local function CreateOverviewFrame()
     local cellWidth = 76
     local nameWidth = 126
     local rowHeight = 34
+    local headerGroupHeight = 18
+    local headerSubHeight = 18
+    local headerTopY = -66
+    local rowsTopY = -111
     local width = 42 + nameWidth + cellWidth * #LOCKOUT_COLUMNS
     local headers = {}
+    local groupHeaders = {}
     local rows = {}
 
     overviewFrame = CreateFrame("Frame", "BGForgeRaidLockoutOverviewFrame", UIParent, "BackdropTemplate")
@@ -1330,23 +1498,37 @@ local function CreateOverviewFrame()
     refresh:SetSize(64, 22)
     refresh:SetPoint("BOTTOMRIGHT", -14, 12)
     refresh:SetText(REFRESH)
-    refresh:SetScript("OnClick", RequestCurrentRaidInfo)
+    refresh:SetScript("OnClick", function()
+        CaptureCurrentQuestProgress()
+        RequestCurrentRaidInfo()
+    end)
 
     local startX = 20 + nameWidth
     local characterHeader = overviewFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    characterHeader:SetPoint("TOPLEFT", 20, -66)
+    characterHeader:SetPoint("TOPLEFT", 20, headerTopY)
     characterHeader:SetWidth(nameWidth)
+    characterHeader:SetHeight(headerGroupHeight + headerSubHeight)
     characterHeader:SetJustifyH("LEFT")
     characterHeader:SetTextColor(0, 0.75, 1)
 
     for columnIndex, column in ipairs(LOCKOUT_COLUMNS) do
         local header = overviewFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        header:SetPoint("TOPLEFT", startX + (columnIndex - 1) * cellWidth, -66)
+        header:SetPoint("TOPLEFT", startX + (columnIndex - 1) * cellWidth, headerTopY)
         header:SetWidth(cellWidth)
+        header:SetHeight(column.groupID and headerSubHeight or (headerGroupHeight + headerSubHeight))
         header:SetJustifyH("CENTER")
         header:SetText(column.name)
         header:SetTextColor(0, 0.75, 1)
         headers[column.id] = header
+    end
+    for _, group in ipairs(QUEST_HEADER_GROUPS) do
+        local header = overviewFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        header:SetHeight(headerGroupHeight)
+        header:SetJustifyH("CENTER")
+        header:SetText(group.name)
+        header:SetTextColor(0, 0.75, 1)
+        header:Hide()
+        groupHeaders[group.id] = header
     end
 
     local statusText = overviewFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -1361,7 +1543,7 @@ local function CreateOverviewFrame()
 
         local row = CreateFrame("Frame", nil, overviewFrame)
         row:SetSize(width - 40, rowHeight)
-        row:SetPoint("TOPLEFT", 20, -89 - (rowIndex - 1) * rowHeight)
+        row:SetPoint("TOPLEFT", 20, rowsTopY - (rowIndex - 1) * rowHeight)
 
         local highlight = row:CreateTexture(nil, "BACKGROUND")
         highlight:SetAllPoints()
@@ -1379,7 +1561,7 @@ local function CreateOverviewFrame()
         for _, column in ipairs(LOCKOUT_COLUMNS) do
             local cell = CreateStatusDisplay(row, cellWidth, rowHeight)
             cell:SetPoint("LEFT", nameWidth, 0)
-            if not column.isWeeklyQuest then
+            if not column.isQuest then
                 cell:EnableMouse(true)
                 cell.raid = column
                 cell:SetScript("OnEnter", ShowLockoutTooltip)
@@ -1403,10 +1585,28 @@ local function CreateOverviewFrame()
         for _, header in pairs(headers) do
             header:Hide()
         end
+        for _, header in pairs(groupHeaders) do
+            header:Hide()
+        end
+        local columnX = {}
         for columnIndex, column in ipairs(visibleColumns) do
             local header = headers[column.id]
             header:ClearAllPoints()
-            header:SetPoint("TOPLEFT", startX + (columnIndex - 1) * cellWidth, -66)
+            local x = startX + (columnIndex - 1) * cellWidth
+            columnX[column.id] = x
+            header:SetHeight(column.groupID and headerSubHeight or (headerGroupHeight + headerSubHeight))
+            header:SetPoint(
+                "TOPLEFT",
+                x,
+                column.groupID and (headerTopY - headerGroupHeight) or headerTopY
+            )
+            header:Show()
+        end
+        for _, group in ipairs(GetVisibleQuestGroups(visibleColumns)) do
+            local header = groupHeaders[group.id]
+            header:ClearAllPoints()
+            header:SetPoint("TOPLEFT", columnX[group.columns[1].id], headerTopY)
+            header:SetWidth(cellWidth * #group.columns)
             header:Show()
         end
 
@@ -1425,8 +1625,8 @@ local function CreateOverviewFrame()
                 cell:ClearAllPoints()
                 cell:SetPoint("LEFT", nameWidth + (columnIndex - 1) * cellWidth, 0)
                 cell.character = character
-                if column.isWeeklyQuest then
-                    UpdateWeeklyQuestStatusDisplay(cell, character)
+                if column.isQuest then
+                    UpdateQuestStatusDisplay(cell, character, column)
                 else
                     UpdateStatusDisplay(cell, character, GetPrimaryLockout(character.instances[column.id]), false)
                 end
@@ -1438,7 +1638,7 @@ local function CreateOverviewFrame()
             rows[rowIndex]:Hide()
         end
 
-        overviewFrame:SetHeight(132 + rowCount * rowHeight)
+        overviewFrame:SetHeight(154 + rowCount * rowHeight)
 
         if currentCharacter.refreshing then
             statusText:SetText(L["正在刷新当前角色的团本锁定…"])
@@ -1454,7 +1654,7 @@ local function CreateOverviewFrame()
     end
 
     overviewFrame:SetScript("OnShow", function()
-        CaptureCurrentWeeklyQuest()
+        CaptureCurrentQuestProgress()
         RequestCurrentRaidInfo()
     end)
     updateOverviewFrame()
@@ -1467,6 +1667,7 @@ local function CreateHoverFrame()
 
     local ui = SMALL_UI
     local headers = {}
+    local groupHeaders = {}
     local rows = {}
     local width = 720
     local resourceTop = 0
@@ -1783,7 +1984,7 @@ local function CreateHoverFrame()
     refresh.icon:SetTexCoord(0, 1, 0, 1)
     refresh:SetScript("OnClick", function()
         CaptureCurrentResources()
-        CaptureCurrentWeeklyQuest()
+        CaptureCurrentQuestProgress()
         RequestCurrentRaidInfo()
         BG.PlaySound(1)
     end)
@@ -1798,7 +1999,7 @@ local function CreateHoverFrame()
 
     local raidTitleCell = CreateTableCell(hoverFrame, COLOR.headerStrong, { left = true })
     raidTitleCell:SetPoint("TOPLEFT", ui.padding, -(ui.padding + ui.topBarHeight))
-    raidTitleCell:SetSize(ui.nameWidth, ui.raidHeaderHeight)
+    raidTitleCell:SetSize(ui.nameWidth, ui.raidHeaderGroupHeight + ui.raidHeaderSubHeight)
     local raidTitleAccent = raidTitleCell:CreateTexture(nil, "ARTWORK")
     raidTitleAccent:SetPoint("TOPLEFT", 5, -5)
     raidTitleAccent:SetPoint("BOTTOMLEFT", 5, 5)
@@ -1811,10 +2012,22 @@ local function CreateHoverFrame()
 
     for _, column in ipairs(LOCKOUT_COLUMNS) do
         local header = CreateTableCell(hoverFrame, COLOR.header)
-        header:SetSize(column.compactWidth, ui.raidHeaderHeight)
+        header:SetSize(
+            column.compactWidth,
+            column.groupID and ui.raidHeaderSubHeight
+                or (ui.raidHeaderGroupHeight + ui.raidHeaderSubHeight)
+        )
         local text = CreateCellText(header, "GameFontNormal", 12, COLOR.gold, "CENTER")
         text:SetText(column.name)
         headers[column.id] = header
+    end
+    for _, group in ipairs(QUEST_HEADER_GROUPS) do
+        local header = CreateTableCell(hoverFrame, COLOR.headerStrong)
+        header:SetSize(1, ui.raidHeaderGroupHeight)
+        local text = CreateCellText(header, "GameFontNormal", 12, COLOR.gold, "CENTER")
+        text:SetText(group.name)
+        header:Hide()
+        groupHeaders[group.id] = header
     end
 
     local resourceTitleCell = CreateTableCell(hoverFrame, COLOR.headerStrong, { left = true, top = true })
@@ -1988,6 +2201,7 @@ local function CreateHoverFrame()
     local renderContext = {
         color = COLOR,
         calculateColumnWidths = CalculateRaidColumnWidths,
+        calculateResourceColumnWidths = CalculateResourceColumnWidths,
         ensureRow = EnsureRow,
         formatResetTime = FormatResetTime,
         formatResourceAmount = FormatResourceAmount,
@@ -2001,6 +2215,7 @@ local function CreateHoverFrame()
         getRaidCharacterRows = GetRaidCharacterRows,
         getResourceIconMarkup = GetResourceIconMarkup,
         getVisibleColumns = GetVisibleLockoutColumns,
+        getVisibleQuestGroups = GetVisibleQuestGroups,
         legendaryItemQuality = LEGENDARY_ITEM_QUALITY,
         locale = L,
         renderItemStrip = RenderItemStrip,
@@ -2010,7 +2225,7 @@ local function CreateHoverFrame()
         titanEmberCurrencyID = TITAN_EMBER_CURRENCY_ID,
         titanShardCurrencyID = TITAN_SHARD_CURRENCY_ID,
         updateStatusDisplay = UpdateStatusDisplay,
-        updateWeeklyQuestStatusDisplay = UpdateWeeklyQuestStatusDisplay,
+        updateQuestStatusDisplay = UpdateQuestStatusDisplay,
     }
 
     updateHoverFrame = function()
@@ -2024,36 +2239,80 @@ local function CreateHoverFrame()
             compactColumnsWidth = compactColumnsWidth + column.compactWidth
         end
 
-        local equipmentWidth = ui.legendaryWidth + ui.upgradeWidth + ui.trinketWidth
-        local commonWidth = ui.goldWidth + ui.emberWidth + ui.shardWidth
-        local resourceWidth = ui.nameWidth + ui.professionWidth + equipmentWidth + commonWidth
-        width = max(660, ui.padding * 2 + ui.nameWidth + compactColumnsWidth, ui.padding * 2 + resourceWidth)
+        local compactEquipmentWidth = ui.legendaryWidth + ui.upgradeWidth + ui.trinketWidth
+        local compactCommonWidth = ui.goldWidth + ui.emberWidth + ui.shardWidth
+        local compactResourceWidth = ui.nameWidth + ui.professionWidth
+            + compactEquipmentWidth + compactCommonWidth
+        width = max(
+            660,
+            ui.padding * 2 + ui.nameWidth + compactColumnsWidth,
+            ui.padding * 2 + compactResourceWidth
+        )
         local columnWidths, lockoutsWidth = renderContext.calculateColumnWidths(
             visibleColumns,
             width - ui.padding * 2 - ui.nameWidth
         )
+        local resourceColumnWidths, resourceColumnsWidth = renderContext.calculateResourceColumnWidths(
+            ui,
+            width - ui.padding * 2 - ui.nameWidth
+        )
+        local professionWidth = resourceColumnWidths.profession
+        local legendaryWidth = resourceColumnWidths.legendary
+        local upgradeWidth = resourceColumnWidths.upgrade
+        local trinketWidth = resourceColumnWidths.trinket
+        local goldWidth = resourceColumnWidths.gold
+        local emberWidth = resourceColumnWidths.ember
+        local shardWidth = resourceColumnWidths.shard
+        local equipmentWidth = legendaryWidth + upgradeWidth + trinketWidth
+        local commonWidth = goldWidth + emberWidth + shardWidth
+        local resourceWidth = ui.nameWidth + resourceColumnsWidth
         hoverFrame:SetWidth(width)
         topBar:SetWidth(width - ui.padding * 2)
-        raidTitle:SetText(renderContext.locale["本周 CD（装等）"])
+        raidTitle:SetText(renderContext.locale["副本与任务（装等）"])
         resourceTitle:SetText(renderContext.locale["角色资源（等级）"])
 
         for _, header in pairs(headers) do
             header:Hide()
         end
+        for _, header in pairs(groupHeaders) do
+            header:Hide()
+        end
         local raidOffsetX = ui.padding + ui.nameWidth
+        local columnX = {}
         for _, column in ipairs(visibleColumns) do
             local header = headers[column.id]
+            columnX[column.id] = raidOffsetX
             header:SetWidth(columnWidths[column.id])
+            header:SetHeight(
+                column.groupID and ui.raidHeaderSubHeight
+                    or (ui.raidHeaderGroupHeight + ui.raidHeaderSubHeight)
+            )
             header:ClearAllPoints()
-            header:SetPoint("TOPLEFT", raidOffsetX, -(ui.padding + ui.topBarHeight))
+            header:SetPoint(
+                "TOPLEFT",
+                raidOffsetX,
+                -(ui.padding + ui.topBarHeight
+                    + (column.groupID and ui.raidHeaderGroupHeight or 0))
+            )
             header:Show()
             raidOffsetX = raidOffsetX + columnWidths[column.id]
+        end
+        for _, group in ipairs(renderContext.getVisibleQuestGroups(visibleColumns)) do
+            local header = groupHeaders[group.id]
+            local groupWidth = 0
+            for _, column in ipairs(group.columns) do
+                groupWidth = groupWidth + columnWidths[column.id]
+            end
+            header:SetWidth(groupWidth)
+            header:ClearAllPoints()
+            header:SetPoint("TOPLEFT", columnX[group.columns[1].id], -(ui.padding + ui.topBarHeight))
+            header:Show()
         end
 
         local resetTime = renderContext.getOverviewResetTime()
         if resetTime then
             resetText:SetFormattedText(
-                renderContext.locale["距重置 %s"],
+                renderContext.locale["周重置 %s"],
                 renderContext.formatResetTime(resetTime)
             )
         else
@@ -2071,7 +2330,7 @@ local function CreateHoverFrame()
             renderContext.getCurrencyIconFile(renderContext.titanShardCurrencyID)
         ))
 
-        local raidRowsTop = ui.padding + ui.topBarHeight + ui.raidHeaderHeight
+        local raidRowsTop = ui.padding + ui.topBarHeight + ui.raidHeaderGroupHeight + ui.raidHeaderSubHeight
         resourceTop = raidRowsTop + raidRowCount * ui.rowHeight + ui.sectionGap
         resourceRowsTop = resourceTop + ui.resourceGroupHeight + ui.resourceSubHeaderHeight
 
@@ -2079,38 +2338,47 @@ local function CreateHoverFrame()
         resourceTitleCell:SetPoint("TOPLEFT", ui.padding, -resourceTop)
 
         local professionX = ui.padding + ui.nameWidth
+        professionHeader:SetWidth(professionWidth)
         professionHeader:ClearAllPoints()
         professionHeader:SetPoint("TOPLEFT", professionX, -resourceTop)
 
-        local equipmentX = professionX + ui.professionWidth
+        local equipmentX = professionX + professionWidth
+        equipmentHeader:SetWidth(equipmentWidth)
         equipmentHeader:ClearAllPoints()
         equipmentHeader:SetPoint("TOPLEFT", equipmentX, -resourceTop)
+        legendaryHeader:SetWidth(legendaryWidth)
         legendaryHeader:ClearAllPoints()
         legendaryHeader:SetPoint("TOPLEFT", equipmentX, -(resourceTop + ui.resourceGroupHeight))
+        upgradeHeader:SetWidth(upgradeWidth)
         upgradeHeader:ClearAllPoints()
         upgradeHeader:SetPoint(
             "TOPLEFT",
-            equipmentX + ui.legendaryWidth,
+            equipmentX + legendaryWidth,
             -(resourceTop + ui.resourceGroupHeight)
         )
+        trinketHeader:SetWidth(trinketWidth)
         trinketHeader:ClearAllPoints()
         trinketHeader:SetPoint(
             "TOPLEFT",
-            equipmentX + ui.legendaryWidth + ui.upgradeWidth,
+            equipmentX + legendaryWidth + upgradeWidth,
             -(resourceTop + ui.resourceGroupHeight)
         )
 
         local commonX = equipmentX + equipmentWidth
+        commonHeader:SetWidth(commonWidth)
         commonHeader:ClearAllPoints()
         commonHeader:SetPoint("TOPLEFT", commonX, -resourceTop)
+        goldHeader:SetWidth(goldWidth)
         goldHeader:ClearAllPoints()
         goldHeader:SetPoint("TOPLEFT", commonX, -(resourceTop + ui.resourceGroupHeight))
+        emberHeader:SetWidth(emberWidth)
         emberHeader:ClearAllPoints()
-        emberHeader:SetPoint("TOPLEFT", commonX + ui.goldWidth, -(resourceTop + ui.resourceGroupHeight))
+        emberHeader:SetPoint("TOPLEFT", commonX + goldWidth, -(resourceTop + ui.resourceGroupHeight))
+        shardHeader:SetWidth(shardWidth)
         shardHeader:ClearAllPoints()
         shardHeader:SetPoint(
             "TOPLEFT",
-            commonX + ui.goldWidth + ui.emberWidth,
+            commonX + goldWidth + emberWidth,
             -(resourceTop + ui.resourceGroupHeight)
         )
 
@@ -2137,8 +2405,8 @@ local function CreateHoverFrame()
                 cell:SetPoint("TOPLEFT", cellOffsetX, -rowY)
                 cell.character = character
                 cell.baseColor = rowColor
-                if column.isWeeklyQuest then
-                    renderContext.updateWeeklyQuestStatusDisplay(cell, character)
+                if column.isQuest then
+                    renderContext.updateQuestStatusDisplay(cell, character, column)
                 else
                     renderContext.updateStatusDisplay(
                         cell,
@@ -2167,12 +2435,12 @@ local function CreateHoverFrame()
                 or (rowIndex % 2 == 0 and renderContext.color.rowEven or renderContext.color.rowOdd)
             local resourceRowY = resourceRowsTop + (rowIndex - 1) * ui.rowHeight
             local professionX = ui.padding + ui.nameWidth
-            local legendaryX = professionX + ui.professionWidth
-            local upgradeX = legendaryX + ui.legendaryWidth
-            local trinketX = upgradeX + ui.upgradeWidth
-            local goldX = trinketX + ui.trinketWidth
-            local emberX = goldX + ui.goldWidth
-            local shardX = emberX + ui.emberWidth
+            local legendaryX = professionX + professionWidth
+            local upgradeX = legendaryX + legendaryWidth
+            local trinketX = upgradeX + upgradeWidth
+            local goldX = trinketX + trinketWidth
+            local emberX = goldX + goldWidth
+            local shardX = emberX + emberWidth
 
             row.resourceNameCell:Show()
             row.resourceNameCell:ClearAllPoints()
@@ -2181,12 +2449,14 @@ local function CreateHoverFrame()
             row.resourceName:SetText(renderContext.getCharacterDisplayName(character, "level"))
 
             row.professionCell:Show()
+            row.professionCell:SetWidth(professionWidth)
             row.professionCell:ClearAllPoints()
             row.professionCell:SetPoint("TOPLEFT", professionX, -resourceRowY)
             renderContext.setCellColor(row.professionCell, rowColor)
             renderContext.renderProfessionStrip(row.professionCell, row.professionTiles, character.professions)
 
             row.legendaryCell:Show()
+            row.legendaryCell:SetWidth(legendaryWidth)
             row.legendaryCell:ClearAllPoints()
             row.legendaryCell:SetPoint("TOPLEFT", legendaryX, -resourceRowY)
             renderContext.setCellColor(row.legendaryCell, rowColor)
@@ -2199,6 +2469,7 @@ local function CreateHoverFrame()
             )
 
             row.upgradeCell:Show()
+            row.upgradeCell:SetWidth(upgradeWidth)
             row.upgradeCell:ClearAllPoints()
             row.upgradeCell:SetPoint("TOPLEFT", upgradeX, -resourceRowY)
             renderContext.setCellColor(row.upgradeCell, rowColor)
@@ -2212,12 +2483,14 @@ local function CreateHoverFrame()
             )
 
             row.trinketCell:Show()
+            row.trinketCell:SetWidth(trinketWidth)
             row.trinketCell:ClearAllPoints()
             row.trinketCell:SetPoint("TOPLEFT", trinketX, -resourceRowY)
             renderContext.setCellColor(row.trinketCell, rowColor)
             renderContext.renderItemStrip(row.trinketCell, row.trinketTiles, character.trinkets, "itemLevel")
 
             row.goldCell:Show()
+            row.goldCell:SetWidth(goldWidth)
             row.goldCell:ClearAllPoints()
             row.goldCell:SetPoint("TOPLEFT", goldX, -resourceRowY)
             row.goldCell.character = character
@@ -2226,6 +2499,7 @@ local function CreateHoverFrame()
             row.gold:SetText(renderContext.formatResourceNumber(gold))
 
             row.emberCell:Show()
+            row.emberCell:SetWidth(emberWidth)
             row.emberCell:ClearAllPoints()
             row.emberCell:SetPoint("TOPLEFT", emberX, -resourceRowY)
             row.emberCell.character = character
@@ -2233,6 +2507,7 @@ local function CreateHoverFrame()
             row.ember:SetText(renderContext.formatResourceNumber(character.titanEmbers))
 
             row.shardCell:Show()
+            row.shardCell:SetWidth(shardWidth)
             row.shardCell:ClearAllPoints()
             row.shardCell:SetPoint("TOPLEFT", shardX, -resourceRowY)
             row.shardCell.character = character
@@ -2281,26 +2556,33 @@ local function CreateHoverFrame()
 
         local totalY = resourceRowsTop + resourceRowCount * ui.rowHeight
         local professionX = ui.padding + ui.nameWidth
-        local legendaryX = professionX + ui.professionWidth
-        local upgradeX = legendaryX + ui.legendaryWidth
-        local trinketX = upgradeX + ui.upgradeWidth
-        local goldX = trinketX + ui.trinketWidth
-        local emberX = goldX + ui.goldWidth
-        local shardX = emberX + ui.emberWidth
+        local legendaryX = professionX + professionWidth
+        local upgradeX = legendaryX + legendaryWidth
+        local trinketX = upgradeX + upgradeWidth
+        local goldX = trinketX + trinketWidth
+        local emberX = goldX + goldWidth
+        local shardX = emberX + emberWidth
         totalNameCell:ClearAllPoints()
         totalNameCell:SetPoint("TOPLEFT", ui.padding, -totalY)
+        totalProfessionCell:SetWidth(professionWidth)
         totalProfessionCell:ClearAllPoints()
         totalProfessionCell:SetPoint("TOPLEFT", professionX, -totalY)
+        totalLegendaryCell:SetWidth(legendaryWidth)
         totalLegendaryCell:ClearAllPoints()
         totalLegendaryCell:SetPoint("TOPLEFT", legendaryX, -totalY)
+        totalUpgradeCell:SetWidth(upgradeWidth)
         totalUpgradeCell:ClearAllPoints()
         totalUpgradeCell:SetPoint("TOPLEFT", upgradeX, -totalY)
+        totalTrinketCell:SetWidth(trinketWidth)
         totalTrinketCell:ClearAllPoints()
         totalTrinketCell:SetPoint("TOPLEFT", trinketX, -totalY)
+        totalGoldCell:SetWidth(goldWidth)
         totalGoldCell:ClearAllPoints()
         totalGoldCell:SetPoint("TOPLEFT", goldX, -totalY)
+        totalEmberCell:SetWidth(emberWidth)
         totalEmberCell:ClearAllPoints()
         totalEmberCell:SetPoint("TOPLEFT", emberX, -totalY)
+        totalShardCell:SetWidth(shardWidth)
         totalShardCell:ClearAllPoints()
         totalShardCell:SetPoint("TOPLEFT", shardX, -totalY)
         totalGold:SetText(renderContext.formatResourceAmount(goldTotal, renderContext.getCoinIconFile()))
@@ -2381,7 +2663,7 @@ function BG.ShowRaidLockoutHover(anchor)
     hoverHideSerial = hoverHideSerial + 1
     hoverAnchor = anchor
     PositionHoverFrame(anchor)
-    CaptureCurrentWeeklyQuest()
+    CaptureCurrentQuestProgress()
     updateHoverFrame()
     hoverFrame:Show()
     hoverFrame:SetScript("OnEnter", function()
@@ -2406,11 +2688,18 @@ end
 
 function BG.GetRaidLockoutDisplayChoices()
     local choices = {}
-    for _, column in ipairs(LOCKOUT_COLUMNS) do
+    for _, raid in ipairs(RAIDS) do
         choices[#choices + 1] = {
-            id = column.id,
-            name = column.name,
-            optionKey = GetLockoutOptionKey(column.id),
+            id = raid.id,
+            name = raid.name,
+            optionKey = GetLockoutOptionKey(raid.id),
+        }
+    end
+    for _, group in ipairs(QUEST_HEADER_GROUPS) do
+        choices[#choices + 1] = {
+            id = group.id,
+            name = group.name,
+            optionKey = GetQuestGroupOptionKey(group.id),
         }
     end
     return choices
@@ -2485,7 +2774,7 @@ function BG.CreateRaidLockoutMainMenuButton(anchor)
     button:SetNormalFontObject(BG.FontGreen15)
     button:SetDisabledFontObject(BG.FontDis15)
     button:SetHighlightFontObject(BG.FontWhite15)
-    button:SetText(L["查看团本CD"])
+    button:SetText(L["全角色总览"])
     button:SetSize(button:GetFontString():GetWidth(), 20)
     BG.SetTextHighlightTexture(button)
     button:SetScript("OnClick", function()
@@ -2493,12 +2782,13 @@ function BG.CreateRaidLockoutMainMenuButton(anchor)
         BG.PlaySound(1)
     end)
     BG.ButtonRaidLockout = button
+    BG.LayoutMainMenuButtons()
 end
 
 BG.RegisterEvent("UPDATE_INSTANCE_INFO", CaptureRaidInfo)
 
 BG.RegisterEvent("QUEST_TURNED_IN", function(_, _, questID)
-    CaptureCurrentWeeklyQuest(questID)
+    CaptureCurrentQuestProgress(questID)
 end)
 
 BG.RegisterEvent("ENCOUNTER_END", function(_, _, _, _, _, _, success)
@@ -2539,14 +2829,14 @@ BG.Init2(function()
 
     ClearExpiredRaidData()
     ScheduleResourceRefresh(0.5)
-    BG.After(3, CaptureCurrentWeeklyQuest)
+    BG.After(3, CaptureCurrentQuestProgress)
     RequestCurrentRaidInfo()
 
     if C_Timer and C_Timer.NewTicker then
         C_Timer.NewTicker(60, function()
             if ClearExpiredRaidData() then
-                if not CaptureCurrentWeeklyQuest() then
-                    BG.After(5, CaptureCurrentWeeklyQuest)
+                if not CaptureCurrentQuestProgress() then
+                    BG.After(5, CaptureCurrentQuestProgress)
                 end
                 RefreshLockoutDisplays()
             end

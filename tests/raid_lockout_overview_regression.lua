@@ -13,7 +13,7 @@ local function ResetEnvironment()
     min = math.min
     sort = table.sort
     tremove = table.remove
-    unpack = table.unpack
+    unpack = table.unpack or unpack
 
     GetRealmID = function()
         return 100
@@ -73,6 +73,9 @@ local function ResetEnvironment()
     }
     C_CurrencyInfo = nil
     C_DateAndTime = {
+        GetSecondsUntilDailyReset = function()
+            return 86400
+        end,
         GetSecondsUntilWeeklyReset = function()
             return 604800
         end,
@@ -267,6 +270,24 @@ local function TestRaidColumnsFillAvailableWidth()
     assert(math.abs(totalWidth - 744) < 0.001, "raid columns did not fill the available width")
     assert(widths[1] > 50 and widths[2] > 70 and widths[3] > 42,
         "the available width was not distributed across every raid column")
+
+    local calculateResourceWidths = FindUpvalue(createHoverFrame, "CalculateResourceColumnWidths")
+    assert(calculateResourceWidths, "dynamic resource-column width calculation is missing")
+    local ui = {
+        professionWidth = 100,
+        legendaryWidth = 150,
+        upgradeWidth = 130,
+        trinketWidth = 100,
+        goldWidth = 88,
+        emberWidth = 88,
+        shardWidth = 88,
+    }
+    local resourceWidths, resourceTotal = calculateResourceWidths(ui, 800)
+    assert(math.abs(resourceTotal - 800) < 0.001,
+        "resource columns did not fill the same available width as the raid table")
+    assert(resourceWidths.profession > ui.professionWidth
+        and resourceWidths.shard > ui.shardWidth,
+        "the extra resource-table width was not distributed across its columns")
 end
 
 local function TestEquipmentUsesIconTilesWithTopLeftValues()
@@ -568,79 +589,199 @@ local function TestItemTilesUseNativeGameTooltip()
     assert(calls.itemID == 265340, "item ID fallback did not use GameTooltip:SetItemByID")
 end
 
-local function TestWeeklyQuestColumnFollowsVault()
+local function TestQuestColumnsFollowVaultInTwoGroups()
     local BG = ResetEnvironment()
     local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
     local getColumns = FindUpvalue(createHoverFrame, "GetVisibleLockoutColumns")
-    assert(getColumns, "weekly lockout-column builder is missing")
+    local getGroups = FindUpvalue(createHoverFrame, "GetVisibleQuestGroups")
+    local updateQuestStatus = FindUpvalue(createHoverFrame, "UpdateQuestStatusDisplay")
+    assert(getColumns and getGroups and updateQuestStatus, "quest column/group builders are missing")
 
     local columns = getColumns()
-    assert(columns[#columns].isWeeklyQuest and columns[#columns].id == "weeklyQuest",
-        "weekly quest must be the last lockout column")
-    assert(columns[#columns - 1].id == 624,
-        "weekly quest must appear immediately after Vault of Archavon")
+    local expected = {
+        { id = "raidWeekly", groupID = "weekly" },
+        { id = "zulGurubWeekly", groupID = "weekly" },
+        { id = "jewelcraftingDaily", groupID = "professionDaily" },
+        { id = "cookingDaily", groupID = "professionDaily" },
+        { id = "fishingDaily", groupID = "professionDaily" },
+    }
+    assert(columns[#columns - #expected].id == 624,
+        "quest groups must appear immediately after Vault of Archavon")
+    for index, expectation in ipairs(expected) do
+        local column = columns[#columns - #expected + index]
+        assert(column.id == expectation.id and column.groupID == expectation.groupID and column.isQuest,
+            "quest columns are missing or out of group order")
+    end
+
+    local groups = getGroups(columns)
+    assert(#groups == 2, "expected weekly and profession-daily header groups")
+    assert(groups[1].id == "weekly" and groups[1].name == "周常" and #groups[1].columns == 2,
+        "weekly two-level header group is incorrect")
+    assert(groups[2].id == "professionDaily" and groups[2].name == "专业日常"
+        and #groups[2].columns == 3,
+        "profession-daily two-level header group is incorrect")
 
     local choices = BG.GetRaidLockoutDisplayChoices()
-    local weeklyChoice = choices[#choices]
-    assert(weeklyChoice.id == "weeklyQuest"
+    assert(#choices == 13, "settings should expose eleven raids and exactly two quest groups")
+    local weeklyChoice = choices[#choices - 1]
+    local professionDailyChoice = choices[#choices]
+    assert(weeklyChoice.id == "weekly"
         and weeklyChoice.name == "周常"
-        and weeklyChoice.optionKey == "raidLockoutShow_weeklyQuest",
-        "weekly quest must be exposed as the last configurable display module")
+        and weeklyChoice.optionKey == "raidLockoutShowGroup_weekly",
+        "weekly quests must be exposed as one group-level display choice")
+    assert(professionDailyChoice.id == "professionDaily"
+        and professionDailyChoice.name == "专业日常"
+        and professionDailyChoice.optionKey == "raidLockoutShowGroup_professionDaily",
+        "profession dailies must be exposed as one group-level display choice")
 
     local calculateWidths = FindUpvalue(createHoverFrame, "CalculateRaidColumnWidths")
-    local widths, totalWidth = calculateWidths(columns, 744)
-    assert(math.abs(totalWidth - 744) < 0.001 and widths.weeklyQuest > 58,
-        "adding the weekly quest column must still fill the existing compact-table width")
+    local widths, totalWidth = calculateWidths(columns, 900)
+    assert(math.abs(totalWidth - 900) < 0.001 and widths.raidWeekly >= 60 and widths.fishingDaily >= 44,
+        "grouped quest columns must still fill the available compact-table width")
 
     BiaoGe = {
         options = {
-            raidLockoutShow_weeklyQuest = 0,
+            raidLockoutShowGroup_weekly = 0,
         },
     }
     columns = getColumns()
-    assert(columns[#columns].id == 624,
-        "disabling the weekly display option must remove it from both overview layouts")
+    for _, column in ipairs(columns) do
+        assert(column.groupID ~= "weekly",
+            "disabling weekly quests must hide every weekly child column")
+    end
+    groups = getGroups(columns)
+    assert(#groups == 1 and groups[1].id == "professionDaily" and #groups[1].columns == 3,
+        "disabling weekly quests must leave the complete profession-daily group intact")
+
+    BiaoGe.options.raidLockoutShowGroup_professionDaily = 0
+    columns = getColumns()
+    for _, column in ipairs(columns) do
+        assert(not column.groupID, "disabling both quest groups must hide all quest columns")
+    end
+    assert(#getGroups(columns) == 0, "disabled quest groups must hide both parent headers")
+
+    local status = {
+        check = {
+            Hide = function(self) self.shown = false end,
+            Show = function(self) self.shown = true end,
+        },
+        text = {
+            SetText = function(self, value) self.value = value end,
+        },
+        background = {
+            SetColorTexture = function(self, ...) self.color = { ... } end,
+        },
+        baseColor = { 0.02, 0.07, 0.09, 0.9 },
+    }
+    updateQuestStatus(status, { ready = true, questCompletions = {} }, { id = "fishingDaily" })
+    assert(not status.check.shown and status.text.value == "",
+        "unfinished profession dailies must remain blank without a red cross")
+    updateQuestStatus(status, {
+        ready = true,
+        questCompletions = { fishingDaily = { questID = 13836 } },
+    }, { id = "fishingDaily" })
+    assert(status.check.shown and status.background.color[1] == 0.1,
+        "completed profession dailies must render a green check")
 end
 
-local function TestWeeklyQuestTurnInStoresMinimalSnapshot()
+local function TestQuestTurnInsStoreSeparateMinimalSnapshots()
     local _, events = ResetEnvironment()
     assert(events.QUEST_TURNED_IN, "QUEST_TURNED_IN handler is missing")
 
     events.QUEST_TURNED_IN(nil, nil, 93975)
-    local weeklyQuest = GetStoredCharacter().weeklyQuest
-    assert(weeklyQuest and weeklyQuest.status == "completed" and weeklyQuest.questID == 93975,
-        "a matching rotating weekly quest was not recorded as completed")
-    assert(weeklyQuest.resetAt == 1700604800 and weeklyQuest.updatedAt == 1700000000,
-        "weekly quest snapshot did not use the official weekly reset boundary")
-    assert(weeklyQuest.player == nil and weeklyQuest.colorplayer == nil,
-        "weekly quest snapshot must not restore redundant original-BiaoGe identity fields")
+    events.QUEST_TURNED_IN(nil, nil, 98183)
+    events.QUEST_TURNED_IN(nil, nil, 12959)
+    events.QUEST_TURNED_IN(nil, nil, 13114)
+    events.QUEST_TURNED_IN(nil, nil, 13836)
+    local completions = GetStoredCharacter().questCompletions
+    assert(completions.raidWeekly.questID == 93975
+        and completions.zulGurubWeekly.questID == 98183,
+        "weekly quest categories overwrote each other")
+    assert(completions.jewelcraftingDaily.questID == 12959
+        and completions.cookingDaily.questID == 13114
+        and completions.fishingDaily.questID == 13836,
+        "profession-daily categories overwrote each other")
+    assert(completions.raidWeekly.resetAt == 1700604800
+        and completions.jewelcraftingDaily.resetAt == 1700086400,
+        "quest snapshots did not use their official weekly/daily reset boundaries")
+    assert(completions.raidWeekly.updatedAt == 1700000000
+        and completions.raidWeekly.player == nil
+        and completions.raidWeekly.colorplayer == nil,
+        "quest snapshots must remain minimal and omit redundant identity fields")
 
     events.QUEST_TURNED_IN(nil, nil, 123456)
-    assert(GetStoredCharacter().weeklyQuest.questID == 93975,
-        "an unrelated quest overwrote the weekly quest slot")
+    assert(GetStoredCharacter().questCompletions.raidWeekly.questID == 93975,
+        "an unrelated quest overwrote a quest completion slot")
 end
 
-local function TestWeeklyQuestLoginBackfillAndIndependentExpiry()
+local function TestQuestLoginBackfillAndIndependentExpiry()
     local BG, events = ResetEnvironment()
     C_QuestLog.IsQuestFlaggedCompleted = function(questID)
-        return questID == 96312
+        return questID == 96312 or questID == 98183 or questID == 12962 or questID == 13830
     end
 
-    local captureWeeklyQuest = FindUpvalue(events.QUEST_TURNED_IN, "CaptureCurrentWeeklyQuest")
-    assert(captureWeeklyQuest, "weekly quest backfill function is missing")
-    assert(captureWeeklyQuest(), "weekly quest backfill did not run")
-    assert(GetStoredCharacter().weeklyQuest.questID == 96312,
-        "login backfill did not scan the rotating weekly quest pool")
+    local captureQuestProgress = FindUpvalue(events.QUEST_TURNED_IN, "CaptureCurrentQuestProgress")
+    assert(captureQuestProgress, "quest backfill function is missing")
+    assert(captureQuestProgress(), "quest backfill did not run")
+    local completions = GetStoredCharacter().questCompletions
+    assert(completions.raidWeekly.questID == 96312
+        and completions.zulGurubWeekly.questID == 98183,
+        "login backfill did not scan both weekly quest pools")
+    assert(completions.jewelcraftingDaily.questID == 12962
+        and completions.fishingDaily.questID == 13830
+        and completions.cookingDaily == nil,
+        "login backfill did not independently scan profession-daily pools")
 
     GetServerTime = function()
-        return 1700604801
+        return 1700086401
     end
     local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
     local getVisibleRows = FindUpvalue(createHoverFrame, "GetCharacterRows")
     assert(getVisibleRows, "character-row builder is missing")
     getVisibleRows()
-    assert(GetStoredCharacter().weeklyQuest == nil,
-        "expired weekly quest snapshot survived its own reset boundary")
+    completions = GetStoredCharacter().questCompletions
+    assert(completions.jewelcraftingDaily == nil and completions.fishingDaily == nil,
+        "expired daily quest snapshots survived their reset boundary")
+    assert(completions.raidWeekly and completions.zulGurubWeekly,
+        "daily expiry incorrectly removed weekly quest snapshots")
+
+    GetServerTime = function()
+        return 1700604801
+    end
+    getVisibleRows()
+    completions = GetStoredCharacter().questCompletions
+    assert(completions.raidWeekly == nil and completions.zulGurubWeekly == nil,
+        "expired weekly quest snapshots survived their reset boundary")
+end
+
+local function TestLegacyWeeklyQuestMigratesToRaidWeekly()
+    local BG = ResetEnvironment()
+    BiaoGe = {
+        BGForgeRaidLockouts = {
+            schemaVersion = 1,
+            realms = {
+                [100] = {
+                    characters = {
+                        Tester = {
+                            instances = {},
+                            weeklyQuest = {
+                                status = "completed",
+                                questID = 93975,
+                                resetAt = 1700604800,
+                                updatedAt = 1699999999,
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    BG.GetRaidLockoutStoredCharacters(100)
+    local stored = GetStoredCharacter()
+    assert(stored.weeklyQuest == nil, "legacy weeklyQuest field was not removed after migration")
+    assert(stored.questCompletions.raidWeekly.questID == 93975,
+        "legacy weeklyQuest completion was not migrated to raidWeekly")
 end
 
 local tests = {
@@ -657,9 +798,10 @@ local tests = {
     item_quality = TestItemTileDisplayUsesRequestedQualitySemantics,
     character_visibility = TestCharacterVisibilityCanBeRestored,
     native_tooltip = TestItemTilesUseNativeGameTooltip,
-    weekly_column = TestWeeklyQuestColumnFollowsVault,
-    weekly_turnin = TestWeeklyQuestTurnInStoresMinimalSnapshot,
-    weekly_backfill = TestWeeklyQuestLoginBackfillAndIndependentExpiry,
+    quest_columns = TestQuestColumnsFollowVaultInTwoGroups,
+    quest_turnin = TestQuestTurnInsStoreSeparateMinimalSnapshots,
+    quest_backfill = TestQuestLoginBackfillAndIndependentExpiry,
+    quest_migration = TestLegacyWeeklyQuestMigratesToRaidWeekly,
 }
 
 if arg[1] then
@@ -674,9 +816,10 @@ else
         "item_quality",
         "character_visibility",
         "native_tooltip",
-        "weekly_column",
-        "weekly_turnin",
-        "weekly_backfill",
+        "quest_columns",
+        "quest_turnin",
+        "quest_backfill",
+        "quest_migration",
     }) do
         tests[testName]()
     end

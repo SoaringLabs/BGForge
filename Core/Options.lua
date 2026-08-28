@@ -216,10 +216,12 @@ BG.Init(function()
         text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -14)
         text:SetWidth(700)
         text:SetJustifyH("LEFT")
-        text:SetText(L["勾选要展示的副本模块"])
+        text:SetText(L["勾选要展示的副本与任务栏目"])
 
         local choices = BG.GetRaidLockoutDisplayChoices and BG.GetRaidLockoutDisplayChoices() or {}
         local columnWidth = 175
+        local choiceRowCount = max(1, ceil(#choices / 4))
+        local lineY = 72 + (choiceRowCount - 1) * 34 + 44
         for index, choice in ipairs(choices) do
             local optionKey = choice.optionKey
             local moduleName = choice.name
@@ -252,21 +254,21 @@ BG.Init(function()
 
         local line = raidLockout:CreateTexture(nil, "ARTWORK")
         line:SetColorTexture(0.5, 0.5, 0.5, 0.7)
-        line:SetPoint("TOPLEFT", 15, -184)
+        line:SetPoint("TOPLEFT", 15, -lineY)
         line:SetSize(700, 1)
 
         local characterTitle = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        characterTitle:SetPoint("TOPLEFT", 15, -202)
+        characterTitle:SetPoint("TOPLEFT", 15, -(lineY + 18))
         characterTitle:SetTextColor(0, 0.75, 1)
 
         local characterHelp = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         characterHelp:SetPoint("TOPLEFT", characterTitle, "BOTTOMLEFT", 0, -8)
         characterHelp:SetWidth(700)
         characterHelp:SetJustifyH("LEFT")
-        characterHelp:SetText(L["隐藏只影响团本CD和角色资源总览，可随时恢复；删除仍只删除本地总览记录，不影响拍卖、账本或其他插件数据。"])
+        characterHelp:SetText(L["删除只影响角色总览人物显示，不影响拍卖功能"])
 
         local emptyText = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        emptyText:SetPoint("TOPLEFT", 15, -258)
+        emptyText:SetPoint("TOPLEFT", 15, -(lineY + 74))
         emptyText:SetText(L["暂无已记录角色"])
         emptyText:SetTextColor(0.5, 0.5, 0.5)
 
@@ -302,7 +304,7 @@ BG.Init(function()
 
             local row = CreateFrame("Frame", nil, raidLockout)
             row:SetSize(530, 28)
-            row:SetPoint("TOPLEFT", 15, -250 - (index - 1) * 30)
+            row:SetPoint("TOPLEFT", 15, -(lineY + 66) - (index - 1) * 30)
 
             local name = row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             name:SetPoint("LEFT", 4, 0)
@@ -369,7 +371,7 @@ BG.Init(function()
             for index = #characters + 1, #characterRows do
                 characterRows[index]:Hide()
             end
-            raidLockout:SetHeight(max(320, 278 + #characters * 30))
+            raidLockout:SetHeight(max(320, lineY + 94 + #characters * 30))
         end
 
         BG.RefreshRaidLockoutCharacterOptions = UpdateCharacterManager

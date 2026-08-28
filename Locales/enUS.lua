@@ -9,8 +9,8 @@ local c1 = ns.c1
 
 do --英语说明书
     ns.instructionsText = {
-        "|cff00BFFF<BGForge Guide>|r",
-        "BGForge is a raid-auction enhancement addon built on BGLite 2.4.0.",
+        "|cff00BFFF<About BGForge>|r",
+        "BGForge is a raid-auction enhancement addon built on BGLite.",
         "The BGLite base was security-cleaned and streamlined by the World of Warcraft China operations team; BGForge continues development on that foundation.",
         "This release keeps the core auction and accounting features and will be expanded gradually with safety and stability in mind.",
         "BGForge developer: Soaring Labs",
@@ -720,6 +720,7 @@ do
     L["褪色的安德麦雷亚尔"] = "Faded Andromeda Real"
     L["世界Boss"] = "World Boss"
     L["说明书"] = "Manual"
+    L["关于"] = "About"
     L["<历史表格>"] = "<History Table>"
     L["<BGForge> 金团表格"] = "<BGForge>"
     L["这个词缀是指“法术治疗提高最多x点，法术伤害提高最多x点”，法系DPS一般需要过滤此词缀"] = "This term means 'Fire Blast' increases spell damage by up to x points', which is usually filtered for spell DPS."
@@ -2939,13 +2940,17 @@ do -- Mail history
     L["角色列表"] = "Character List"
     L["%d个角色"] = "%d characters"
     L["查看团本CD"] = "View Raid Lockouts"
+    L["全角色总览"] = "Character Overview"
     L["CD展示设置"] = "CD Display Settings"
     L["勾选要展示的副本模块"] = "Choose which lockout modules to display."
+    L["勾选要展示的副本与任务栏目"] = "Choose which raid and quest columns to display."
+    L["团本周常"] = "Raid Weekly"
+    L["专业日常"] = "Profession Dailies"
     L["已记录角色（%d）"] = "Recorded Characters (%d)"
     L["已记录角色（%d，隐藏%d）"] = "Recorded Characters (%d, %d hidden)"
     L["暂无已记录角色"] = "No recorded characters"
     L["这里只删除团本CD列表记录，不影响拍卖、账本或其他插件数据。"] = "Deleting here only removes the local raid-lockout entry; auction and ledger data are unaffected."
-    L["隐藏只影响团本CD和角色资源总览，可随时恢复；删除仍只删除本地总览记录，不影响拍卖、账本或其他插件数据。"] = "Hiding only affects the raid-lockout and character-resource overviews and can be undone at any time. Deleting still removes only the local overview entry; auction and ledger data are unaffected."
+    L["删除只影响角色总览人物显示，不影响拍卖功能"] = "Deleting only removes the character from the overview; auction features are unaffected."
     L["隐藏"] = "Hide"
     L["恢复显示"] = "Show Again"
     L["（已隐藏）"] = "(Hidden)"
@@ -2953,6 +2958,8 @@ do -- Mail history
     L["该页面已预留，后续将加入角色列表、显示方式等设置。"] = "This page is reserved for character-list and display settings."
     L["角色列表（%d）"] = "Characters (%d)"
     L["BGForge · 全角色总览"] = "BGForge · Character Overview"
+    L["副本与任务（装等）"] = "Raids & Quests (iLvl)"
+    L["周重置 %s"] = "Weekly reset %s"
     L["本周团本 CD · %d个角色"] = "Weekly Raid Lockouts · %d characters"
     L["角色资源总览 · %d个角色"] = "Character Resources · %d characters"
     L["本周团本 CD（装等）"] = "Raid CD (iLvl)"

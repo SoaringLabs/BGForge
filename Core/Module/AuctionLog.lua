@@ -68,6 +68,7 @@ BG.Init(function()
         bt:SetSize(bt:GetFontString():GetWidth(), 20)
         BG.SetTextHighlightTexture(bt)
         BG.ButtonAuctionLog = bt
+        BG.LayoutMainMenuButtons()
 
         bt:SetScript("OnClick", function(self)
             if BG.auctionLogFrame:IsVisible() then

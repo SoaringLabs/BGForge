@@ -24,8 +24,8 @@ if (l == "zhTW" or l == "enUS") then return end
 
 do --简体说明书
     ns.instructionsText = {
-        "|cff00BFFF<BGForge 说明书>|r",
-        "BGForge 是基于 BGLite 2.4.0 开发的团本拍卖增强插件。",
+        "|cff00BFFF<关于 BGForge>|r",
+        "BGForge 是基于 BGLite 开发的团本拍卖增强插件。",
         "BGLite 基础版由魔兽世界国服运营团队进行安全清理与精简，BGForge 在此基础上继续开发。",
         "当前版本保留基础拍卖与记账能力，后续将在安全稳定的前提下逐步增强。",
         "BGForge 开发者：Soaring Labs",
@@ -733,6 +733,7 @@ do
     L["褪色的安德麦雷亚尔"] = true
     L["世界Boss"] = true
     L["说明书"] = true
+    L["关于"] = true
     L["<历史表格>"] = true
     L["<历史表格> "] = true
     L["<BGForge> 金团表格"] = true
@@ -2954,13 +2955,17 @@ do
     L["角色列表"] = true
     L["%d个角色"] = true
     L["查看团本CD"] = true
+    L["全角色总览"] = true
     L["CD展示设置"] = true
     L["勾选要展示的副本模块"] = true
+    L["勾选要展示的副本与任务栏目"] = true
+    L["团本周常"] = true
+    L["专业日常"] = true
     L["已记录角色（%d）"] = true
     L["已记录角色（%d，隐藏%d）"] = true
     L["暂无已记录角色"] = true
     L["这里只删除团本CD列表记录，不影响拍卖、账本或其他插件数据。"] = true
-    L["隐藏只影响团本CD和角色资源总览，可随时恢复；删除仍只删除本地总览记录，不影响拍卖、账本或其他插件数据。"] = true
+    L["删除只影响角色总览人物显示，不影响拍卖功能"] = true
     L["隐藏"] = true
     L["恢复显示"] = true
     L["（已隐藏）"] = true
@@ -2968,6 +2973,8 @@ do
     L["该页面已预留，后续将加入角色列表、显示方式等设置。"] = true
     L["角色列表（%d）"] = true
     L["BGForge · 全角色总览"] = true
+    L["副本与任务（装等）"] = true
+    L["周重置 %s"] = true
     L["本周团本 CD · %d个角色"] = true
     L["角色资源总览 · %d个角色"] = true
     L["本周团本 CD（装等）"] = true

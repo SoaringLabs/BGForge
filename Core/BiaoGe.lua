@@ -140,7 +140,7 @@ BG.Init(function()
         VerText:SetText(BG.addonVer)
         BG.VerText = VerText
 
-        -- 说明书
+        -- 关于 BGForge
         local f = CreateFrame("Frame", nil, BG.MainFrame)
         f:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 8, -1)
         f:SetHitRectInsets(0, 0, 0, 0)
@@ -148,7 +148,7 @@ BG.Init(function()
         t:SetPoint("CENTER")
         t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
         t:SetJustifyH("LEFT")
-        t:SetText(L["说明书"])
+        t:SetText(L["关于"])
         t:SetTextColor(0, 1, 0)
         f:SetSize(t:GetStringWidth(), 20)
         BG.ShuoMingShu = f
@@ -166,7 +166,7 @@ BG.Init(function()
             end
         end
         -- 说明书正文统一由 Locales/ 三语 instructionsText 驱动（原硬编码块覆盖 Locale 版，已移除）；此处仅对非 zhCN/zhTW/enUS 客户端留兜底，避免 tooltip nil
-        ns.instructionsText = ns.instructionsText or { "|cff00BFFF< BGForge 说明书>|r", " " }
+        ns.instructionsText = ns.instructionsText or { "|cff00BFFF<关于 BGForge>|r", " " }
         f:SetScript("OnEnter", function(self)
             self.OnEnter = true
             GameTooltip:SetOwner(self, "ANCHOR_NONE")
@@ -431,6 +431,30 @@ BG.Init(function()
     ----------设置----------
     do
         BG.TopLeftButtonJianGe = 7
+
+        function BG.LayoutMainMenuButtons()
+            local menuButtonNames = {
+                "ButtonMove",
+                "ButtonAuctionLog",
+                "ButtonRaidLockout",
+                "ShuoMingShu",
+                "ButtonSheZhi",
+            }
+            local previousButton
+            for _, name in ipairs(menuButtonNames) do
+                local button = BG[name]
+                if button then
+                    button:ClearAllPoints()
+                    if previousButton then
+                        button:SetPoint("LEFT", previousButton, "RIGHT", BG.TopLeftButtonJianGe, 0)
+                    else
+                        button:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 8, -1)
+                    end
+                    previousButton = button
+                end
+            end
+        end
+
         -- 设置
         do
             local bt = CreateFrame("Button", nil, BG.MainFrame)
@@ -442,6 +466,7 @@ BG.Init(function()
             bt:SetSize(bt:GetFontString():GetWidth(), 20)
             BG.SetTextHighlightTexture(bt)
             BG.ButtonSheZhi = bt
+            BG.LayoutMainMenuButtons()
             bt:SetScript("OnClick", function(self)
                 BG.OpenOption()
                 BG.MainFrame:Hide()
@@ -594,6 +619,7 @@ BG.Init(function()
             bt:SetSize(bt:GetFontString():GetWidth(), 20)
             BG.SetTextHighlightTexture(bt)
             BG.ButtonMove = bt
+            BG.LayoutMainMenuButtons()
             bt:SetScript("OnClick", BG.Move)
             bt:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_NONE")
