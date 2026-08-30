@@ -99,22 +99,10 @@ BG.Init(function()
                         end
                     end
                 end
-                for n = 1, HopeMaxn[FB] do
-                    for b = 1, HopeMaxb[FB] do
-                        for i = 1, HopeMaxi do
-                            local bt = BG.HopeFrame[FB]["nandu" .. n]["boss" .. b]["zhuangbei" .. i]
-                            if bt then
-                                local _itemID = GetItemID(bt:GetText())
-                                if _itemID == itemID then
-                                    bt:SetText("")
-                                    BiaoGe.Hope[RealmId][player][FB]["nandu" .. n]["boss" .. b]["zhuangbei" .. i] = nil
-                                    havehope = true
-                                end
-                            end
-                        end
-                    end
-                end
             end
+
+            -- 只有交易记账确认装备归当前角色后才移除心愿；单纯掉落不会删除。
+            havehope = BG.DeleteHope and BG.DeleteHope(itemID) or false
 
             if haveguanzhu and havehope then
                 BG.SendSystemMessage(format(L["已自动取消%s的关注和心愿。"], name))

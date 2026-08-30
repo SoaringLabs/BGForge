@@ -631,11 +631,7 @@ BG.Init(function()
         end
         -- 心愿装备
         local isHope = BG.IsHope(BG.GetLeiTingItem(itemID, FB), FB)
-        if isHope then
-            BG.FrameLootMsg:AddMessage(BG.STC_g1(format(L["你的心愿达成啦！！！>>>>> %s(%s) <<<<<"],
-                (AddTexture(Texture) .. link), level)))
-            BG.PlaySound("hope")
-        end
+        -- 掉落提醒由 Wishlist.lua 独立监听 CHAT_MSG_LOOT，避免依赖自动记账开关。
         -- 特殊物品固定记录到对应BOSS
         local __b = BG.Loot.itemToBoss[FB] and BG.Loot.itemToBoss[FB][itemID]
         if __b then
@@ -1249,10 +1245,8 @@ BG.Init2(function()
                                 local name, _, quality, level, _, _, _, itemStackCount, _, Texture,
                                 _, typeID, _, bindType = GetItemInfo(link)
                                 local isHope = BG.IsHope(BG.GetLeiTingItem(GetItemID(link), FB), FB)
-                                if isHope then
-                                    BG.FrameLootMsg:AddMessage(BG.STC_g1(format(L["你的心愿达成啦！！！>>>>> %s(%s) <<<<<"],
-                                        (AddTexture(Texture) .. link), level)))
-                                    BG.PlaySound("hope")
+                                if isHope and BG.Wishlist then
+                                    BG.Wishlist.NotifyDrop(GetItemID(link), link, level, FB)
                                 end
                                 BG.AddLootItem(FB, numb, link, Texture, level, isHope, count, typeID)
                             end

@@ -1599,24 +1599,11 @@ BG.Init(function()
             end
             if hasGZ then break end
         end
-        -- 心愿
-        for _, FB in ipairs(BG.GetAllFB()) do
-            for n = 1, HopeMaxn[FB] do
-                for b = 1, HopeMaxb[FB] do
-                    for i = 1, HopeMaxi do
-                        local zb = BG.HopeFrame[FB]["nandu" .. n]["boss" .. b]["zhuangbei" .. i]
-                        if zb and itemID == GetItemID(zb:GetText()) then
-                            local itemType = f.itemFrame.itemTypeText
-                            itemType:SetText((itemType:GetText() or "") .. (hasGZ and " " or "") .. BG.STC_g1(L["<心愿>"]))
-                            hasHope = true
-                            break
-                        end
-                    end
-                    if hasHope then break end
-                end
-                if hasHope then break end
-            end
-            if hasHope then break end
+        -- 心愿直接查询本地数据模型，不依赖心愿页面是否已经创建或显示。
+        hasHope = BG.IsHope(itemID)
+        if hasHope then
+            local itemType = f.itemFrame.itemTypeText
+            itemType:SetText((itemType:GetText() or "") .. (hasGZ and " " or "") .. BG.STC_g1(L["<心愿>"]))
         end
         if hasGZ or hasHope then
             BG.After(0.5, function()
@@ -1627,9 +1614,11 @@ BG.Init(function()
         if BG.SpecGearFilter then
             BG.SpecGearFilter.ApplyToAuctionFrame(f, hasGZ or hasHope)
         end
-        tinsert(BG.auctionLogFrame.auctioning, f.itemID)
-        BG.UpdateAuctioning()
-        CheckIgnore()
+        if not f.isPreview then
+            tinsert(BG.auctionLogFrame.auctioning, f.itemID)
+            BG.UpdateAuctioning()
+            CheckIgnore()
+        end
     end
 
     -- 被顶价语音提醒

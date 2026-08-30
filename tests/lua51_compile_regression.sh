@@ -23,5 +23,19 @@ if [[ "$version" != *"Lua 5.1"* ]]; then
     exit 2
 fi
 
-"$compiler" -p Core/Module/RaidLockoutOverview.lua
-echo "Lua 5.1 raid lockout compile regression test passed"
+files=(
+    Core/Module/RaidLockoutOverview.lua
+    Core/Module/Wishlist.lua
+    Core/Module/WishlistUI.lua
+    Core/BiaoGe.lua
+    Core/Module/Auction.lua
+    Core/Module/AuctionWA.lua
+    Core/Module/AuctionWAEvent.lua
+    Core/Module/Loot.lua
+    Core/Module/Trade.lua
+)
+
+for file in "${files[@]}"; do
+    "$compiler" -p "$file"
+done
+echo "Lua 5.1 compile regression tests passed"

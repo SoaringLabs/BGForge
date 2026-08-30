@@ -968,6 +968,13 @@ BG.Init(function()
    btn:SetShown(not bidFrame.IsSmallWindow)
    local btn = bidFrame.logTextButton
    btn:SetShown(not bidFrame.IsSmallWindow)
+   if bidFrame.isPreview then
+    bidFrame.cancelButton:Hide()
+    if bidFrame.puaseButton then bidFrame.puaseButton:Hide() end
+    bidFrame.autoTextButton:Hide()
+    bidFrame.logTextButton:Hide()
+    bidFrame.hide:Hide()
+   end
   end
  end
  do

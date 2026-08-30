@@ -829,6 +829,10 @@ BG.Init(function()
             BiaoGe.FB = FB
             BG.FrameDongHua()
 
+            if BG.WishlistMainFrame and BG.WishlistMainFrame:IsVisible() and BG.Wishlist then
+                BG.Wishlist.Refresh()
+            end
+
             if BG.SpecGearFilter then
                 BG.SpecGearFilter.RefreshCurrentTable()
             end
@@ -948,6 +952,7 @@ BG.Init(function()
         BG.tabButtons = {}
 
         BG.FBMainFrameTabNum = 1
+        BG.WishlistMainFrameTabNum = 3
         BG.DuiZhangMainFrameTabNum = 4
         -- Lite: 交易/邮件记录面板 tab 编号（对齐 v2.3.5，避让 1-8 主 tab 编号段）
         BG.TradeHistoryMainFrameTabNum = 101
@@ -1040,6 +1045,10 @@ BG.Init(function()
             GameTooltip:AddLine(L["表格的核心功能都在这里"], 1, 0.82, 0, true)
             GameTooltip:Show()
         end, onEnterDelay, true)
+
+        if BG.Wishlist and BG.Wishlist.CreateUI then
+            BG.Wishlist.CreateUI()
+        end
 
         -- 2026-08-24 策划决策：恢复对账底部 tab 入口（原 BGForge 裁剪时隐藏，功能本就完整）
         local bt = BG.Create_TabButton(BG.DuiZhangMainFrameTabNum, L["对账"], BG.DuiZhangMainFrame)

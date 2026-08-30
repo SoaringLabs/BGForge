@@ -7,7 +7,7 @@
 ## X-Upstream-Version: 2.4.0
 ## LoadOnDemand: 0
 ## SavedVariables: BiaoGe
-## Version: 0.3.0
+## Version: 0.4.0
 
 Locales\zhCN.lua
 Locales\zhTW.lua
@@ -30,6 +30,8 @@ Core\TongBao\XiaoFei.lua
 Core\TongBao\QianKuan.lua
 Core\TongBao\Channel.lua
 
+Core\Module\Wishlist.lua
+Core\Module\WishlistUI.lua
 Core\BiaoGe.lua
 
 Core\Module\ClearBiaoGe.lua

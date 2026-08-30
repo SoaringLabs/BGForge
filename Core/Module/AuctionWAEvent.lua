@@ -4,7 +4,9 @@ local LibBG = ns.LibBG
 local L = ns.L
 local print = print
 local After = C_Timer.After
+local LibCustomGlow = LibStub("LibCustomGlow-1.0")
 local auctionIdKey = "auctionID"
+local previewAuctionID = -1
 BG.Init(function()
  local font = BIAOGE_TEXT_FONT or STANDARD_TEXT_FONT
  local wa = BGA.aura_env
@@ -83,7 +85,7 @@ BG.Init(function()
    menuItem:GetFontString():SetWidth(width - 30)
   end
  end
- function wa.CreateAuction(auctionID, itemID, money, duration, player, mod, link, resetThreshold, isGen2)
+ function wa.CreateAuction(auctionID, itemID, money, duration, player, mod, link, resetThreshold, isGen2, isPreview)
   for minLevel, frame in pairs(BGA.Frames) do
    if frame[auctionIdKey] == auctionID then
     return
@@ -123,6 +125,7 @@ BG.Init(function()
    frame.logs = {}
    frame.resetThreshold = resetThreshold
    frame.isGen2 = isGen2
+   frame.isPreview = isPreview
    auctionFrame = frame
    BGA.Frames[frame.num] = frame
    frame:SetScript("OnMouseUp", function(self)
@@ -588,10 +591,71 @@ BG.Init(function()
    wa.myMoney_OnTextChanged(auctionFrame.myMoneyEdit)
   end
   wa.anim(auctionFrame)
-  wa.Auctioning(auctionFrame, duration)
+  if not isPreview then
+   wa.Auctioning(auctionFrame, duration)
+  end
   if BG and BG.HookCreateAuction then
    BG.HookCreateAuction(auctionFrame)
   end
+  if isPreview then
+   auctionFrame.remainingTime:SetText(L["预览"])
+   auctionFrame.remainingTime:SetTextColor(0, 1, 0)
+   auctionFrame.bar:Show()
+   auctionFrame.bar:SetValue(700)
+   auctionFrame.myMoneyEdit:Disable()
+   auctionFrame.ButtonJian:Disable()
+   auctionFrame.ButtonJia:Disable()
+   auctionFrame.ButtonSendMyMoney:Disable()
+   auctionFrame.autoMoneyEdit:Disable()
+   auctionFrame.autoButton:Disable()
+   auctionFrame.cancelButton:Hide()
+   if auctionFrame.puaseButton then auctionFrame.puaseButton:Hide() end
+   auctionFrame.autoTextButton:Hide()
+   auctionFrame.logTextButton:Hide()
+   auctionFrame.hide:Hide()
+   auctionFrame.cantClickFrame:Hide()
+   auctionFrame.cantClickFrame.autoFrame:Hide()
+
+   local previewText = auctionFrame:CreateFontString()
+   previewText:SetFont(font, 14, "OUTLINE")
+   previewText:SetPoint("TOP", 0, -3)
+   previewText:SetText(L["心愿拍卖预览"])
+   previewText:SetTextColor(0.2, 1, 0.2)
+
+   local closeButton = CreateFrame("Button", nil, auctionFrame, "UIPanelCloseButton")
+   closeButton:SetPoint("TOPRIGHT", 4, 4)
+   closeButton:SetFrameLevel(auctionFrame:GetFrameLevel() + 210)
+   local function ClosePreview()
+    if auctionFrame.previewClosed then return end
+    auctionFrame.previewClosed = true
+    for index, candidate in pairs(BGA.Frames) do
+     if candidate == auctionFrame then
+      BGA.Frames[index] = nil
+      break
+     end
+    end
+    auctionFrame.autoFrame:Hide()
+    LibCustomGlow.PixelGlow_Stop(auctionFrame)
+    auctionFrame:Hide()
+    if BG.WishlistAuctionPreviewFrame == auctionFrame then
+     BG.WishlistAuctionPreviewFrame = nil
+    end
+    wa.UpdateAllFrames()
+   end
+   auctionFrame.ClosePreview = ClosePreview
+   closeButton:SetScript("OnClick", ClosePreview)
+   auctionFrame.previewCloseButton = closeButton
+   BG.WishlistAuctionPreviewFrame = auctionFrame
+  end
+  return auctionFrame
+ end
+
+ function BG.ShowWishlistAuctionPreview(itemID, link)
+  if BG.WishlistAuctionPreviewFrame and BG.WishlistAuctionPreviewFrame.ClosePreview then
+   BG.WishlistAuctionPreviewFrame.ClosePreview()
+  end
+  previewAuctionID = previewAuctionID - 1
+  return wa.CreateAuction(previewAuctionID, itemID, 1000, 30, nil, "normal", link, 20, true, true)
  end
  do
   local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
