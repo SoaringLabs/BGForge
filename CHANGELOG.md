@@ -27,6 +27,10 @@
 
 ### 界面预览
 
+![个人心愿单功能预览](docs/images/v0.4.0-wishlist-overview.png)
+
+![心愿装备拍卖联动预览](docs/images/v0.4.0-wishlist-auction.png)
+
 ![开启被过滤装备自动折叠](docs/images/auto-collapse-filtered-auction-setting.png)
 
 ![拍卖中自动折叠被过滤装备](docs/images/auto-collapse-filtered-auction.png)
