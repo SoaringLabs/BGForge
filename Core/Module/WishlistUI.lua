@@ -814,6 +814,11 @@ local function SetItemButton(button, entry, FB, selected)
         button.level:SetText(itemLevel and tostring(itemLevel) or "")
         button.level:SetTextColor(r, g, b)
         ApplyItemVisual(button)
+        if BG.SpecGearFilter and BG.SpecGearFilter.ApplyToCell then
+            BG.SpecGearFilter.ApplyToCell(button, "item:" .. itemID)
+        else
+            button:SetAlpha(1)
+        end
     end
     Update()
     if waitingForItem and BG.OnItemLoad then
@@ -1319,6 +1324,14 @@ function Wishlist.CreateUI()
     description:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
     description:SetTextColor(unpack(MUTED))
     description:SetText(L["按职业套装与首领掉落建立心愿；实际掉落会提醒，拍卖时保持展开。"])
+
+    if BG.SpecGearFilter and BG.SpecGearFilter.CreateControls then
+        local filterControls = BG.SpecGearFilter.CreateControls(frame)
+        if filterControls then
+            filterControls:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -34, -68)
+            frame.filterControls = filterControls
+        end
+    end
 
     local clearButton = BG.CreateButton(frame)
     clearButton:SetSize(112, 25)

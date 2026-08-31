@@ -403,6 +403,34 @@ BG.Init(function()
         text:SetTextColor(RGB(BG.g1))
         text:SetText(L["邮件记录"])
     end
+
+    -- 本地历史表格：只展示 BGForge 自己的白名单账本快照。
+    if BG.IsTitan then
+        BG.HistoryMainFrame = CreateFrame("Frame", "BG.HistoryMainFrame", BG.MainFrame)
+        local mainFrame = BG.HistoryMainFrame
+        mainFrame:Hide()
+        for _, FB in ipairs(BG.FBtable) do
+            BG["HistoryFrame" .. FB] = CreateFrame("Frame", "BG.HistoryFrame" .. FB, mainFrame)
+            BG["HistoryFrame" .. FB]:Hide()
+        end
+        mainFrame:SetScript("OnShow", function()
+            BG.FBMainFrame:Hide()
+            for _, FB in ipairs(BG.FBtable) do
+                BG["HistoryFrame" .. FB]:Hide()
+            end
+            BG["HistoryFrame" .. BG.FB1]:Show()
+            BiaoGe.lastFrame = "History"
+            if BG.NanDuDropDown then
+                BG.NanDuDropDown.DropDown:Hide()
+            end
+        end)
+        mainFrame:SetScript("OnHide", function()
+            if BiaoGe.lastFrame == "History" then
+                BiaoGe.lastFrame = nil
+            end
+            BG.History.chooseNum = nil
+        end)
+    end
     ----------生成各副本UI----------
     do
         for k, FB in pairs(BG.FBtable) do
@@ -420,6 +448,7 @@ BG.Init(function()
             BG.NotifyChannelUI(lastbt)
         end)
 
+        if BG.HistoryUI then securecall(BG.HistoryUI) end
         securecall(BG.ReceiveUI)
         if BG.DuiZhangUI then securecall(BG.DuiZhangUI) end
         if BG.DuiZhangList then securecall(BG.DuiZhangList) end
@@ -814,6 +843,16 @@ BG.Init(function()
                 end
                 BG["DuiZhangFrame" .. FB]:Show()
                 BG.DuiZhangMainFrame.msgBg:UpdatePoint(FB)
+            elseif BG.HistoryMainFrame and BG.HistoryMainFrame:IsVisible() then
+                for _, historyFB in ipairs(BG.FBtable) do
+                    BG["HistoryFrame" .. historyFB]:Hide()
+                end
+                BG.CreateFBUI(FB, "History")
+                BG["HistoryFrame" .. FB]:Show()
+                BG.History.chooseNum = nil
+                BG.History.Title:SetParent(BG["HistoryFrame" .. FB])
+                BG.History.Title:SetText(L["<历史表格>"])
+                BG.CreatHistoryListButton(FB)
             end
 
             for i, FB in ipairs(BG.FBtable) do
@@ -827,6 +866,12 @@ BG.Init(function()
             end)
             BG.FB1 = FB
             BiaoGe.FB = FB
+            if BG.UpdateHistoryButton then
+                BG.UpdateHistoryButton()
+            end
+            if BG.History and BG.History.List and BG.History.List:IsShown() then
+                BG.CreatHistoryListButton(FB)
+            end
             BG.FrameDongHua()
 
             if BG.WishlistMainFrame and BG.WishlistMainFrame:IsVisible() and BG.Wishlist then
@@ -973,6 +1018,12 @@ BG.Init(function()
             bt.bg:SetAlpha(alpha)
         end
         function BG.ClickTabButton(num)
+            if BG.HistoryMainFrame then
+                BG.HistoryMainFrame:Hide()
+            end
+            if BG.History and BG.History.List then
+                BG.History.List:Hide()
+            end
             for _, v in ipairs(BG.tabButtons) do
                 local bt = v.button
                 if v.num == num then

@@ -24,6 +24,8 @@ if [[ "$version" != *"Lua 5.1"* ]]; then
 fi
 
 files=(
+    Core/Module/HistoryStore.lua
+    Core/Module/History.lua
     Core/Module/RaidLockoutOverview.lua
     Core/Module/Wishlist.lua
     Core/Module/WishlistUI.lua

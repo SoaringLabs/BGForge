@@ -198,11 +198,12 @@ local function TestPublicInterfaceAndMigration()
 
     local keys = {}
     for key in pairs(env.module) do keys[key] = true end
-    AssertTrue(keys.CreateUI and keys.ApplyToCell and keys.ApplyToAuctionFrame and keys.RefreshCurrentTable,
+    AssertTrue(keys.CreateUI and keys.CreateControls and keys.ApplyToCell
+        and keys.ApplyToAuctionFrame and keys.RefreshCurrentTable,
         "public methods should exist")
     local count = 0
     for _ in pairs(keys) do count = count + 1 end
-    AssertEqual(count, 4, "module should expose only four methods")
+    AssertEqual(count, 5, "module should expose only the five supported methods")
 end
 
 local function TestFilterResultCallback()
@@ -426,6 +427,28 @@ local function TestSchemeButtonsAndPersistence()
     AssertEqual(BiaoGe.options.specGearFilterByClass.MAGE, "class", "another class selection should be preserved")
 end
 
+local function TestSynchronizedControlGroups()
+    local env = ResetEnvironment("WARRIOR", nil)
+    env.module.CreateUI()
+    local wishlistControls = env.module.CreateControls({})
+    AssertTrue(wishlistControls, "wishlist should be able to mount another filter control group")
+    AssertEqual(#env.buttons, 6, "two warrior control groups should each expose three schemes")
+
+    env.buttons[3].scripts.OnClick(env.buttons[3])
+    AssertEqual(BiaoGe.options.specGearFilterByClass.WARRIOR, "arms_fury",
+        "table controls should update the shared selected scheme")
+    AssertEqual(env.buttons[3].highlight.shown, true, "table control should show the selected scheme")
+    AssertEqual(env.buttons[6].highlight.shown, true, "wishlist control should mirror the selected scheme")
+    AssertEqual(env.buttons[3].icon.desaturated, false, "selected table icon should stay saturated")
+    AssertEqual(env.buttons[6].icon.desaturated, false, "selected wishlist icon should stay saturated")
+
+    env.buttons[6].scripts.OnClick(env.buttons[6])
+    AssertEqual(BiaoGe.options.specGearFilterByClass.WARRIOR, nil,
+        "clicking the selected wishlist scheme should disable the shared filter")
+    AssertEqual(env.buttons[3].highlight.shown, false, "table controls should mirror wishlist changes")
+    AssertEqual(env.buttons[6].highlight.shown, false, "wishlist selection should clear")
+end
+
 local function TestAsyncStaleCallbacks()
     local env = ResetEnvironment("WARRIOR", "arms_fury", true)
     local cell = NewCell(ItemLink(100))
@@ -469,11 +492,16 @@ local function TestCurrentTableScope()
             { frame = auctionLogCell, link = ItemLink(100) },
         },
     }
+    local wishlistRefreshCount = 0
+    env.BG.Wishlist = {
+        Refresh = function() wishlistRefreshCount = wishlistRefreshCount + 1 end,
+    }
     env.module.RefreshCurrentTable()
     AssertEqual(env.currentCell.alpha, 0.4, "current table cell should refresh")
     AssertEqual(auctionLogCell.alpha, 0.4, "automatic auction log item should refresh")
     AssertEqual(auctioningItemFrame.alpha, 0.4, "active auction item should refresh")
     AssertEqual(unrelatedCell.alpha, nil, "unrelated frames should remain untouched")
+    AssertEqual(wishlistRefreshCount, 1, "filter changes should refresh the wishlist view")
 
     BiaoGe.options.specGearFilterByClass.WARRIOR = nil
     env.module.RefreshCurrentTable()
@@ -490,6 +518,7 @@ TestRulesAndExemption()
 TestTankRules()
 TestDisabledAndInvalidSchemes()
 TestSchemeButtonsAndPersistence()
+TestSynchronizedControlGroups()
 TestAsyncStaleCallbacks()
 TestCurrentTableScope()
 print("SpecGearFilter regression tests passed")

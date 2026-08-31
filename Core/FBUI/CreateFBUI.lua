@@ -9,6 +9,8 @@ local BossNum = ns.BossNum
 local function GetFrameName(type)
     if type == "FB" then
         return "Frame"
+    elseif type == "History" then
+        return "HistoryFrame"
     elseif type == "Receive" then
         return "ReceiveFrame"
     end
@@ -61,6 +63,8 @@ function BG.CreateFBUI(FB, type)
         local parent
         if type == "FB" then
             parent = BG.FBMainFrame
+        elseif type == "History" then
+            parent = BG.HistoryMainFrame
         elseif type == "Receive" then
             parent = BG.ReceiveMainFrame
         end

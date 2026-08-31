@@ -34,6 +34,7 @@ function Region:SetSize(width, height) self.width, self.height = width, height e
 function Region:SetTexture(texture) self.texture = texture end
 function Region:SetVertexColor(r, g, b, a) self.vertexColor = { r, g, b, a } end
 function Region:SetTextColor(r, g, b, a) self.textColor = { r, g, b, a } end
+function Region:SetAlpha(alpha) self.alpha = alpha end
 function Region:SetWordWrap(enabled) self.wordWrap = enabled end
 function Region:SetHighlightTexture(texture) self.highlightTexture = texture end
 function Region:GetWidth() return rawget(self, "width") or 1275 end
@@ -174,6 +175,20 @@ BG = {
 -- never create negative-width item buttons.
 BG.MainFrame:SetSize(1, 900)
 
+local filterControlMounts = 0
+BG.SpecGearFilter = {
+    CreateControls = function(parent)
+        filterControlMounts = filterControlMounts + 1
+        local controls = NewFrame(parent)
+        controls.isWishlistFilterControls = true
+        return controls
+    end,
+    ApplyToCell = function(button, link)
+        button.appliedFilterLink = link
+        button:SetAlpha(link == "item:100" and 0.4 or 1)
+    end,
+}
+
 local L = setmetatable({}, { __index = function(_, key) return key end })
 local namespace = {
     L = L,
@@ -258,6 +273,12 @@ for _, frame in ipairs(frames) do
 end
 
 assert(BG.WishlistMainFrame.child:GetHeight() > 1, "wishlist scroll child should have rendered content height")
+assert(filterControlMounts == 1 and BG.WishlistMainFrame.filterControls,
+    "wishlist header should mount one shared gear-filter control group")
+local filterPoints = BG.WishlistMainFrame.filterControls.pointCalls
+assert(filterPoints and filterPoints[1][1] == "TOPRIGHT"
+    and filterPoints[1][2] == BG.MainFrame and filterPoints[1][3] == "TOPRIGHT",
+    "wishlist gear-filter controls should be anchored in the header's top-right area")
 assert(BG.WishlistMainFrame.child.labelLayer:GetFrameLevel() > BG.WishlistMainFrame.child:GetFrameLevel(),
     "wishlist labels should render above opaque panels")
 assert(BG.WishlistMainFrame.bossDirectoryScroll:IsShown(),
@@ -285,6 +306,12 @@ assert(scrollBarPoints and scrollBarPoints[1][1] == "TOPRIGHT"
     and scrollBarPoints[1][4] == -2,
     "the boss-directory scrollbar should be anchored inside the directory's right edge")
 assert(visibleItems > 0, "wishlist should render at least one visible item card")
+assert(selectedBrowseItem.appliedFilterLink == "item:100" and selectedBrowseItem.alpha == 0.4,
+    "boss-detail items that do not match the selected filter should be dimmed")
+assert(summaryItem.appliedFilterLink == "item:100" and summaryItem.alpha == 0.4,
+    "current wishlist items that do not match the selected filter should be dimmed")
+assert(setBrowseItem.appliedFilterLink == "item:301" and setBrowseItem.alpha == 1,
+    "wishlist items that match the selected filter should remain fully visible")
 assert(summaryTitle, "wishlist summary should render its title")
 assert(summaryTitle:GetWidth() > 0 and summaryTitle:GetWidth() < 250,
     "wishlist summary title should be constrained to the narrow right column")

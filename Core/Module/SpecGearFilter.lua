@@ -417,6 +417,77 @@ local function UpdateButtons()
     end
 end
 
+local function CreateControls(parent)
+    EnsureStorage()
+
+    local classFile = CurrentClass()
+    local classSchemes = SCHEMES[classFile]
+    if not classSchemes or #classSchemes == 0 then return end
+
+    local frame = CreateFrame("Frame", nil, parent)
+    frame:SetSize(#classSchemes * 35 - 10, 25)
+
+    local label = frame:CreateFontString(nil, "OVERLAY")
+    label:SetPoint("RIGHT", frame, "LEFT", -10, 0)
+    label:SetFont(BIAOGE_TEXT_FONT, 14, "OUTLINE")
+    label:SetTextColor(1, 0.82, 0)
+    label:SetText(L["装备过滤："])
+
+    for index, scheme in ipairs(classSchemes) do
+        local button = CreateFrame("Button", nil, frame)
+        button:SetSize(25, 25)
+        button:SetPoint("LEFT", (index - 1) * 35, 0)
+        button.scheme = scheme
+
+        local icon = button:CreateTexture(nil, "ARTWORK")
+        icon:SetAllPoints()
+        icon:SetTexture(scheme.icon)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        button.icon = icon
+
+        local highlight = button:CreateTexture(nil, "OVERLAY")
+        highlight:SetPoint("TOPLEFT", -4, 4)
+        highlight:SetPoint("BOTTOMRIGHT", 4, -4)
+        highlight:SetTexture("Interface/Buttons/ButtonHilight-Square")
+        highlight:SetBlendMode("ADD")
+        button.highlight = highlight
+
+        button:SetScript("OnClick", function(self)
+            local currentClass = CurrentClass()
+            local selected = BiaoGe.options.specGearFilterByClass[currentClass]
+            if selected == self.scheme.key then
+                BiaoGe.options.specGearFilterByClass[currentClass] = nil
+            else
+                BiaoGe.options.specGearFilterByClass[currentClass] = self.scheme.key
+            end
+            UpdateButtons()
+            SpecGearFilter.RefreshCurrentTable()
+            if BG.PlaySound then BG.PlaySound(1) end
+        end)
+        button:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:ClearLines()
+            GameTooltip:AddLine(self.scheme.name, 1, 1, 1)
+            GameTooltip:AddLine(L["不适合该方案的装备会被置灰。"], 1, 0.82, 0, true)
+            if SelectedKey() == self.scheme.key then
+                GameTooltip:AddLine(L["再次点击可关闭装备过滤。"], 0, 1, 0, true)
+            else
+                GameTooltip:AddLine(L["点击启用该装备过滤方案。"], 0, 1, 0, true)
+            end
+            GameTooltip:AddLine(L["战网账号绑定装备始终保持高亮。"], 0.6, 0.8, 1, true)
+            GameTooltip:Show()
+        end)
+        button:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+
+        table.insert(buttons, button)
+    end
+
+    UpdateButtons()
+    return frame
+end
+
 function SpecGearFilter.ApplyToCell(cell, explicitLink, onApplied)
     if not cell or not cell.SetAlpha then return end
 
@@ -524,78 +595,21 @@ function SpecGearFilter.RefreshCurrentTable()
             SpecGearFilter.ApplyToAuctionFrame(auctionFrame)
         end
     end
+
+    if BG.Wishlist and BG.Wishlist.Refresh then
+        BG.Wishlist.Refresh()
+    end
+end
+
+function SpecGearFilter.CreateControls(parent)
+    return CreateControls(parent)
 end
 
 function SpecGearFilter.CreateUI()
     if uiFrame or not BG.ButtonQingKong then return end
-    EnsureStorage()
-
-    local classFile = CurrentClass()
-    local classSchemes = SCHEMES[classFile]
-    if not classSchemes or #classSchemes == 0 then return end
-
-    uiFrame = CreateFrame("Frame", nil, BG.FBMainFrame)
-    uiFrame:SetSize(#classSchemes * 35 - 10, 25)
+    uiFrame = CreateControls(BG.FBMainFrame)
+    if not uiFrame then return end
     uiFrame:SetPoint("LEFT", BG.ButtonQingKong, "RIGHT", 100, 0)
-
-    local label = uiFrame:CreateFontString(nil, "OVERLAY")
-    label:SetPoint("RIGHT", uiFrame, "LEFT", -10, 0)
-    label:SetFont(BIAOGE_TEXT_FONT, 14, "OUTLINE")
-    label:SetTextColor(1, 0.82, 0)
-    label:SetText(L["装备过滤："])
-
-    for index, scheme in ipairs(classSchemes) do
-        local button = CreateFrame("Button", nil, uiFrame)
-        button:SetSize(25, 25)
-        button:SetPoint("LEFT", (index - 1) * 35, 0)
-        button.scheme = scheme
-
-        local icon = button:CreateTexture(nil, "ARTWORK")
-        icon:SetAllPoints()
-        icon:SetTexture(scheme.icon)
-        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        button.icon = icon
-
-        local highlight = button:CreateTexture(nil, "OVERLAY")
-        highlight:SetPoint("TOPLEFT", -4, 4)
-        highlight:SetPoint("BOTTOMRIGHT", 4, -4)
-        highlight:SetTexture("Interface/Buttons/ButtonHilight-Square")
-        highlight:SetBlendMode("ADD")
-        button.highlight = highlight
-
-        button:SetScript("OnClick", function(self)
-            local currentClass = CurrentClass()
-            local selected = BiaoGe.options.specGearFilterByClass[currentClass]
-            if selected == self.scheme.key then
-                BiaoGe.options.specGearFilterByClass[currentClass] = nil
-            else
-                BiaoGe.options.specGearFilterByClass[currentClass] = self.scheme.key
-            end
-            UpdateButtons()
-            SpecGearFilter.RefreshCurrentTable()
-            if BG.PlaySound then BG.PlaySound(1) end
-        end)
-        button:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:ClearLines()
-            GameTooltip:AddLine(self.scheme.name, 1, 1, 1)
-            GameTooltip:AddLine(L["不适合该方案的装备会被置灰。"], 1, 0.82, 0, true)
-            if SelectedKey() == self.scheme.key then
-                GameTooltip:AddLine(L["再次点击可关闭装备过滤。"], 0, 1, 0, true)
-            else
-                GameTooltip:AddLine(L["点击启用该装备过滤方案。"], 0, 1, 0, true)
-            end
-            GameTooltip:AddLine(L["战网账号绑定装备始终保持高亮。"], 0.6, 0.8, 1, true)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function()
-            GameTooltip:Hide()
-        end)
-
-        table.insert(buttons, button)
-    end
-
-    UpdateButtons()
     SpecGearFilter.RefreshCurrentTable()
 end
 

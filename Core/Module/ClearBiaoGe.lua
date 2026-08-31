@@ -199,32 +199,67 @@ function BG.ClearBiaoGeUI()
                 teamText = L['不在团队里。']
                 return true
             end
+            local currentRoster = type(BG.raidRosterInfo) == "table" and BG.raidRosterInfo or {}
+            local currentNames = {}
+            for _, member in ipairs(currentRoster) do
+                local name = type(member) == "table" and member.name or member
+                if type(name) == "string" and name ~= "" then
+                    currentNames[name] = true
+                end
+            end
+            local currentCount = 0
+            for _ in pairs(currentNames) do
+                currentCount = currentCount + 1
+            end
+            if currentCount == 0 then
+                teamText = L['当前团队名单暂不可用，无法判断是否换团，本次不会自动清空。']
+                return false
+            end
             -- 没有历史成员名单
-            if not BiaoGe[FB].raidRoster then
+            local savedRosterInfo = type(BiaoGe[FB]) == "table" and BiaoGe[FB].raidRoster or nil
+            if type(savedRosterInfo) ~= "table" then
                 teamText = L['表格没有历史成员名单。']
                 return true
             end
+            local savedAt = tonumber(savedRosterInfo.time)
+            local savedRoster = type(savedRosterInfo.roster) == "table" and savedRosterInfo.roster or nil
+            if not savedAt or not savedRoster then
+                teamText = L['表格的历史成员名单无效，判断为现在是新团队。']
+                return true
+            end
             -- 超过x天了
-            if GetServerTime() - BiaoGe[FB].raidRoster.time >= 86400 * 1 then
+            if GetServerTime() - savedAt >= 86400 * 1 then
                 teamText = L['表格的历史成员名单的创建时间已超过1天，判断为现在是新团队。']
                 return true
             end
             -- 服务器不同
-            if BG.realmName ~= BiaoGe[FB].raidRoster.realm then
-                teamText = L['表格的历史成员名单服务器是[%s]，与当前服务器[%s]不同，判断为现在是新团队。']:format(BiaoGe[FB].raidRoster.realm or '', BG.realmName or '')
+            if BG.realmName ~= savedRosterInfo.realm then
+                teamText = L['表格的历史成员名单服务器是[%s]，与当前服务器[%s]不同，判断为现在是新团队。']:format(savedRosterInfo.realm or '', BG.realmName or '')
                 return true
             end
-            local maxCount = max(#BG.raidRosterInfo, #BiaoGe[FB].raidRoster.roster)
+            local savedNames = {}
+            for _, name in ipairs(savedRoster) do
+                if type(name) == "string" and name ~= "" then
+                    savedNames[name] = true
+                end
+            end
+            local savedCount = 0
+            for _ in pairs(savedNames) do
+                savedCount = savedCount + 1
+            end
+            if savedCount == 0 then
+                teamText = L['表格的历史成员名单无效，判断为现在是新团队。']
+                return true
+            end
+            local maxCount = max(currentCount, savedCount)
             local sameCount = 0
-            for _, vv in ipairs(BG.raidRosterInfo) do
-                for _, name in ipairs(BiaoGe[FB].raidRoster.roster) do
-                    if vv.name == name then
-                        sameCount = sameCount + 1
-                    end
+            for name in pairs(currentNames) do
+                if savedNames[name] then
+                    sameCount = sameCount + 1
                 end
             end
             if sameCount / maxCount < 0.6 then
-                teamText = L['表格的历史成员人数为%s，当前团队人数为%s，相同成员的占比低于60%%，判断为现在是新团队。']:format(#BiaoGe[FB].raidRoster.roster, #BG.raidRosterInfo)
+                teamText = L['表格的历史成员人数为%s，当前团队人数为%s，相同成员的占比低于60%%，判断为现在是新团队。']:format(savedCount, currentCount)
                 return true
             end
             return false
@@ -275,8 +310,35 @@ function BG.ClearBiaoGeUI()
                     end
 
                     if clearType then
+                        local savedToHistory = false
+                        local historyStatus
+                        if BiaoGe.options.autoQingKongSaveHistory == 1 then
+                            local saved
+                            if BG.SaveBiaoGe then
+                                saved, historyStatus = BG.SaveBiaoGe(FB, {
+                                    source = "auto-clear",
+                                    dedupe = true,
+                                    silent = true,
+                                })
+                            end
+                            if not saved then
+                                BG.SendSystemMessage(BG.STC_r1(L["历史表格保存失败，已取消自动清空，当前表格仍然保留。"]))
+                                return
+                            end
+                            savedToHistory = true
+                        end
                         local num = BG.ClearBiaoGe("biaoge", FB)
-                        BG.SendSystemMessage(format(L["已自动清空表格< %s >，分钱人数已改为%s人。"], BG.GetFBinfo(FB, "shortName"), num))
+                        if savedToHistory then
+                            if historyStatus == "duplicate" then
+                                BG.SendSystemMessage(format(L["已自动清空表格< %s >，分钱人数已改为%s人；当前表格与最近历史记录相同，未重复保存。"],
+                                    BG.GetFBinfo(FB, "shortName"), num))
+                            else
+                                BG.SendSystemMessage(format(L["已自动清空表格< %s >，分钱人数已改为%s人，原表格已保存至历史表格。"],
+                                    BG.GetFBinfo(FB, "shortName"), num))
+                            end
+                        else
+                            BG.SendSystemMessage(format(L["已自动清空表格< %s >，分钱人数已改为%s人。"], BG.GetFBinfo(FB, "shortName"), num))
+                        end
                         if clearType == 1 then
                             BG.SendSystemMessage(L['自动清空表格的原因：1.当前副本你是新CD；2.%s']:format(
                                 L['当前副本所在的表格BOSS编号（%s-%s）格子中存在旧记录。']:format(startB, endB)))

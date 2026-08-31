@@ -1090,11 +1090,11 @@ BG.Init(function()
     BiaoGe.battleNetRoles = nil
     BiaoGe.blacklist = nil
     BiaoGe.migrations = nil
-    -- 历史表格（BiaoGe.History / HistoryList）数据保留不动（发布前审查 §7 方案A，2026-08-25 实施）：
-    --  ① 原版与 BGForge_v3 加载时对 History 只「创建/迁移、永不删除」，无条件置 nil 是本改造引入的偏差；
-    --  ② 该域在本插件内零读取点、零写入点，保留为惰性数据不影响任何功能；
-    --  ③ 本插件与原版共享 ## SavedVariables: BiaoGe，自动删会连并存的原版 biaoge 正在读取的历史账本一起抹掉。
-    -- 如需清除，应走用户主动的一次性提示（§7 方案C），禁止自动删除。
+    -- 历史表格（BiaoGe.History / HistoryList）兼容边界：
+    --  ① 原版记录继续原样保留，BGForge 只在读取时投影成最小账本字段，不回写旧记录；
+    --  ② BGForge 新记录带 _bgforge 标记，由 HistoryStore 按用户设置清理，绝不自动清理无标记的原版记录；
+    --  ③ 两个插件共用 ## SavedVariables: BiaoGe，因此这里仍禁止对整个 History 域做迁移式删除。
+    -- 用户主动点击「清空历史表格」仍会清空当前副本的全部记录，并有二次确认。
     -- Lite: 恢复交易/邮件模块所需的模块禁用表初始化（TradeHistory/MailHistory 入口守卫用，空表=全部启用）。
     -- 注：BGForge 未恢复 BG.CreateDisableButton 禁用按钮 UI，此表仅作守卫初始化，恒为启用。
     BiaoGe.disabledModules = BiaoGe.disabledModules or {}

@@ -1662,6 +1662,54 @@ BG.Init(function()
 
         O.CreateLine(biaoge, height - h)
         h = h + 15
+        -- 历史表格保留时长（Titan Reforged Classic only）
+        if BG.IsTitan then
+            local name = "historyRetentionDays"
+            BG.options[name .. "reset"] = 90
+            if BiaoGe.options[name] == nil then
+                BiaoGe.options[name] = BG.options[name .. "reset"]
+            end
+            local choices = { 30, 90, 180, 0 }
+            local function GetText(days)
+                if days == 0 then return L["永久"] end
+                return days .. L["天"]
+            end
+
+            local dropDown = LibBG:Create_UIDropDownMenu(nil, biaoge)
+            dropDown:SetPoint("TOPLEFT", 0, height - h - 2)
+            LibBG:UIDropDownMenu_SetWidth(dropDown, 120)
+            LibBG:UIDropDownMenu_SetText(dropDown, GetText(BiaoGe.options[name]))
+            LibBG:UIDropDownMenu_SetAnchor(dropDown, 0, 0, "TOP", dropDown, "BOTTOM")
+            BG.dropDownToggle(dropDown)
+            BG.options["button" .. name] = dropDown
+
+            local title = dropDown:CreateFontString()
+            title:SetPoint("LEFT", dropDown, "RIGHT", -5, 2)
+            title:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            title:SetTextColor(1, 1, 1)
+            title:SetText(L["历史表格保留时长"])
+
+            LibBG:UIDropDownMenu_Initialize(dropDown, function()
+                for _, days in ipairs(choices) do
+                    local info = LibBG:UIDropDownMenu_CreateInfo()
+                    info.text = GetText(days)
+                    info.checked = BiaoGe.options[name] == days
+                    info.func = function()
+                        BiaoGe.options[name] = days
+                        LibBG:UIDropDownMenu_SetText(dropDown, GetText(days))
+                        if BG.HistoryStore then
+                            for _, FB in ipairs(BG.FBtable) do
+                                BG.HistoryStore.Prune(FB)
+                            end
+                            BG.UpdateHistoryButton()
+                        end
+                    end
+                    LibBG:UIDropDownMenu_AddButton(info)
+                end
+            end)
+            h = h + 45
+        end
+
         -- 进本自动清空表格
         do
             local name = "autoQingKong"
@@ -1669,18 +1717,40 @@ BG.Init(function()
             BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
             local ontext = {
                 L["进本自动清空表格"],
-                L["当你进入一个新CD团本时，表格会自动清空。"],
+                L["当你进入一个新CD团本时，表格会自动清空，原表格数据默认保存至历史表格。"],
                 -- " ",
                 -- L[""],
             }
             local f = O.CreateCheckButton(name, L["进本自动清空表格"], biaoge, 15, height - h, ontext)
             BG.options["button" .. name] = f
+            f:HookScript("OnClick", function()
+                local historyOption = BG.options.buttonautoQingKongSaveHistory
+                if historyOption then
+                    historyOption:SetShown(f:GetChecked())
+                end
+            end)
             -- 删除旧设置
             if BiaoGe.options["showQingKong"] then
                 BiaoGe.options["showQingKong"] = nil
             end
         end
         h = h + 30
+        -- 新 CD 自动清空前保存历史（默认开启）
+        if BG.IsTitan then
+            local name = "autoQingKongSaveHistory"
+            BG.options[name .. "reset"] = 1
+            if BiaoGe.options[name] == nil then
+                BiaoGe.options[name] = BG.options[name .. "reset"]
+            end
+            local ontext = {
+                L["自动清空表格时保存表格"],
+                L["新CD触发自动清空时，先把当前表格保存至本地历史表格；保存失败则不会清空。"],
+            }
+            local f = O.CreateCheckButton(name, L["自动清空表格时保存表格"], biaoge, 40, height - h, ontext)
+            BG.options["button" .. name] = f
+            f:SetShown(BiaoGe.options.autoQingKong == 1)
+            h = h + 30
+        end
         -- 清空表格时保留支出补贴名称
         do
             local name = "retainExpenses"

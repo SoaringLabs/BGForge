@@ -1,4 +1,5 @@
 local _, ns = ...
+if not BG.IsTitan then return end
 
 local L = ns.L
 
@@ -7,6 +8,16 @@ local Maxb = ns.Maxb
 local BossNum = ns.BossNum
 local GetItemID = ns.GetItemID
 
+BG.HistoryFrame = BG.HistoryFrame or {}
+BG.HistoryFrameDs = BG.HistoryFrameDs or {}
+for _, FB in ipairs(BG.FBtable) do
+    BG.HistoryFrame[FB] = BG.HistoryFrame[FB] or {}
+    BG.HistoryFrameDs[FB .. 1] = BG.HistoryFrameDs[FB .. 1] or {}
+    for b = 1, 22 do
+        BG.HistoryFrame[FB]["boss" .. b] = BG.HistoryFrame[FB]["boss" .. b] or {}
+        BG.HistoryFrameDs[FB .. 1]["boss" .. b] = BG.HistoryFrameDs[FB .. 1]["boss" .. b] or {}
+    end
+end
 
 local p = {}
 BG.HistoryFrame.p = p
@@ -16,35 +27,6 @@ local framedown
 local frameright
 local red, greed, blue = 1, 1, 1
 local touming1, touming2 = 0.1, 0.1
-
-local function ShowTardeHighLightItem(self)
-    if not BG.History.chooseNum then return end
-    local b = self.bossnum
-    local i = self.i
-    local FB = BG.FB1
-    local tradeInfo = BG.GetGeZiTardeInfo(FB, b, i, true)
-    if tradeInfo then
-        for _, v in ipairs(tradeInfo) do
-            for b = 1, Maxb[FB] do
-                for i = 1, BG.GetMaxi(FB, b) do
-                    local zb = BG.HistoryFrame[FB]["boss" .. b]["zhuangbei" .. i]
-                    local jine = BG.HistoryFrame[FB]["boss" .. b]["jine" .. i]
-                    if zb and FB == v.FB and b == v.b and i == v.i then
-                        local f = BG.CreateHighlightFrame(zb, nil, { 0, 1, 0, 0.5 }, 4)
-                        f:ClearAllPoints()
-                        f:SetPoint("TOPLEFT", zb, "TOPLEFT", 0, 0)
-                        f:SetPoint("BOTTOMRIGHT", jine, "BOTTOMRIGHT", 0, 0)
-                        local t = f:CreateFontString()
-                        t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-                        t:SetPoint("LEFT", jine, "RIGHT", 2, 0)
-                        t:SetTextColor(0, 1, 0)
-                        t:SetText(L["打包交易"])
-                    end
-                end
-            end
-        end
-    end
-end
 
 ------------------标题------------------
 function BG.HistoryTitleUI(FB, t)
@@ -147,12 +129,6 @@ function BG.HistoryZhuangBeiUI(FB, t, b, bb, i, ii, scrollFrame)
             BG.IsHave(self)
         end
     end)
-    -- 发送装备到聊天输入框
-    bt:SetScript("OnMouseDown", function(self, enter)
-        if IsShiftKeyDown() then
-            BG.InsertLink(self:GetText())
-        end
-    end)
     -- 鼠标悬停在装备时
     BG.OnEnterDelay(bt, function(self)
         BG.HistoryFrameDs[FB .. 1]["boss" .. BossNum(FB, b, t)]["ds" .. i]:Show()
@@ -167,14 +143,12 @@ function BG.HistoryZhuangBeiUI(FB, t, b, bb, i, ii, scrollFrame)
                 end
                 GameTooltip:ClearLines()
                 GameTooltip:SetHyperlink(BG.SetSpecIDToLink(link))
-                BG.SetHistoryMoney(itemID)
             end
         end
     end, BG.itemOnEnterDelay)
     BG.OnLeaveDelay(bt, function(self)
         BG.HistoryFrameDs[FB .. 1]["boss" .. BossNum(FB, b, t)]["ds" .. i]:Hide()
         GameTooltip:Hide()
-        BG.HideHistoryMoney()
     end)
 end
 
@@ -226,12 +200,10 @@ function BG.HistoryJinEUI(FB, t, b, bb, i, ii)
     -- 鼠标悬停在装备时
     bt:SetScript("OnEnter", function(self)
         BG.HistoryFrameDs[FB .. 1]["boss" .. BossNum(FB, b, t)]["ds" .. i]:Show()
-        ShowTardeHighLightItem(self)
     end)
     bt:SetScript("OnLeave", function(self)
         BG.HistoryFrameDs[FB .. 1]["boss" .. BossNum(FB, b, t)]["ds" .. i]:Hide()
         GameTooltip:Hide()
-        BG.Hide_AllHighlight()
     end)
 end
 
