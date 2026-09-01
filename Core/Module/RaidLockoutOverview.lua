@@ -191,6 +191,19 @@ local RAID_MIN_LEVEL = 80
 local TITAN_EMBER_CURRENCY_ID = 3403
 local TITAN_SHARD_CURRENCY_ID = 3406
 local LEGENDARY_ITEM_QUALITY = 5
+-- 橙武碎片是普通物品而不是货币，客户端也没有“橙武材料”的语义分类。
+-- 每个阶段只需在这里补充物品定义；角色快照和总览会自动按目录统计。
+local TITAN_LEGENDARY_FRAGMENT_DEFINITIONS = {
+    {
+        itemID = 22726, -- 埃提耶什的碎片
+        targetCount = 40,
+        iconFileID = 134888,
+    },
+}
+local TITAN_LEGENDARY_FRAGMENT_DEFINITION_BY_ITEM_ID = {}
+for _, definition in ipairs(TITAN_LEGENDARY_FRAGMENT_DEFINITIONS) do
+    TITAN_LEGENDARY_FRAGMENT_DEFINITION_BY_ITEM_ID[definition.itemID] = definition
+end
 local TITAN_LEGENDARY_UPGRADE_ITEM_IDS = {
     265340, 265524, 267339, 269664, -- 橙颈
     265335, 265523, 267338, 269667, -- 橙锤
@@ -238,6 +251,7 @@ local SMALL_UI = {
     resourceSubHeaderHeight = 22,
     professionWidth = 100,
     legendaryWidth = 150,
+    fragmentWidth = 100,
     upgradeWidth = 130,
     trinketWidth = 100,
     goldWidth = 88,
@@ -281,6 +295,9 @@ local function ShowItemTooltip(owner, item)
         GameTooltip:SetItemByID(item.itemID)
     else
         GameTooltip:SetHyperlink("item:" .. item.itemID)
+    end
+    if item.targetCount and GameTooltip.AddLine then
+        GameTooltip:AddLine(string.format(L["目标数量：%d"], item.targetCount), 1, 0.82, 0)
     end
     GameTooltip:Show()
 end
@@ -654,6 +671,30 @@ local function CaptureLegendaryUpgradeItems()
     return items
 end
 
+local function CaptureLegendaryFragmentItems()
+    local items = {}
+    for _, definition in ipairs(TITAN_LEGENDARY_FRAGMENT_DEFINITIONS) do
+        local itemID = definition.itemID
+        local count
+        if C_Item and C_Item.GetItemCount then
+            count = C_Item.GetItemCount(itemID, true)
+        elseif GetItemCount then
+            count = GetItemCount(itemID, true)
+        end
+        if count and count > 0 then
+            items[#items + 1] = {
+                itemID = itemID,
+                link = select(2, GetItemInfo(itemID)),
+                count = count,
+                targetCount = definition.targetCount,
+                iconFileID = GetItemIconFile(itemID, definition.iconFileID),
+                quality = LEGENDARY_ITEM_QUALITY,
+            }
+        end
+    end
+    return items
+end
+
 local COLOR = {
     panel = { 0.015, 0.055, 0.075, 0.98 },
     panelTop = { 0.02, 0.075, 0.095, 0.98 },
@@ -768,6 +809,7 @@ local function CalculateResourceColumnWidths(ui, availableWidth)
     local definitions = {
         { id = "profession", width = ui.professionWidth },
         { id = "legendary", width = ui.legendaryWidth },
+        { id = "fragment", width = ui.fragmentWidth },
         { id = "upgrade", width = ui.upgradeWidth },
         { id = "trinket", width = ui.trinketWidth },
         { id = "gold", width = ui.goldWidth },
@@ -924,6 +966,27 @@ local function ClearExpiredRaidData()
                     character.legendaryItems = MergeItemSnapshots(
                         type(character.legendaryItems) == "table" and character.legendaryItems or {}
                     )
+                    local normalizedFragmentItems = {}
+                    for _, item in ipairs(
+                        type(character.legendaryFragmentItems) == "table"
+                            and character.legendaryFragmentItems or {}
+                    ) do
+                        local itemID = type(item) == "table" and tonumber(item.itemID)
+                        local definition = itemID
+                            and TITAN_LEGENDARY_FRAGMENT_DEFINITION_BY_ITEM_ID[itemID] or nil
+                        local count = type(item) == "table" and tonumber(item.count)
+                        if definition and count and count > 0 then
+                            normalizedFragmentItems[#normalizedFragmentItems + 1] = {
+                                itemID = itemID,
+                                link = item.link,
+                                count = count,
+                                targetCount = definition.targetCount,
+                                iconFileID = item.iconFileID or definition.iconFileID,
+                                quality = LEGENDARY_ITEM_QUALITY,
+                            }
+                        end
+                    end
+                    character.legendaryFragmentItems = normalizedFragmentItems
                     character.bankLegendaryItems = MergeItemSnapshots(
                         type(character.bankLegendaryItems) == "table" and character.bankLegendaryItems or {}
                     )
@@ -1288,6 +1351,7 @@ local function CaptureCurrentResources()
     end
     CaptureCurrentProfessionCooldowns(stored)
     stored.trinkets = CaptureEquippedTrinkets()
+    stored.legendaryFragmentItems = CaptureLegendaryFragmentItems()
     stored.legendaryUpgradeItems = CaptureLegendaryUpgradeItems()
     stored.legendaryItems = MergeItemSnapshots(
         CaptureEquippedAndBagLegendaries(),
@@ -1418,6 +1482,8 @@ local function BuildCharacterRows(realmID)
                     titanShardIconFileID = stored.titanShardIconFileID,
                     professions = type(stored.professions) == "table" and stored.professions or {},
                     legendaryItems = type(stored.legendaryItems) == "table" and stored.legendaryItems or {},
+                    legendaryFragmentItems = type(stored.legendaryFragmentItems) == "table"
+                        and stored.legendaryFragmentItems or {},
                     legendaryUpgradeItems = type(stored.legendaryUpgradeItems) == "table"
                         and stored.legendaryUpgradeItems or {},
                     trinkets = type(stored.trinkets) == "table" and stored.trinkets or {},
@@ -2604,7 +2670,7 @@ local function CreateHoverFrame()
 
     local equipmentHeader = CreateTableCell(contentFrame, COLOR.headerStrong, { top = true })
     equipmentHeader:SetSize(
-        ui.legendaryWidth + ui.upgradeWidth + ui.trinketWidth,
+        ui.legendaryWidth + ui.fragmentWidth + ui.upgradeWidth + ui.trinketWidth,
         ui.resourceGroupHeight
     )
     local equipmentHeaderText = CreateCellText(equipmentHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
@@ -2614,6 +2680,11 @@ local function CreateHoverFrame()
     legendaryHeader:SetSize(ui.legendaryWidth, ui.resourceSubHeaderHeight)
     local legendaryHeaderText = CreateCellText(legendaryHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
     legendaryHeaderText:SetText(L["橙装"])
+
+    local fragmentHeader = CreateTableCell(contentFrame, COLOR.header)
+    fragmentHeader:SetSize(ui.fragmentWidth, ui.resourceSubHeaderHeight)
+    local fragmentHeaderText = CreateCellText(fragmentHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    fragmentHeaderText:SetText(L["橙武碎片"])
 
     local upgradeHeader = CreateTableCell(contentFrame, COLOR.header)
     upgradeHeader:SetSize(ui.upgradeWidth, ui.resourceSubHeaderHeight)
@@ -2706,6 +2777,11 @@ local function CreateHoverFrame()
         row.legendaryTiles = {}
         CreateRowHoverOverlay(row.legendaryCell, row.resourceHoverOverlays)
 
+        row.fragmentCell = CreateTableCell(contentFrame)
+        row.fragmentCell:SetSize(ui.fragmentWidth, ui.rowHeight)
+        row.fragmentTiles = {}
+        CreateRowHoverOverlay(row.fragmentCell, row.resourceHoverOverlays)
+
         row.upgradeCell = CreateTableCell(contentFrame)
         row.upgradeCell:SetSize(ui.upgradeWidth, ui.rowHeight)
         row.upgradeTiles = {}
@@ -2748,6 +2824,10 @@ local function CreateHoverFrame()
 
     local totalLegendaryCell = CreateTableCell(contentFrame, COLOR.header)
     totalLegendaryCell:SetSize(ui.legendaryWidth, ui.rowHeight)
+
+    local totalFragmentCell = CreateTableCell(contentFrame, COLOR.header)
+    totalFragmentCell:SetSize(ui.fragmentWidth, ui.rowHeight)
+    local totalFragmentTiles = {}
 
     local totalUpgradeCell = CreateTableCell(contentFrame, COLOR.header)
     totalUpgradeCell:SetSize(ui.upgradeWidth, ui.rowHeight)
@@ -2815,7 +2895,8 @@ local function CreateHoverFrame()
             renderContext.measureHeaderText
         )
 
-        local compactEquipmentWidth = ui.legendaryWidth + ui.upgradeWidth + ui.trinketWidth
+        local compactEquipmentWidth = ui.legendaryWidth + ui.fragmentWidth
+            + ui.upgradeWidth + ui.trinketWidth
         local compactCommonWidth = ui.goldWidth + ui.emberWidth + ui.shardWidth
         local compactResourceWidth = ui.nameWidth + ui.professionWidth
             + compactEquipmentWidth + compactCommonWidth
@@ -2839,12 +2920,13 @@ local function CreateHoverFrame()
         )
         local professionWidth = resourceColumnWidths.profession
         local legendaryWidth = resourceColumnWidths.legendary
+        local fragmentWidth = resourceColumnWidths.fragment
         local upgradeWidth = resourceColumnWidths.upgrade
         local trinketWidth = resourceColumnWidths.trinket
         local goldWidth = resourceColumnWidths.gold
         local emberWidth = resourceColumnWidths.ember
         local shardWidth = resourceColumnWidths.shard
-        local equipmentWidth = legendaryWidth + upgradeWidth + trinketWidth
+        local equipmentWidth = legendaryWidth + fragmentWidth + upgradeWidth + trinketWidth
         local commonWidth = goldWidth + emberWidth + shardWidth
         local resourceWidth = ui.nameWidth + resourceColumnsWidth
         hoverFrame:SetWidth(viewportWidth)
@@ -2943,18 +3025,25 @@ local function CreateHoverFrame()
         legendaryHeader:SetWidth(legendaryWidth)
         legendaryHeader:ClearAllPoints()
         legendaryHeader:SetPoint("TOPLEFT", equipmentX, -(resourceTop + ui.resourceGroupHeight))
+        fragmentHeader:SetWidth(fragmentWidth)
+        fragmentHeader:ClearAllPoints()
+        fragmentHeader:SetPoint(
+            "TOPLEFT",
+            equipmentX + legendaryWidth,
+            -(resourceTop + ui.resourceGroupHeight)
+        )
         upgradeHeader:SetWidth(upgradeWidth)
         upgradeHeader:ClearAllPoints()
         upgradeHeader:SetPoint(
             "TOPLEFT",
-            equipmentX + legendaryWidth,
+            equipmentX + legendaryWidth + fragmentWidth,
             -(resourceTop + ui.resourceGroupHeight)
         )
         trinketHeader:SetWidth(trinketWidth)
         trinketHeader:ClearAllPoints()
         trinketHeader:SetPoint(
             "TOPLEFT",
-            equipmentX + legendaryWidth + upgradeWidth,
+            equipmentX + legendaryWidth + fragmentWidth + upgradeWidth,
             -(resourceTop + ui.resourceGroupHeight)
         )
 
@@ -3024,6 +3113,8 @@ local function CreateHoverFrame()
         local goldTotal = 0
         local emberTotal = 0
         local shardTotal = 0
+        local fragmentTotalsByItemID = {}
+        local fragmentTotals = {}
         local latestResourceRecord
         for rowIndex, character in ipairs(resourceCharacters) do
             local row = renderContext.ensureRow(rowIndex)
@@ -3032,7 +3123,8 @@ local function CreateHoverFrame()
             local resourceRowY = resourceRowsTop + (rowIndex - 1) * ui.rowHeight
             local professionX = ui.padding + ui.nameWidth
             local legendaryX = professionX + professionWidth
-            local upgradeX = legendaryX + legendaryWidth
+            local fragmentX = legendaryX + legendaryWidth
+            local upgradeX = fragmentX + fragmentWidth
             local trinketX = upgradeX + upgradeWidth
             local goldX = trinketX + trinketWidth
             local emberX = goldX + goldWidth
@@ -3062,6 +3154,20 @@ local function CreateHoverFrame()
                 character.legendaryItems,
                 "itemLevel",
                 renderContext.legendaryItemQuality
+            )
+
+            row.fragmentCell:Show()
+            row.fragmentCell:SetWidth(fragmentWidth)
+            row.fragmentCell:ClearAllPoints()
+            row.fragmentCell:SetPoint("TOPLEFT", fragmentX, -resourceRowY)
+            renderContext.setCellColor(row.fragmentCell, rowColor)
+            renderContext.renderItemStrip(
+                row.fragmentCell,
+                row.fragmentTiles,
+                character.legendaryFragmentItems,
+                "count",
+                renderContext.legendaryItemQuality,
+                "×"
             )
 
             row.upgradeCell:Show()
@@ -3118,6 +3224,22 @@ local function CreateHoverFrame()
             goldTotal = goldTotal + (gold or 0)
             emberTotal = emberTotal + (character.titanEmbers or 0)
             shardTotal = shardTotal + (character.titanShards or 0)
+            for _, item in ipairs(character.legendaryFragmentItems or {}) do
+                local total = fragmentTotalsByItemID[item.itemID]
+                if not total then
+                    total = {
+                        itemID = item.itemID,
+                        link = item.link,
+                        count = 0,
+                        targetCount = item.targetCount,
+                        iconFileID = item.iconFileID,
+                        quality = renderContext.legendaryItemQuality,
+                    }
+                    fragmentTotalsByItemID[item.itemID] = total
+                    fragmentTotals[#fragmentTotals + 1] = total
+                end
+                total.count = total.count + (tonumber(item.count) or 0)
+            end
             if character.resourcesUpdatedAt
                 and (not latestResourceRecord or character.resourcesUpdatedAt > latestResourceRecord) then
                 latestResourceRecord = character.resourcesUpdatedAt
@@ -3140,6 +3262,7 @@ local function CreateHoverFrame()
             row.resourceNameCell:Hide()
             row.professionCell:Hide()
             row.legendaryCell:Hide()
+            row.fragmentCell:Hide()
             row.upgradeCell:Hide()
             row.trinketCell:Hide()
             row.goldCell:Hide()
@@ -3153,7 +3276,8 @@ local function CreateHoverFrame()
         local totalY = resourceRowsTop + resourceRowCount * ui.rowHeight
         local professionX = ui.padding + ui.nameWidth
         local legendaryX = professionX + professionWidth
-        local upgradeX = legendaryX + legendaryWidth
+        local fragmentX = legendaryX + legendaryWidth
+        local upgradeX = fragmentX + fragmentWidth
         local trinketX = upgradeX + upgradeWidth
         local goldX = trinketX + trinketWidth
         local emberX = goldX + goldWidth
@@ -3166,6 +3290,17 @@ local function CreateHoverFrame()
         totalLegendaryCell:SetWidth(legendaryWidth)
         totalLegendaryCell:ClearAllPoints()
         totalLegendaryCell:SetPoint("TOPLEFT", legendaryX, -totalY)
+        totalFragmentCell:SetWidth(fragmentWidth)
+        totalFragmentCell:ClearAllPoints()
+        totalFragmentCell:SetPoint("TOPLEFT", fragmentX, -totalY)
+        renderContext.renderItemStrip(
+            totalFragmentCell,
+            totalFragmentTiles,
+            fragmentTotals,
+            "count",
+            renderContext.legendaryItemQuality,
+            "×"
+        )
         totalUpgradeCell:SetWidth(upgradeWidth)
         totalUpgradeCell:ClearAllPoints()
         totalUpgradeCell:SetPoint("TOPLEFT", upgradeX, -totalY)

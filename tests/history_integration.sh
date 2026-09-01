@@ -5,20 +5,33 @@ set -euo pipefail
 store="Core/Module/HistoryStore.lua"
 module="Core/Module/History.lua"
 clear_module="Core/Module/ClearBiaoGe.lua"
+db="Core/DB/DB.lua"
 
 store_line="$(rg -n '^Core\\Module\\HistoryStore\.lua$' BGForge.toc | cut -d: -f1)"
 module_line="$(rg -n '^Core\\Module\\History\.lua$' BGForge.toc | cut -d: -f1)"
 main_line="$(rg -n '^Core\\BiaoGe\.lua$' BGForge.toc | cut -d: -f1)"
-if [[ -z "$store_line" || -z "$module_line" || -z "$main_line" ]] \
-    || (( store_line >= module_line || module_line >= main_line )); then
+db_line="$(rg -n '^Core\\DB\\DB\.xml$' BGForge.toc | cut -d: -f1)"
+if [[ -z "$db_line" || -z "$store_line" || -z "$module_line" || -z "$main_line" ]] \
+    || (( db_line >= store_line || store_line >= module_line || module_line >= main_line )); then
     echo "History store and UI must load in order before BiaoGe creates the main frames" >&2
     exit 1
 fi
 
+rg -q 'BG\.HistoryFeatureEnabled = false' "$db"
+rg -q 'if not BG\.HistoryFeatureEnabled then return end' "$store"
+rg -q 'if not BG\.HistoryFeatureEnabled then return end' "$module"
+rg -q 'if not BG\.HistoryFeatureEnabled then return end' Core/FBUI/HistoryUIfunction.lua
+rg -q 'if BG\.IsTitan and BG\.HistoryFeatureEnabled then' Core/BiaoGe.lua
+if [[ "$(rg -c 'if BG\.IsTitan and BG\.HistoryFeatureEnabled then' Core/Options.lua)" -ne 2 ]]; then
+    echo "History settings are not guarded by the soft-disable flag" >&2
+    exit 1
+fi
+rg -q 'if BG\.HistoryFeatureEnabled and BiaoGe\.options\.autoQingKongSaveHistory == 1 then' "$clear_module"
+
+# The dormant implementation stays available for a future policy change.
 rg -q '<Script file="HistoryUIfunction.lua"/>' Core/FBUI/FBUI.xml
 rg -q 'elseif type == "History" then' Core/FBUI/CreateFBUI.lua
 rg -q 'securecall\(BG\.HistoryUI\)' Core/BiaoGe.lua
-rg -q 'BG\.History\.List:IsShown\(\)' Core/BiaoGe.lua
 rg -q 'function BG\.SaveBiaoGe' "$module"
 rg -q 'function BG\.SetBiaoGeFormHistory' "$module"
 rg -q 'local name = "historyRetentionDays"' Core/Options.lua
@@ -75,4 +88,4 @@ if ! rg -q '当前表格不会被清空' "$module"; then
     exit 1
 fi
 
-echo "History integration and privacy regression tests passed"
+echo "History soft-disable, integration, and privacy regression tests passed"

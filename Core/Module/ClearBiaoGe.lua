@@ -312,7 +312,7 @@ function BG.ClearBiaoGeUI()
                     if clearType then
                         local savedToHistory = false
                         local historyStatus
-                        if BiaoGe.options.autoQingKongSaveHistory == 1 then
+                        if BG.HistoryFeatureEnabled and BiaoGe.options.autoQingKongSaveHistory == 1 then
                             local saved
                             if BG.SaveBiaoGe then
                                 saved, historyStatus = BG.SaveBiaoGe(FB, {

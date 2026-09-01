@@ -405,7 +405,7 @@ BG.Init(function()
     end
 
     -- 本地历史表格：只展示 BGForge 自己的白名单账本快照。
-    if BG.IsTitan then
+    if BG.IsTitan and BG.HistoryFeatureEnabled then
         BG.HistoryMainFrame = CreateFrame("Frame", "BG.HistoryMainFrame", BG.MainFrame)
         local mainFrame = BG.HistoryMainFrame
         mainFrame:Hide()

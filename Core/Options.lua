@@ -1663,7 +1663,7 @@ BG.Init(function()
         O.CreateLine(biaoge, height - h)
         h = h + 15
         -- 历史表格保留时长（Titan Reforged Classic only）
-        if BG.IsTitan then
+        if BG.IsTitan and BG.HistoryFeatureEnabled then
             local name = "historyRetentionDays"
             BG.options[name .. "reset"] = 90
             if BiaoGe.options[name] == nil then
@@ -1717,7 +1717,7 @@ BG.Init(function()
             BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
             local ontext = {
                 L["进本自动清空表格"],
-                L["当你进入一个新CD团本时，表格会自动清空，原表格数据默认保存至历史表格。"],
+                L["当你进入一个新CD团本时，表格会自动清空。"],
                 -- " ",
                 -- L[""],
             }
@@ -1736,7 +1736,7 @@ BG.Init(function()
         end
         h = h + 30
         -- 新 CD 自动清空前保存历史（默认开启）
-        if BG.IsTitan then
+        if BG.IsTitan and BG.HistoryFeatureEnabled then
             local name = "autoQingKongSaveHistory"
             BG.options[name .. "reset"] = 1
             if BiaoGe.options[name] == nil then

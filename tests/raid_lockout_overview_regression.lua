@@ -289,14 +289,15 @@ local function TestRaidColumnsFillAvailableWidth()
     local ui = {
         professionWidth = 100,
         legendaryWidth = 150,
+        fragmentWidth = 100,
         upgradeWidth = 130,
         trinketWidth = 100,
         goldWidth = 88,
         emberWidth = 88,
         shardWidth = 88,
     }
-    local resourceWidths, resourceTotal = calculateResourceWidths(ui, 800)
-    assert(math.abs(resourceTotal - 800) < 0.001,
+    local resourceWidths, resourceTotal = calculateResourceWidths(ui, 1000)
+    assert(math.abs(resourceTotal - 1000) < 0.001,
         "resource columns did not fill the same available width as the raid table")
     assert(resourceWidths.profession > ui.professionWidth
         and resourceWidths.shard > ui.shardWidth,
@@ -721,8 +722,13 @@ local function TestUpgradeItemsAreExcludedFromFinishedLegendaries()
         local itemID = GetTestItemID(itemInfo)
         return "Test Item", "item:" .. tostring(itemID), 5
     end
+    local fragmentIncludedBank
     C_Item = {
-        GetItemCount = function(itemID)
+        GetItemCount = function(itemID, includeBank)
+            if itemID == 22726 then
+                fragmentIncludedBank = includeBank
+                return 17
+            end
             return itemID == 265340 and 1 or 0
         end,
         GetDetailedItemLevelInfo = function(itemInfo)
@@ -779,6 +785,17 @@ local function TestUpgradeItemsAreExcludedFromFinishedLegendaries()
         and stored.legendaryUpgradeItems[1].itemID == 265340
         and stored.legendaryUpgradeItems[1].count == 1,
         "the real legendary upgrade item was not counted correctly")
+    assert(fragmentIncludedBank == true,
+        "legendary fragments must include the current character's bank count")
+    assert(#stored.legendaryFragmentItems == 1
+        and stored.legendaryFragmentItems[1].itemID == 22726
+        and stored.legendaryFragmentItems[1].count == 17
+        and stored.legendaryFragmentItems[1].targetCount == 40,
+        "Atiesh fragments were not captured as extensible legendary-fragment progress")
+
+    local character = BG.GetRaidLockoutStoredCharacters(100)[1]
+    assert(character.legendaryFragmentItems == stored.legendaryFragmentItems,
+        "legendary fragment snapshots did not reach the character-overview model")
 end
 
 local function TestItemTileDisplayUsesRequestedQualitySemantics()
@@ -796,6 +813,9 @@ local function TestItemTileDisplayUsesRequestedQualitySemantics()
     assert(quality == 5 and valueText == "251", "finished legendaries must use legendary quality")
     quality, valueText = getDisplay({ quality = 2, count = 1 }, "count", 5, "×")
     assert(quality == 5 and valueText == "×1", "upgrade-item counts must be clearly marked and orange")
+    quality, valueText = getDisplay({ quality = 5, count = 17, targetCount = 40 }, "count", 5, "×")
+    assert(quality == 5 and valueText == "×17",
+        "legendary-fragment counts must reuse the compact orange item-tile treatment")
 end
 
 local function TestCharacterVisibilityCanBeRestored()
@@ -878,6 +898,14 @@ local function TestItemTilesUseNativeGameTooltip()
     calls = {}
     showTooltip(owner, { itemID = 265340 })
     assert(calls.itemID == 265340, "item ID fallback did not use GameTooltip:SetItemByID")
+
+    calls = {}
+    GameTooltip.AddLine = function(_, line)
+        calls.target = line
+    end
+    showTooltip(owner, { itemID = 22726, targetCount = 40 })
+    assert(calls.target == "目标数量：40",
+        "legendary-fragment tooltips must expose the configured completion target")
 end
 
 local function TestQuestColumnsFollowVaultInTwoGroups()

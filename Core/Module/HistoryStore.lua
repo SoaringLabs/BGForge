@@ -1,5 +1,6 @@
 if BG.IsBlackListPlayer then return end
 if not BG.IsTitan then return end
+if not BG.HistoryFeatureEnabled then return end
 local _, ns = ...
 
 local Maxb = ns.Maxb

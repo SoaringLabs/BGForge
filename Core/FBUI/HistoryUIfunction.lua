@@ -1,5 +1,6 @@
 local _, ns = ...
 if not BG.IsTitan then return end
+if not BG.HistoryFeatureEnabled then return end
 
 local L = ns.L
 

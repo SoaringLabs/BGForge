@@ -21,6 +21,7 @@ local function ResetEnvironment(options)
     end
 
     BG = {
+        HistoryFeatureEnabled = true,
         IsTitan = true,
         FBtable = { "RAID" },
         GetMaxi = function()

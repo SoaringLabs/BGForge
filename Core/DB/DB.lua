@@ -58,6 +58,9 @@ do
     BG.itemOnEnterDelay = 0.02
     BG.addonChannelCount = 10
     BG.LastBagItemFrame = {}
+    -- 历史拍卖表格暂时软下线：源码和旧存档保留，但当前版本不创建入口、
+    -- 不初始化存储，也不在新 CD 自动清表前生成新的历史记录。
+    BG.HistoryFeatureEnabled = false
     -- Lite: 恢复交易/邮件模块所需的存档天数选项（TradeHistory/MailHistory 的保留时长下拉）
     BG.saveDays = {
         { day = 3, text = "3" .. L["天"] },

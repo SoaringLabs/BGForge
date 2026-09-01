@@ -2994,6 +2994,8 @@ do -- Mail history
     L["本周 CD（装等）"] = "Weekly CDs (iLvl)"
     L["角色资源（等级）"] = "Resources (Level)"
     L["橙装"] = "Legendaries"
+    L["橙武碎片"] = "Legendary Fragments"
+    L["目标数量：%d"] = "Required: %d"
     L["饰品"] = "Trinkets"
     L["通用资源"] = "Common Resources"
     L["泰坦余烬"] = "Titan Embers"

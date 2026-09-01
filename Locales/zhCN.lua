@@ -3009,6 +3009,8 @@ do
     L["本周 CD（装等）"] = true
     L["角色资源（等级）"] = true
     L["橙装"] = true
+    L["橙武碎片"] = true
+    L["目标数量：%d"] = true
     L["饰品"] = true
     L["通用资源"] = true
     L["泰坦余烬"] = true
