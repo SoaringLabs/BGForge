@@ -23,6 +23,7 @@ local RAIDS = {
 local QUEST_HEADER_GROUPS = {
     { id = "weekly", name = L["周常"] },
     { id = "professionDaily", name = L["专业日常"] },
+    { id = "professionCooldown", name = L["专业制造"] },
 }
 local QUEST_COLUMNS = {
     {
@@ -71,6 +72,91 @@ local QUEST_COLUMNS = {
     },
 }
 
+-- Titan 3.80.2.69496 的客户端 SpellCooldowns + SkillLineAbility 联表结果。
+-- 这里只保留当前确实存在长 CD 的逻辑项；泰坦精钢与三种专精布已无长 CD。
+-- 炼金转化共享 Category 310，因此多个配方折叠成一个总览项目。
+local PROFESSION_COOLDOWN_DEFINITIONS = {
+    {
+        id = "alchemyResearch",
+        name = L["诺森德炼金研究"],
+        professionName = L["炼金术"],
+        skillLineID = 171,
+        spellIDs = { 60893 },
+    },
+    {
+        id = "alchemyTransmute",
+        name = L["炼金转化"],
+        professionName = L["炼金术"],
+        skillLineID = 171,
+        spellIDs = {
+            11479, 11480,
+            17559, 17560, 17561, 17562, 17563, 17564, 17565, 17566,
+            28566, 28567, 28568, 28569, 28580, 28581, 28582, 28583, 28584, 28585,
+            53771, 53773, 53774, 53775, 53776, 53777, 53779,
+            53780, 53781, 53782, 53783, 53784, 54020,
+            66658, 66659, 66660, 66662, 66663, 66664,
+        },
+    },
+    {
+        id = "inscriptionNorthrendResearch",
+        name = L["诺森德铭文研究"],
+        professionName = L["铭文"],
+        skillLineID = 773,
+        spellIDs = { 61177 },
+    },
+    {
+        id = "inscriptionMinorResearch",
+        name = L["小型铭文研究"],
+        professionName = L["铭文"],
+        skillLineID = 773,
+        spellIDs = { 61288 },
+    },
+    {
+        id = "jewelcraftingBrilliantGlass",
+        name = L["闪亮的玻璃"],
+        professionName = L["珠宝加工"],
+        skillLineID = 755,
+        spellIDs = { 47280 },
+    },
+    {
+        id = "jewelcraftingIcyPrism",
+        name = L["冰冻棱柱"],
+        professionName = L["珠宝加工"],
+        skillLineID = 755,
+        spellIDs = { 62242 },
+    },
+    {
+        id = "tailoringGlacialBag",
+        name = L["冰川背包"],
+        professionName = L["裁缝"],
+        skillLineID = 197,
+        spellIDs = { 56005 },
+    },
+}
+
+local professionCooldownDefinitionByID = {}
+local professionCooldownDefinitionBySpellID = {}
+local professionCooldownSkillLineSet = {}
+local professionCooldownProfessionNameBySkillLineID = {}
+for _, definition in ipairs(PROFESSION_COOLDOWN_DEFINITIONS) do
+    definition.spellIDSet = {}
+    professionCooldownDefinitionByID[definition.id] = definition
+    professionCooldownSkillLineSet[definition.skillLineID] = true
+    professionCooldownProfessionNameBySkillLineID[definition.skillLineID] = definition.professionName
+    for _, spellID in ipairs(definition.spellIDs) do
+        definition.spellIDSet[spellID] = true
+        professionCooldownDefinitionBySpellID[spellID] = definition
+    end
+end
+
+local PROFESSION_COOLDOWN_COLUMN = {
+    id = "professionCooldown",
+    name = L["制造 CD"],
+    compactWidth = 70,
+    groupID = "professionCooldown",
+    isProfessionCooldown = true,
+}
+
 local questColumnByID = {}
 local questColumnByQuestID = {}
 for _, column in ipairs(QUEST_COLUMNS) do
@@ -90,6 +176,7 @@ end
 for _, column in ipairs(QUEST_COLUMNS) do
     LOCKOUT_COLUMNS[#LOCKOUT_COLUMNS + 1] = column
 end
+LOCKOUT_COLUMNS[#LOCKOUT_COLUMNS + 1] = PROFESSION_COOLDOWN_COLUMN
 
 local raidByID = {}
 for _, raid in ipairs(RAIDS) do
@@ -415,6 +502,81 @@ local function CaptureCurrentProfessions()
     return CaptureProfessionsFromPrimaryAPI() or CaptureProfessionsFromSkillLines()
 end
 
+local function IsKnownProfessionSpell(spellID)
+    if IsPlayerSpell and IsPlayerSpell(spellID) then
+        return true
+    end
+    return IsSpellKnown and IsSpellKnown(spellID) and true or false
+end
+
+local function GetActiveProfessionCooldownRemaining(spellID)
+    if not GetSpellCooldown or not GetTime then
+        return 0
+    end
+
+    local startTime, duration = GetSpellCooldown(spellID)
+    startTime = tonumber(startTime) or 0
+    duration = tonumber(duration) or 0
+    -- 忽略公共冷却。这里的候选配方最短也是 20 小时，不应把 1.5 秒 GCD 写进总览。
+    if startTime <= 0 or duration < 60 then
+        return 0
+    end
+
+    local currentTime = GetTime()
+    if startTime > currentTime then
+        startTime = startTime - 2 ^ 32 / 1000
+    end
+    return max(0, startTime + duration - currentTime)
+end
+
+local function GetTradeSkillRecipeSpellID(index)
+    if not GetTradeSkillRecipeLink then
+        return
+    end
+    local link = GetTradeSkillRecipeLink(index)
+    return link and tonumber(link:match("enchant:(%d+)") or link:match("spell:(%d+)")) or nil
+end
+
+local function ScanOpenTradeSkillCooldowns()
+    if not GetNumTradeSkills or not GetTradeSkillInfo or not GetTradeSkillCooldown then
+        return {}, false
+    end
+
+    local count = tonumber(GetNumTradeSkills()) or 0
+    if count <= 0 then
+        return {}, false
+    end
+
+    local snapshots = {}
+    local scannedRecipe = false
+    local scannedSkillLineID
+    if GetTradeSkillLine then
+        local tradeSkillName = GetTradeSkillLine()
+        local professionInfo = tradeSkillName and TITAN_PRIMARY_PROFESSION_INFO[tradeSkillName]
+        scannedSkillLineID = professionInfo and professionInfo.skillLineID or nil
+    end
+    for index = 1, count do
+        local _, skillType = GetTradeSkillInfo(index)
+        if skillType and skillType ~= "header" then
+            scannedRecipe = true
+            local spellID = GetTradeSkillRecipeSpellID(index)
+            local definition = spellID and professionCooldownDefinitionBySpellID[spellID] or nil
+            if definition then
+                scannedSkillLineID = scannedSkillLineID or definition.skillLineID
+                local remaining = tonumber(GetTradeSkillCooldown(index)) or 0
+                local snapshot = snapshots[definition.id]
+                if not snapshot or remaining > snapshot.remaining then
+                    snapshots[definition.id] = {
+                        spellID = spellID,
+                        remaining = max(0, remaining),
+                    }
+                end
+            end
+        end
+    end
+    return snapshots, scannedRecipe and scannedSkillLineID or nil
+end
+
 local function CaptureEquippedTrinkets()
     local trinkets = {}
     for _, slotID in ipairs({ 13, 14 }) do
@@ -720,6 +882,27 @@ local function NormalizeQuestCompletionSnapshot(snapshot, column, now)
     }
 end
 
+local function NormalizeProfessionCooldownSnapshot(snapshot, definition, now)
+    if type(snapshot) ~= "table" or not definition then
+        return
+    end
+
+    local spellID = tonumber(snapshot.spellID)
+    if not spellID or not definition.spellIDSet[spellID] then
+        return
+    end
+
+    local endTime = tonumber(snapshot.endTime)
+    if endTime and endTime <= now then
+        endTime = nil
+    end
+    return {
+        spellID = spellID,
+        endTime = endTime,
+        observedAt = tonumber(snapshot.observedAt),
+    }
+end
+
 local function ClearExpiredRaidData()
     local data = GetDataStore()
     local now = GetServerTime()
@@ -754,6 +937,37 @@ local function ClearExpiredRaidData()
                     character.trinkets = type(character.trinkets) == "table" and character.trinkets or {}
                     character.questCompletions = type(character.questCompletions) == "table"
                         and character.questCompletions or {}
+                    character.professionCooldowns = type(character.professionCooldowns) == "table"
+                        and character.professionCooldowns or {}
+                    character.professionCooldownsUpdatedAt = tonumber(character.professionCooldownsUpdatedAt)
+                    local normalizedCooldownScans = {}
+                    if type(character.professionCooldownScans) == "table" then
+                        for skillLineID, observedAt in pairs(character.professionCooldownScans) do
+                            skillLineID = tonumber(skillLineID)
+                            observedAt = tonumber(observedAt)
+                            if skillLineID and observedAt and professionCooldownSkillLineSet[skillLineID] then
+                                normalizedCooldownScans[skillLineID] = observedAt
+                            end
+                        end
+                    end
+                    character.professionCooldownScans = normalizedCooldownScans
+                    for cooldownID, snapshot in pairs(character.professionCooldowns) do
+                        local previousEndTime = type(snapshot) == "table" and tonumber(snapshot.endTime)
+                        local normalized = NormalizeProfessionCooldownSnapshot(
+                            snapshot,
+                            professionCooldownDefinitionByID[cooldownID],
+                            now
+                        )
+                        if normalized then
+                            character.professionCooldowns[cooldownID] = normalized
+                            if previousEndTime and not normalized.endTime then
+                                changed = true
+                            end
+                        else
+                            character.professionCooldowns[cooldownID] = nil
+                            changed = true
+                        end
+                    end
                     if character.weeklyQuest ~= nil then
                         local migrated = NormalizeQuestCompletionSnapshot(
                             character.weeklyQuest,
@@ -897,6 +1111,77 @@ local function GetOrCreateCurrentCharacterStore()
     return stored
 end
 
+local function CaptureCurrentProfessionCooldowns(stored)
+    stored = stored or GetOrCreateCurrentCharacterStore()
+    if not stored then
+        return false
+    end
+
+    local canInspectKnownSpells = IsPlayerSpell or IsSpellKnown
+    local tradeSkillSnapshots, scannedSkillLineID = ScanOpenTradeSkillCooldowns()
+    if not canInspectKnownSpells and not scannedSkillLineID then
+        return false
+    end
+
+    local now = GetServerTime()
+    local snapshots = type(stored.professionCooldowns) == "table" and stored.professionCooldowns or {}
+    local scans = type(stored.professionCooldownScans) == "table" and stored.professionCooldownScans or {}
+    if scannedSkillLineID then
+        for _, definition in ipairs(PROFESSION_COOLDOWN_DEFINITIONS) do
+            if definition.skillLineID == scannedSkillLineID then
+                snapshots[definition.id] = nil
+            end
+        end
+        scans[scannedSkillLineID] = now
+    end
+
+    local observedKnownSpellSkillLines = {}
+    for _, definition in ipairs(PROFESSION_COOLDOWN_DEFINITIONS) do
+        local tradeSkillSnapshot = tradeSkillSnapshots[definition.id]
+        local knownSpellIDs = {}
+        for _, spellID in ipairs(definition.spellIDs) do
+            if IsKnownProfessionSpell(spellID) then
+                knownSpellIDs[#knownSpellIDs + 1] = spellID
+            end
+        end
+
+        if tradeSkillSnapshot and not definition.spellIDSet[tradeSkillSnapshot.spellID] then
+            tradeSkillSnapshot = nil
+        end
+        if tradeSkillSnapshot or #knownSpellIDs > 0 then
+            if #knownSpellIDs > 0 then
+                observedKnownSpellSkillLines[definition.skillLineID] = true
+            end
+            local observedSpellID = tradeSkillSnapshot and tradeSkillSnapshot.spellID or knownSpellIDs[1]
+            local remaining = tradeSkillSnapshot and tradeSkillSnapshot.remaining or 0
+            for _, spellID in ipairs(knownSpellIDs) do
+                remaining = max(remaining, GetActiveProfessionCooldownRemaining(spellID))
+            end
+            snapshots[definition.id] = {
+                spellID = observedSpellID,
+                endTime = remaining > 0 and (now + remaining) or nil,
+                observedAt = now,
+            }
+        end
+    end
+
+    for skillLineID in pairs(observedKnownSpellSkillLines) do
+        scans[skillLineID] = now
+    end
+
+    -- 按专业增量更新：打开珠宝窗口不能清掉炼金或裁缝已经记录的冷却。
+    -- 只有打开对应专业窗口或检测到已知配方时，才更新该专业的状态。
+    -- 换专业后的旧快照会由当前专业列表在展示层过滤，不在登录早期破坏性删除。
+    local hasProfessionSnapshot = #(stored.professions or {}) > 0
+    if hasProfessionSnapshot or scannedSkillLineID or next(snapshots) then
+        stored.professionCooldowns = snapshots
+        stored.professionCooldownScans = scans
+        stored.professionCooldownsUpdatedAt = now
+        return true
+    end
+    return false
+end
+
 local function GetQuestResetAt(resetType, now)
     local getSeconds
     if C_DateAndTime then
@@ -1001,6 +1286,7 @@ local function CaptureCurrentResources()
     if professions then
         stored.professions = professions
     end
+    CaptureCurrentProfessionCooldowns(stored)
     stored.trinkets = CaptureEquippedTrinkets()
     stored.legendaryUpgradeItems = CaptureLegendaryUpgradeItems()
     stored.legendaryItems = MergeItemSnapshots(
@@ -1073,6 +1359,21 @@ local function ScheduleResourceRefresh(delay)
     end)
 end
 
+local professionCooldownRefreshSerial = 0
+local function ScheduleProfessionCooldownRefresh(delay)
+    professionCooldownRefreshSerial = professionCooldownRefreshSerial + 1
+    local serial = professionCooldownRefreshSerial
+    BG.After(delay or 0.5, function()
+        if serial ~= professionCooldownRefreshSerial then
+            return
+        end
+        local stored = GetOrCreateCurrentCharacterStore()
+        if stored and CaptureCurrentProfessionCooldowns(stored) then
+            RefreshLockoutDisplays()
+        end
+    end)
+end
+
 local function GetCharacterSpecIcon(character)
     local classIcons = BG.talentIcon and BG.talentIcon[character.classFile]
     return classIcons and character.specIndex and classIcons[character.specIndex] or nil
@@ -1125,6 +1426,11 @@ local function BuildCharacterRows(realmID)
                     instances = type(stored.instances) == "table" and stored.instances or {},
                     questCompletions = type(stored.questCompletions) == "table"
                         and stored.questCompletions or {},
+                    professionCooldowns = type(stored.professionCooldowns) == "table"
+                        and stored.professionCooldowns or {},
+                    professionCooldownsUpdatedAt = tonumber(stored.professionCooldownsUpdatedAt),
+                    professionCooldownScans = type(stored.professionCooldownScans) == "table"
+                        and stored.professionCooldownScans or {},
                     ready = true,
                     isHidden = stored.isHidden and true or false,
                     isCurrent = realmID == currentRealmID and name == currentName,
@@ -1178,6 +1484,166 @@ local function FormatResetTime(seconds)
     else
         return minutes .. L["分钟"]
     end
+end
+
+local function FormatCompactCooldownTime(seconds)
+    seconds = max(0, floor(seconds or 0))
+    local days = floor(seconds / 86400)
+    local hours = floor(seconds % 86400 / 3600)
+    local minutes = floor(seconds % 3600 / 60)
+    if days > 0 then
+        return days .. L["天"] .. hours .. L["小时"]
+    elseif hours > 0 then
+        return hours .. L["小时"]
+    end
+    return max(1, minutes) .. L["分钟"]
+end
+
+local function GetProfessionCooldownSummary(character, now)
+    now = now or GetServerTime()
+    local cooldowns = character.professionCooldowns or {}
+    local summary = {
+        entries = {},
+        total = 0,
+        ready = 0,
+        cooling = 0,
+        earliestEndTime = nil,
+        unknown = false,
+        unknownProfessions = {},
+    }
+
+    local learnedSkillLines = {}
+    for _, profession in ipairs(character.professions or {}) do
+        local skillLineID = tonumber(profession.skillLineID)
+        if skillLineID then
+            learnedSkillLines[skillLineID] = true
+        end
+    end
+    local hasProfessionSnapshot = next(learnedSkillLines) ~= nil
+
+    for _, definition in ipairs(PROFESSION_COOLDOWN_DEFINITIONS) do
+        local snapshot = cooldowns[definition.id]
+        if snapshot and (not hasProfessionSnapshot or learnedSkillLines[definition.skillLineID]) then
+            local endTime = tonumber(snapshot.endTime)
+            local isReady = not endTime or endTime <= now
+            summary.total = summary.total + 1
+            summary.ready = summary.ready + (isReady and 1 or 0)
+            summary.cooling = summary.cooling + (isReady and 0 or 1)
+            if not isReady and (not summary.earliestEndTime or endTime < summary.earliestEndTime) then
+                summary.earliestEndTime = endTime
+            end
+            summary.entries[#summary.entries + 1] = {
+                definition = definition,
+                snapshot = snapshot,
+                isReady = isReady,
+                remaining = isReady and 0 or (endTime - now),
+            }
+        end
+    end
+    local scans = character.professionCooldownScans or {}
+    local unknownProfessionSet = {}
+    for _, profession in ipairs(character.professions or {}) do
+        local skillLineID = tonumber(profession.skillLineID)
+        if professionCooldownSkillLineSet[skillLineID] and not scans[skillLineID] then
+            summary.unknown = true
+            local professionName = professionCooldownProfessionNameBySkillLineID[skillLineID]
+            if professionName and not unknownProfessionSet[professionName] then
+                unknownProfessionSet[professionName] = true
+                summary.unknownProfessions[#summary.unknownProfessions + 1] = professionName
+            end
+        end
+    end
+    return summary
+end
+
+local function UpdateProfessionCooldownStatusDisplay(status, character)
+    status.check:Hide()
+    status.text:SetText("")
+    if status.background then
+        status.background:SetColorTexture(unpack(status.baseColor or { 0, 0, 0, 0 }))
+    end
+
+    local summary = GetProfessionCooldownSummary(character)
+    if summary.unknown then
+        status.text:SetText("?")
+        status.text:SetTextColor(0.48, 0.48, 0.48)
+    elseif summary.total == 0 then
+        return
+    elseif summary.ready == summary.total then
+        status.check:Show()
+        if status.background then
+            status.background:SetColorTexture(unpack(COLOR.complete))
+        end
+    else
+        if summary.ready > 0 then
+            status.text:SetFormattedText("%d/%d", summary.ready, summary.total)
+        else
+            status.text:SetText(FormatCompactCooldownTime(summary.earliestEndTime - GetServerTime()))
+        end
+        status.text:SetTextColor(1, 0.68, 0.18)
+        if status.background then
+            status.background:SetColorTexture(unpack(COLOR.partial))
+        end
+    end
+end
+
+local function ShowProfessionCooldownTooltip(cell)
+    local character = cell and cell.character
+    if not character or not GameTooltip then
+        return
+    end
+
+    local summary = GetProfessionCooldownSummary(character)
+    if summary.total == 0 and not summary.unknown then
+        return
+    end
+
+    local anchor = BG.ButtonIsInRight(cell) and "ANCHOR_LEFT" or "ANCHOR_RIGHT"
+    GameTooltip:SetOwner(cell, anchor, 0, 0)
+    GameTooltip:ClearLines()
+    GameTooltip:AddLine(L["专业制造"] .. "（" .. character.name .. "）", 0.95, 0.67, 0.29)
+    if #summary.entries > 0 then
+        local previousProfession
+        for _, entry in ipairs(summary.entries) do
+            local definition = entry.definition
+            if definition.professionName ~= previousProfession then
+                if previousProfession then
+                    GameTooltip:AddLine(" ")
+                end
+                GameTooltip:AddLine(definition.professionName, 1, 0.82, 0)
+                previousProfession = definition.professionName
+            end
+            if entry.isReady then
+                GameTooltip:AddDoubleLine(
+                    definition.name,
+                    L["可制造"],
+                    0.9, 0.9, 0.9,
+                    0.2, 1, 0.2
+                )
+            else
+                GameTooltip:AddDoubleLine(
+                    definition.name,
+                    FormatResetTime(entry.remaining),
+                    0.9, 0.9, 0.9,
+                    1, 0.68, 0.18
+                )
+            end
+        end
+    end
+    if summary.unknown then
+        if #summary.entries > 0 then
+            GameTooltip:AddLine(" ")
+        end
+        GameTooltip:AddLine(L["尚未扫描以下专业："], 0.9, 0.9, 0.9)
+        for _, professionName in ipairs(summary.unknownProfessions) do
+            GameTooltip:AddLine("  " .. professionName, 1, 0.82, 0)
+        end
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(L["如何记录"], 1, 0.82, 0)
+        GameTooltip:AddLine(L["登录该角色后，打开一次上述专业的制造窗口。"], 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine(L["首次扫描完成后会自动保存，以后无需重复打开。"], 0.55, 0.75, 0.55, true)
+    end
+    GameTooltip:Show()
 end
 
 local function GetRaidResetTime()
@@ -1587,7 +2053,11 @@ local function CreateOverviewFrame()
         for _, column in ipairs(LOCKOUT_COLUMNS) do
             local cell = CreateStatusDisplay(row, cellWidth, rowHeight)
             cell:SetPoint("LEFT", nameWidth, 0)
-            if not column.isQuest then
+            if column.isProfessionCooldown then
+                cell:EnableMouse(true)
+                cell:SetScript("OnEnter", ShowProfessionCooldownTooltip)
+                cell:SetScript("OnLeave", GameTooltip_Hide)
+            elseif not column.isQuest then
                 cell:EnableMouse(true)
                 cell.raid = column
                 cell:SetScript("OnEnter", ShowLockoutTooltip)
@@ -1653,6 +2123,8 @@ local function CreateOverviewFrame()
                 cell.character = character
                 if column.isQuest then
                     UpdateQuestStatusDisplay(cell, character, column)
+                elseif column.isProfessionCooldown then
+                    UpdateProfessionCooldownStatusDisplay(cell, character)
                 else
                     UpdateStatusDisplay(cell, character, GetPrimaryLockout(character.instances[column.id]), false)
                 end
@@ -2199,6 +2671,23 @@ local function CreateHoverFrame()
             local cell = CreateStatusDisplay(contentFrame, column.compactWidth, ui.rowHeight, 15, 11, true)
             cell.column = column
             CreateRowHoverOverlay(cell, row.raidHoverOverlays)
+            if column.isProfessionCooldown then
+                cell:SetFrameLevel(hoverFrame:GetFrameLevel() + 11)
+                cell:EnableMouse(true)
+                cell:SetScript("OnEnter", function(self)
+                    hoverHideSerial = hoverHideSerial + 1
+                    if row.raidHover then
+                        AnimateRowHover(row.raidHover, 0.16)
+                    end
+                    ShowProfessionCooldownTooltip(self)
+                end)
+                cell:SetScript("OnLeave", function()
+                    if row.raidHover then
+                        AnimateRowHover(row.raidHover, 0)
+                    end
+                    GameTooltip:Hide()
+                end)
+            end
             row.raidCells[column.id] = cell
         end
 
@@ -2312,6 +2801,7 @@ local function CreateHoverFrame()
         titanShardCurrencyID = TITAN_SHARD_CURRENCY_ID,
         updateStatusDisplay = UpdateStatusDisplay,
         updateQuestStatusDisplay = UpdateQuestStatusDisplay,
+        updateProfessionCooldownStatusDisplay = UpdateProfessionCooldownStatusDisplay,
     }
 
     updateHoverFrame = function()
@@ -2511,6 +3001,8 @@ local function CreateHoverFrame()
                 cell.baseColor = rowColor
                 if column.isQuest then
                     renderContext.updateQuestStatusDisplay(cell, character, column)
+                elseif column.isProfessionCooldown then
+                    renderContext.updateProfessionCooldownStatusDisplay(cell, character)
                 else
                     renderContext.updateStatusDisplay(
                         cell,
@@ -2915,6 +3407,22 @@ BG.RegisterEvent({
     "SKILL_LINES_CHANGED",
 }, function()
     ScheduleResourceRefresh(0.2)
+end)
+
+BG.RegisterEvent({ "TRADE_SKILL_SHOW", "TRADE_SKILL_UPDATE" }, function()
+    ScheduleProfessionCooldownRefresh(0.2)
+end)
+
+BG.RegisterEvent("SPELL_UPDATE_COOLDOWN", function()
+    if not InCombatLockdown or not InCombatLockdown() then
+        ScheduleProfessionCooldownRefresh(0.5)
+    end
+end)
+
+BG.RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", function(_, _, unitTarget, _, spellID)
+    if unitTarget == "player" and professionCooldownDefinitionBySpellID[tonumber(spellID)] then
+        ScheduleProfessionCooldownRefresh(0.8)
+    end
 end)
 
 BG.RegisterEvent("BAG_UPDATE_DELAYED", function()

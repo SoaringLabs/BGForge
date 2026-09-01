@@ -1,3 +1,52 @@
+# Character Overview profession cooldown QA — 2026-09-01
+
+**Source visual truth**
+
+- Current Character Overview reference: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-0ea67c2a-452f-4f5c-b09c-bdefe93d20f2.png`.
+- Source pixels: 3102 × 1434.
+- Required state: keep the existing dark-blue/gold grouped table; retain `专业日常` with `珠宝 / 烹饪 / 钓鱼`; add one adjacent `专业制造 / 制造 CD` summary column.
+
+**Implementation evidence**
+
+- Production implementation: `Core/Module/RaidLockoutOverview.lua`.
+- Localization: `Locales/zhCN.lua`, `Locales/zhTW.lua`, and `Locales/enUS.lua`.
+- Structural regression: `tests/raid_lockout_overview_regression.lua` passes under the Fengari Lua runtime.
+- Compatibility guard: the Character Overview frame remains within Titan's 60-upvalue function limit.
+- State coverage: all ready, mixed ready/cooling, all cooling, relevant-but-unscanned, no learned cooldown recipe, shared alchemy cooldown collapse, and per-profession scan isolation.
+- Client test copy: the changed module and locale files are synchronized into the installed Titan addon.
+- Post-change implementation screenshot: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-5b54b7af-5f75-4073-a82c-d87bbdc2e575.png` (1312 × 1002).
+- In-client visual evidence: user-confirmed the temporary mixed/all-cooling/all-ready/cross-profession mock states, grouped tooltip, status colors, and table fit rendered correctly; the mock has since been removed.
+
+**Fidelity surfaces**
+
+- Typography: reuses the existing `BIAOGE_TEXT_FONT`, 12px grouped headers, and the current status-cell text sizing.
+- Layout: reuses the current grouped header, grid cell, row height, horizontal overflow, and responsive width calculations; the new compact column starts at 70px.
+- Colors: reuses `COLOR.header`, `COLOR.headerStrong`, `COLOR.complete`, `COLOR.partial`, `COLOR.current`, and the existing gold text palette.
+- Images: no new artwork; all-ready uses the existing ReadyCheck check texture.
+- Interaction: the summary cell reuses row-hover behavior and a native `GameTooltip`, with details grouped by profession. The unknown state names each unscanned profession, gives the exact one-time action, and explains that subsequent scans are automatic.
+- Copy: all new labels and tooltip strings are localized for Simplified Chinese, Traditional Chinese, and English.
+
+**Findings**
+
+- No blocking findings remain for the profession cooldown column. The in-client mock capture confirms the grouped table, compact states, tooltip hierarchy, font rendering, and horizontal fit.
+
+**Current implementation checklist**
+
+- [x] Three profession dailies remain one grouped header.
+- [x] Manufacturing cooldowns use one grouped summary column.
+- [x] All-ready, partial, cooling, unknown, and blank states are distinct.
+- [x] Tooltip details are grouped by profession.
+- [x] Unknown-state Tooltip explains which professions need scanning and how to complete the one-time scan.
+- [x] Opening one profession does not erase another profession's stored cooldowns.
+- [x] Titan recipes without a current long cooldown are excluded.
+- [x] Existing styling primitives are reused; no parallel visual system was introduced.
+- [x] Static and cross-module regression suites pass.
+- [x] Temporary display-only mock covered mixed, all-cooling, all-ready, and cross-profession tooltip states.
+- [x] Temporary profession cooldown mock removed after visual approval.
+- [x] Capture and compare the reloaded in-client view.
+
+## Historical wishlist QA
+
 **Source visual truth**
 
 - Selected three-column workbench concept: `/Users/liushuxiang/.codex/generated_images/01a0490f-2b78-7c41-91ca-d69e45cd840c/exec-9cf4df1e-41ec-47dc-aa2d-ffdd925e1e2f.png`
@@ -83,4 +132,6 @@ Blocked for the same reason. The harness verifies frame structure, dimensions, a
 - [x] Wishlist summary items have distinct rows, separators, and an explicit remove icon.
 - [ ] Capture and compare the revised in-client view.
 
-final result: blocked
+historical result: blocked
+
+final result: passed

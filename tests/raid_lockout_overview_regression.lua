@@ -46,6 +46,18 @@ local function ResetEnvironment()
     GetServerTime = function()
         return 1700000000
     end
+    GetTime = function()
+        return 1000
+    end
+    IsPlayerSpell = nil
+    IsSpellKnown = nil
+    GetSpellCooldown = nil
+    GetNumTradeSkills = nil
+    GetTradeSkillInfo = nil
+    GetTradeSkillLine = nil
+    GetTradeSkillRecipeLink = nil
+    GetTradeSkillCooldown = nil
+    InCombatLockdown = nil
     GetInventoryItemLink = function()
         return nil
     end
@@ -340,6 +352,20 @@ local function TestWideTablesUseScreenBoundedViewport()
         "tables that fit the screen must not enable horizontal overflow")
 end
 
+local function TestHoverFrameStaysWithinTitanUpvalueLimit()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local count = 0
+    for index = 1, 100 do
+        if not debug.getupvalue(createHoverFrame, index) then
+            break
+        end
+        count = count + 1
+    end
+    assert(count <= 60, "CreateHoverFrame exceeded Titan's 60-upvalue compiler limit")
+end
+
 local function TestEquipmentUsesIconTilesWithTopLeftValues()
     local BG = ResetEnvironment()
     local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
@@ -447,6 +473,221 @@ local function TestResourceRefreshEventsAreDebounced()
     end
 
     assert(captures == 1, "bursty resource events should produce one resource capture")
+end
+
+local function TestTitanProfessionCooldownSnapshotsAndSummary()
+    local BG, events = ResetEnvironment()
+    IsPlayerSpell = function(spellID)
+        return spellID == 47280 or spellID == 62242 or spellID == 56005 or spellID == 56003
+    end
+    GetSpellCooldown = function(spellID)
+        if spellID == 62242 then
+            return 500, 72000
+        elseif spellID == 56003 then
+            return 500, 99999
+        end
+        return 0, 0
+    end
+
+    assert(events.SPELL_UPDATE_COOLDOWN, "profession cooldown refresh event is missing")
+    events.SPELL_UPDATE_COOLDOWN()
+
+    local stored = GetStoredCharacter()
+    local cooldowns = stored.professionCooldowns
+    assert(cooldowns.jewelcraftingBrilliantGlass
+        and cooldowns.jewelcraftingBrilliantGlass.endTime == nil,
+        "ready Brilliant Glass was not retained as a known cooldown recipe")
+    assert(cooldowns.jewelcraftingIcyPrism
+        and cooldowns.jewelcraftingIcyPrism.endTime == 1700071500,
+        "active Icy Prism cooldown did not persist its server end time")
+    assert(cooldowns.tailoringGlacialBag and cooldowns.tailoringGlacialBag.endTime == nil,
+        "ready Glacial Bag was not retained as a known cooldown recipe")
+    assert(cooldowns.tailoringSpellweave == nil and cooldowns.titansteel == nil,
+        "Titan recipes without a long cooldown leaked into the candidate snapshots")
+
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    local updateCooldownStatus = FindUpvalue(createHoverFrame, "UpdateProfessionCooldownStatusDisplay")
+    assert(updateCooldownStatus, "profession cooldown summary renderer is missing")
+    local status = {
+        check = {
+            Hide = function(self) self.shown = false end,
+            Show = function(self) self.shown = true end,
+        },
+        text = {
+            SetText = function(self, value) self.value = value end,
+            SetFormattedText = function(self, pattern, ...) self.value = string.format(pattern, ...) end,
+            SetTextColor = function(self, ...) self.color = { ... } end,
+        },
+        background = {
+            SetColorTexture = function(self, ...) self.color = { ... } end,
+        },
+        baseColor = { 0.02, 0.07, 0.09, 0.9 },
+    }
+    local character = BG.GetRaidLockoutStoredCharacters(100)[1]
+    updateCooldownStatus(status, character)
+    assert(status.text.value == "2/3" and status.background.color[1] == 0.36,
+        "mixed cooldowns must render the compact ready/total summary")
+
+    character.professionCooldowns.jewelcraftingIcyPrism.endTime = nil
+    updateCooldownStatus(status, character)
+    assert(status.check.shown and status.background.color[1] == 0.1,
+        "all-ready crafting cooldowns must render the existing green-check state")
+end
+
+local function TestAlchemyTransmutesCollapseIntoOneSharedCooldown()
+    local _, events = ResetEnvironment()
+    IsPlayerSpell = function(spellID)
+        return spellID == 66658 or spellID == 66660
+    end
+    GetSpellCooldown = function(spellID)
+        if spellID == 66660 then
+            return 700, 72000
+        end
+        return 0, 0
+    end
+
+    events.SPELL_UPDATE_COOLDOWN()
+    local cooldowns = GetStoredCharacter().professionCooldowns
+    local count = 0
+    for _ in pairs(cooldowns) do
+        count = count + 1
+    end
+    assert(count == 1 and cooldowns.alchemyTransmute,
+        "shared alchemy transmutes must collapse into one logical overview item")
+    assert(cooldowns.alchemyTransmute.endTime == 1700071700,
+        "shared transmute cooldown did not keep the longest active category cooldown")
+end
+
+local function TestOpenTradeSkillCooldownIsCapturedByRecipeIndex()
+    local _, events = ResetEnvironment()
+    GetNumTradeSkills = function()
+        return 2
+    end
+    GetTradeSkillInfo = function(index)
+        if index == 1 then
+            return "Jewelcrafting", "header"
+        end
+        return "Icy Prism", "optimal"
+    end
+    GetTradeSkillRecipeLink = function(index)
+        return index == 2 and "|cffffd000|Henchant:62242|h[Icy Prism]|h|r" or nil
+    end
+    GetTradeSkillCooldown = function(index)
+        return index == 2 and 36000 or nil
+    end
+
+    assert(events.TRADE_SKILL_UPDATE, "trade-skill cooldown capture event is missing")
+    events.TRADE_SKILL_UPDATE()
+    local snapshot = GetStoredCharacter().professionCooldowns.jewelcraftingIcyPrism
+    assert(snapshot and snapshot.spellID == 62242 and snapshot.endTime == 1700036000,
+        "open trade-skill recipe cooldown was not captured by recipe index")
+end
+
+local function TestTradeSkillScanPreservesOtherProfessionCooldowns()
+    local _, events = ResetEnvironment()
+    IsPlayerSpell = function(spellID)
+        return spellID == 62242 or spellID == 56005
+    end
+    GetSpellCooldown = function()
+        return 0, 0
+    end
+    events.SPELL_UPDATE_COOLDOWN()
+
+    local stored = GetStoredCharacter()
+    assert(stored.professionCooldowns.jewelcraftingIcyPrism
+        and stored.professionCooldowns.tailoringGlacialBag,
+        "initial profession cooldown snapshots are missing")
+
+    IsPlayerSpell = nil
+    GetTradeSkillLine = function()
+        return "珠宝加工"
+    end
+    GetNumTradeSkills = function()
+        return 1
+    end
+    GetTradeSkillInfo = function()
+        return "Icy Prism", "optimal"
+    end
+    GetTradeSkillRecipeLink = function()
+        return "|cffffd000|Henchant:62242|h[Icy Prism]|h|r"
+    end
+    GetTradeSkillCooldown = function()
+        return 18000
+    end
+    events.TRADE_SKILL_UPDATE()
+
+    stored = GetStoredCharacter()
+    assert(stored.professionCooldowns.jewelcraftingIcyPrism.endTime == 1700018000,
+        "open profession scan did not refresh its own cooldown")
+    assert(stored.professionCooldowns.tailoringGlacialBag,
+        "opening Jewelcrafting incorrectly erased Tailoring cooldowns")
+end
+
+local function TestRelevantUnscannedProfessionRendersUnknown()
+    local BG, events = ResetEnvironment()
+    events.PLAYER_MONEY()
+    local stored = GetStoredCharacter()
+    stored.professions = { { skillLineID = 755, rank = 450, maxRank = 450 } }
+    stored.professionCooldowns = {}
+    stored.professionCooldownScans = {}
+
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    local updateCooldownStatus = FindUpvalue(createHoverFrame, "UpdateProfessionCooldownStatusDisplay")
+    local showCooldownTooltip = FindUpvalue(createHoverFrame, "ShowProfessionCooldownTooltip")
+    assert(updateCooldownStatus and showCooldownTooltip,
+        "profession cooldown unknown-state UI helpers are missing")
+    local status = {
+        check = {
+            Hide = function(self) self.shown = false end,
+            Show = function(self) self.shown = true end,
+        },
+        text = {
+            SetText = function(self, value) self.value = value end,
+            SetFormattedText = function(self, pattern, ...) self.value = string.format(pattern, ...) end,
+            SetTextColor = function(self, ...) self.color = { ... } end,
+        },
+        background = {
+            SetColorTexture = function(self, ...) self.color = { ... } end,
+        },
+        baseColor = { 0.02, 0.07, 0.09, 0.9 },
+    }
+
+    local character = BG.GetRaidLockoutStoredCharacters(100)[1]
+    updateCooldownStatus(status, character)
+    assert(status.text.value == "?" and status.text.color[1] == 0.48,
+        "a relevant but unscanned profession must render the gray unknown state")
+
+    local tooltipLines = {}
+    GameTooltip = {
+        SetOwner = function() end,
+        ClearLines = function()
+            tooltipLines = {}
+        end,
+        AddLine = function(_, text)
+            tooltipLines[#tooltipLines + 1] = text
+        end,
+        AddDoubleLine = function(_, left, right)
+            tooltipLines[#tooltipLines + 1] = left .. " " .. right
+        end,
+        Show = function() end,
+    }
+    BG.ButtonIsInRight = function()
+        return false
+    end
+    showCooldownTooltip({ character = character })
+    local tooltipText = table.concat(tooltipLines, "\n")
+    assert(tooltipText:find("尚未扫描以下专业：", 1, true)
+        and tooltipText:find("珠宝加工", 1, true)
+        and tooltipText:find("如何记录", 1, true)
+        and tooltipText:find("打开一次上述专业的制造窗口", 1, true)
+        and tooltipText:find("以后无需重复打开", 1, true),
+        "unknown-state tooltip must identify the profession and explain the one-time action")
+
+    stored.professionCooldownScans[755] = 1700000000
+    character = BG.GetRaidLockoutStoredCharacters(100)[1]
+    updateCooldownStatus(status, character)
+    assert(status.text.value == "" and not status.check.shown,
+        "a scanned profession with no learned cooldown recipes must render blank")
 end
 
 local function TestUpgradeItemsAreExcludedFromFinishedLegendaries()
@@ -654,27 +895,38 @@ local function TestQuestColumnsFollowVaultInTwoGroups()
         { id = "jewelcraftingDaily", groupID = "professionDaily" },
         { id = "cookingDaily", groupID = "professionDaily" },
         { id = "fishingDaily", groupID = "professionDaily" },
+        { id = "professionCooldown", groupID = "professionCooldown", isProfessionCooldown = true },
     }
     assert(columns[#columns - #expected].id == 624,
         "quest groups must appear immediately after Vault of Archavon")
     for index, expectation in ipairs(expected) do
         local column = columns[#columns - #expected + index]
-        assert(column.id == expectation.id and column.groupID == expectation.groupID and column.isQuest,
-            "quest columns are missing or out of group order")
+        assert(column.id == expectation.id and column.groupID == expectation.groupID,
+            "grouped status columns are missing or out of group order")
+        if expectation.isProfessionCooldown then
+            assert(column.isProfessionCooldown and not column.isQuest,
+                "profession crafting must use its dedicated summary renderer")
+        else
+            assert(column.isQuest, "quest column lost its quest semantics")
+        end
     end
 
     local groups = getGroups(columns)
-    assert(#groups == 2, "expected weekly and profession-daily header groups")
+    assert(#groups == 3, "expected weekly, profession-daily, and profession-crafting header groups")
     assert(groups[1].id == "weekly" and groups[1].name == "周常" and #groups[1].columns == 2,
         "weekly two-level header group is incorrect")
     assert(groups[2].id == "professionDaily" and groups[2].name == "专业日常"
         and #groups[2].columns == 3,
         "profession-daily two-level header group is incorrect")
+    assert(groups[3].id == "professionCooldown" and groups[3].name == "专业制造"
+        and #groups[3].columns == 1 and groups[3].columns[1].id == "professionCooldown",
+        "profession-crafting two-level header group is incorrect")
 
     local choices = BG.GetRaidLockoutDisplayChoices()
-    assert(#choices == 13, "settings should expose eleven raids and exactly two quest groups")
-    local weeklyChoice = choices[#choices - 1]
-    local professionDailyChoice = choices[#choices]
+    assert(#choices == 14, "settings should expose eleven raids and exactly three grouped status choices")
+    local weeklyChoice = choices[#choices - 2]
+    local professionDailyChoice = choices[#choices - 1]
+    local professionCooldownChoice = choices[#choices]
     assert(weeklyChoice.id == "weekly"
         and weeklyChoice.name == "周常"
         and weeklyChoice.optionKey == "raidLockoutShowGroup_weekly",
@@ -683,6 +935,10 @@ local function TestQuestColumnsFollowVaultInTwoGroups()
         and professionDailyChoice.name == "专业日常"
         and professionDailyChoice.optionKey == "raidLockoutShowGroup_professionDaily",
         "profession dailies must be exposed as one group-level display choice")
+    assert(professionCooldownChoice.id == "professionCooldown"
+        and professionCooldownChoice.name == "专业制造"
+        and professionCooldownChoice.optionKey == "raidLockoutShowGroup_professionCooldown",
+        "profession crafting must be exposed as one group-level display choice")
 
     local calculateWidths = FindUpvalue(createHoverFrame, "CalculateRaidColumnWidths")
     local widths, totalWidth = calculateWidths(columns, 900)
@@ -700,15 +956,20 @@ local function TestQuestColumnsFollowVaultInTwoGroups()
             "disabling weekly quests must hide every weekly child column")
     end
     groups = getGroups(columns)
-    assert(#groups == 1 and groups[1].id == "professionDaily" and #groups[1].columns == 3,
-        "disabling weekly quests must leave the complete profession-daily group intact")
+    assert(#groups == 2 and groups[1].id == "professionDaily" and #groups[1].columns == 3
+        and groups[2].id == "professionCooldown",
+        "disabling weekly quests must leave both profession groups intact")
 
     BiaoGe.options.raidLockoutShowGroup_professionDaily = 0
     columns = getColumns()
+    assert(#getGroups(columns) == 1 and getGroups(columns)[1].id == "professionCooldown",
+        "disabling both quest groups must leave profession crafting intact")
+    BiaoGe.options.raidLockoutShowGroup_professionCooldown = 0
+    columns = getColumns()
     for _, column in ipairs(columns) do
-        assert(not column.groupID, "disabling both quest groups must hide all quest columns")
+        assert(not column.groupID, "disabling all grouped statuses must hide every child column")
     end
-    assert(#getGroups(columns) == 0, "disabled quest groups must hide both parent headers")
+    assert(#getGroups(columns) == 0, "disabled status groups must hide every parent header")
 
     local status = {
         check = {
@@ -842,10 +1103,16 @@ local tests = {
     raid_width = TestRaidColumnsFillAvailableWidth,
     wide_font_headers = TestWideFontHeadersExpandColumns,
     wide_table_viewport = TestWideTablesUseScreenBoundedViewport,
+    hover_upvalues = TestHoverFrameStaysWithinTitanUpvalueLimit,
     item_tiles = TestEquipmentUsesIconTilesWithTopLeftValues,
     profession_tiles = TestProfessionsUseMatchingIconTilesWithFixedColor,
     collapsed_headers = TestCollapsedSkillHeadersExpandOnceWithoutEventLoop,
     debounce = TestResourceRefreshEventsAreDebounced,
+    profession_cooldowns = TestTitanProfessionCooldownSnapshotsAndSummary,
+    transmute_group = TestAlchemyTransmutesCollapseIntoOneSharedCooldown,
+    trade_skill_cooldown = TestOpenTradeSkillCooldownIsCapturedByRecipeIndex,
+    trade_skill_isolation = TestTradeSkillScanPreservesOtherProfessionCooldowns,
+    profession_cooldown_unknown = TestRelevantUnscannedProfessionRendersUnknown,
     legendary_classification = TestUpgradeItemsAreExcludedFromFinishedLegendaries,
     item_quality = TestItemTileDisplayUsesRequestedQualitySemantics,
     character_visibility = TestCharacterVisibilityCanBeRestored,
@@ -863,9 +1130,15 @@ else
         "fallback", "preserve", "primary", "incomplete_primary", "raid_width",
         "wide_font_headers", "item_tiles",
         "wide_table_viewport",
+        "hover_upvalues",
         "profession_tiles",
         "collapsed_headers",
         "debounce",
+        "profession_cooldowns",
+        "transmute_group",
+        "trade_skill_cooldown",
+        "trade_skill_isolation",
+        "profession_cooldown_unknown",
         "legendary_classification",
         "item_quality",
         "character_visibility",
