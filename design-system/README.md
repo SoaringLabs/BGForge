@@ -15,6 +15,7 @@
 - [`MASTER.md`](MASTER.md)：品牌、颜色、字体、间距、状态、组件和 Lua 使用规则的唯一事实来源。
 - [`pages/character-overview.md`](pages/character-overview.md)：右上角角色总览的页面级规范。
 - [`pages/auction-workspace.md`](pages/auction-workspace.md)：主体拍卖/记账界面的页面级规范。
+- [`pages/wishlist.md`](pages/wishlist.md)：心愿清单工作台的页面级规范。
 - `Core/UI/DesignSystem.lua`：可直接在 WoW 内使用的 tokens 与基础控件实现。
 
 ## 已实现的基础能力

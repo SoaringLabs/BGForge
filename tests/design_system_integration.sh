@@ -4,6 +4,7 @@ set -euo pipefail
 
 module="Core/UI/DesignSystem.lua"
 overview="Core/Module/RaidLockoutOverview.lua"
+wishlist="Core/Module/WishlistUI.lua"
 
 if ! rg -q '^Core\\UI\\DesignSystem\.lua$' BGForge.toc; then
     echo "Design-system module is not loaded by BGForge.toc" >&2
@@ -55,6 +56,25 @@ if rg -q 'local function AnimateRowHover' "$overview"; then
 fi
 if rg -Fq 'overlay:SetColorTexture(unpack(COLOR.focus))' "$overview"; then
     echo "Character-overview row hover must not reuse the selected-state color" >&2
+    exit 1
+fi
+
+rg -Fq 'Design.Token("color", token)' "$wishlist"
+rg -Fq 'Design.Style(clearButton, "button", {' "$wishlist"
+rg -Fq 'variant = "danger"' "$wishlist"
+rg -Fq 'row.hoverBackground:SetVertexColor(unpack(COLOR.rowHoverWash))' "$wishlist"
+rg -Fq 'button.selectedBackground:SetVertexColor(unpack(COLOR.selected))' "$wishlist"
+rg -Fq 'button.selectedAccent:SetVertexColor(unpack(COLOR.focus))' "$wishlist"
+if rg -q 'SetHighlightTexture\((row\.hoverBackground|hover)\)' "$wishlist"; then
+    echo "Wishlist hover washes must preserve token alpha through manual visibility" >&2
+    exit 1
+fi
+if rg -q 'local (SURFACE|SURFACE_RAISED|BORDER|GOLD|CYAN|MUTED|WHITE|ITEM_SELECTED|ITEM_HOVER) = \{' "$wishlist"; then
+    echo "Wishlist reintroduced a private structural color palette" >&2
+    exit 1
+fi
+if rg -q '0\.018, 0\.055, 0\.065|0\.36, 0\.25, 0\.06|0\.28, 0\.18, 0\.05' "$wishlist"; then
+    echo "Wishlist reintroduced its legacy teal/brown theme" >&2
     exit 1
 fi
 

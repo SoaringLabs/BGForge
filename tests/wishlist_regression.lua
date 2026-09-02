@@ -113,6 +113,7 @@ local chunk, loadError = loadfile(sourcePath)
 if not chunk then error(loadError) end
 chunk("BGForge", namespace)
 
+assert(loadfile("Core/UI/DesignSystem.lua"))("BGForge", namespace)
 local uiChunk, uiLoadError = loadfile("Core/Module/WishlistUI.lua")
 if not uiChunk then error(uiLoadError) end
 uiChunk("BGForge", namespace)

@@ -432,6 +432,7 @@ local function CreateControls(parent)
     label:SetFont(BIAOGE_TEXT_FONT, 14, "OUTLINE")
     label:SetTextColor(1, 0.82, 0)
     label:SetText(L["装备过滤："])
+    frame.label = label
 
     for index, scheme in ipairs(classSchemes) do
         local button = CreateFrame("Button", nil, frame)

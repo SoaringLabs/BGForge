@@ -8,16 +8,35 @@ local Wishlist = BG.Wishlist
 
 if not Wishlist then return end
 
-local SURFACE = { 0.018, 0.055, 0.065, 0.94 }
-local SURFACE_RAISED = { 0.025, 0.085, 0.095, 0.96 }
-local BORDER = { 0.42, 0.30, 0.13, 0.72 }
-local GOLD = { 1.00, 0.63, 0.12 }
-local CYAN = { 0.00, 0.75, 1.00 }
-local MUTED = { 0.63, 0.67, 0.68 }
-local WHITE = { 0.94, 0.96, 0.96 }
--- 沿用“全角色总览”的棕色语言，但拉开层级：选中更亮，悬停更暗。
-local ITEM_SELECTED = { 0.36, 0.25, 0.06, 0.82 }
-local ITEM_HOVER = { 0.28, 0.18, 0.05, 0.26 }
+local Design = assert(BG.UI, "BGForge design system must load before WishlistUI")
+
+local function DesignColor(token, alpha)
+    local color = Design.Token("color", token)
+    if alpha ~= nil then
+        color[4] = alpha
+    end
+    return color
+end
+
+-- Wishlist keeps item-quality, class, and boss colors as content data. Every
+-- structural surface and interaction state comes from the shared Arcane
+-- Archive palette so this page no longer carries its former teal/brown theme.
+local COLOR = {
+    raised = DesignColor("raised"),
+    header = DesignColor("header"),
+    hover = DesignColor("hover"),
+    rowHoverWash = DesignColor("rowHoverWash"),
+    selected = DesignColor("focusSurface"),
+    border = DesignColor("borderSubtle"),
+    borderStrong = DesignColor("borderStrong"),
+    focus = DesignColor("focus"),
+    focusText = DesignColor("focusText"),
+    textPrimary = DesignColor("textPrimary"),
+    textSecondary = DesignColor("textSecondary"),
+    textMuted = DesignColor("textMuted"),
+    success = DesignColor("success"),
+    danger = DesignColor("danger"),
+}
 
 local ITEM_HEIGHT = 34
 local ITEM_GAP = 6
@@ -32,6 +51,9 @@ local tokenMetadata = {}
 local pendingItemLoads = {}
 local refreshScheduled
 local classCatalog
+local resizeRefreshPending
+local viewportHeight
+local outerScrollKey
 
 local function SendFeedback(text)
     if BG.SendSystemMessage then
@@ -55,6 +77,21 @@ local function ScheduleRefresh()
     else
         Run()
     end
+end
+
+local function RefreshAfterFrameResize(frame)
+    if not BG.FrameDongHuaFrame then
+        Wishlist.Refresh()
+        return
+    end
+    if resizeRefreshPending then return end
+    resizeRefreshPending = true
+    frame:SetScript("OnUpdate", function(self)
+        if BG.FrameDongHuaFrame then return end
+        self:SetScript("OnUpdate", nil)
+        resizeRefreshPending = nil
+        Wishlist.Refresh()
+    end)
 end
 
 local function GetClassCatalog()
@@ -463,8 +500,7 @@ local function AcquirePanel(parent)
         ui.panels[ui.panelIndex] = panel
     end
     panel:ClearAllPoints()
-    panel:SetBackdropColor(unpack(SURFACE))
-    panel:SetBackdropBorderColor(unpack(BORDER))
+    Design.Style(panel, "surface", { role = "panel" })
     panel:SetFrameLevel(parent:GetFrameLevel() + 1)
     panel:Show()
     return panel
@@ -491,34 +527,37 @@ local function CreateCollapseHeader(parent)
     header.portrait:SetTexCoord(unpack(BG.iconTexCoord or { 0.07, 0.93, 0.07, 0.93 }))
 
     header.title = header:CreateFontString(nil, "OVERLAY")
-    header.title:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+    Design.Style(header.title, "text", { role = "heading" })
     header.title:SetJustifyH("LEFT")
 
     header.subtitle = header:CreateFontString(nil, "OVERLAY")
-    header.subtitle:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-    header.subtitle:SetTextColor(unpack(MUTED))
+    Design.Style(header.subtitle, "text", { role = "caption" })
     header.subtitle:SetJustifyH("LEFT")
 
     header.arrow = header:CreateFontString(nil, "OVERLAY")
     header.arrow:SetPoint("RIGHT", -14, 0)
     header.arrow:SetFont(BIAOGE_TEXT_FONT, 20, "OUTLINE")
-    header.arrow:SetTextColor(unpack(CYAN))
+    header.arrow:SetTextColor(unpack(COLOR.focusText))
 
     header.checkmark = header:CreateTexture(nil, "ARTWORK")
     header.checkmark:SetPoint("RIGHT", -13, 0)
     header.checkmark:SetSize(18, 18)
     header.checkmark:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
-    header.checkmark:SetVertexColor(0.27, 1.00, 0.87, 1)
+    header.checkmark:SetVertexColor(unpack(COLOR.success))
     header.checkmark:Hide()
 
     header:SetScript("OnClick", function(self)
         if self.action then self.action() end
     end)
     header:SetScript("OnEnter", function(self)
-        self:SetBackdropBorderColor(unpack(CYAN))
+        if self.action and not self.selected then
+            self:SetBackdropColor(unpack(COLOR.hover))
+            self:SetBackdropBorderColor(unpack(COLOR.borderStrong))
+        end
     end)
     header:SetScript("OnLeave", function(self)
-        self:SetBackdropBorderColor(unpack(self.restingBorderColor or BORDER))
+        self:SetBackdropColor(unpack(self.restingSurfaceColor or COLOR.raised))
+        self:SetBackdropBorderColor(unpack(self.restingBorderColor or COLOR.borderStrong))
     end)
     return header
 end
@@ -532,14 +571,15 @@ local function AcquireHeader(parent)
     end
     header:ClearAllPoints()
     header.action = nil
+    header.selected = false
     header.isSetGroupHeader = nil
     header.isBossDetailHeader = nil
     header.arrow:SetText("")
     header.checkmark:Hide()
-    header.restingBorderColor = BORDER
+    header.restingSurfaceColor = COLOR.raised
+    header.restingBorderColor = COLOR.borderStrong
     header:SetFrameLevel(parent:GetFrameLevel() + 3)
-    header:SetBackdropColor(unpack(SURFACE_RAISED))
-    header:SetBackdropBorderColor(unpack(BORDER))
+    Design.Style(header, "surface", { role = "raised" })
     header:Show()
     return header
 end
@@ -551,14 +591,22 @@ local function CreateBossRow(parent)
     row.hoverBackground = row:CreateTexture(nil, "BACKGROUND")
     row.hoverBackground:SetAllPoints()
     row.hoverBackground:SetTexture("Interface/Buttons/WHITE8x8")
-    row.hoverBackground:SetVertexColor(unpack(ITEM_HOVER))
-    row:SetHighlightTexture(row.hoverBackground)
+    row.hoverBackground:SetVertexColor(unpack(COLOR.rowHoverWash))
+    row.hoverBackground:Hide()
 
     row.selectedBackground = row:CreateTexture(nil, "BACKGROUND")
     row.selectedBackground:SetAllPoints()
     row.selectedBackground:SetTexture("Interface/Buttons/WHITE8x8")
-    row.selectedBackground:SetVertexColor(unpack(ITEM_SELECTED))
+    row.selectedBackground:SetVertexColor(unpack(COLOR.selected))
     row.selectedBackground:Hide()
+
+    row.selectedAccent = row:CreateTexture(nil, "ARTWORK")
+    row.selectedAccent:SetPoint("TOPLEFT", 0, -1)
+    row.selectedAccent:SetPoint("BOTTOMLEFT", 0, 1)
+    row.selectedAccent:SetWidth(2)
+    row.selectedAccent:SetTexture("Interface/Buttons/WHITE8x8")
+    row.selectedAccent:SetVertexColor(unpack(COLOR.focus))
+    row.selectedAccent:Hide()
 
     row.portrait = row:CreateTexture(nil, "ARTWORK")
     row.portrait:SetPoint("LEFT", 7, 0)
@@ -582,10 +630,18 @@ local function CreateBossRow(parent)
     row.divider:SetPoint("BOTTOMRIGHT", 0, 0)
     row.divider:SetHeight(1)
     row.divider:SetTexture("Interface/Buttons/WHITE8x8")
-    row.divider:SetVertexColor(unpack(BORDER))
+    row.divider:SetVertexColor(unpack(COLOR.border))
 
     row:SetScript("OnClick", function(self)
         if self.action then self.action() end
+    end)
+    row:SetScript("OnEnter", function(self)
+        if not self.selected then
+            self.hoverBackground:Show()
+        end
+    end)
+    row:SetScript("OnLeave", function(self)
+        self.hoverBackground:Hide()
     end)
     return row
 end
@@ -620,17 +676,22 @@ local function SetBossRow(row, FB, bossModel, wishCount, selected)
     end
     row.portrait:SetVertexColor(1, 1, 1, 1)
     row.title:SetText(GetBossDisplayName(FB, bossIndex, boss))
-    row.title:SetTextColor(unpack(selected and GOLD or WHITE))
+    row.title:SetTextColor(unpack(selected and COLOR.focusText or COLOR.textPrimary))
     row.count:SetText(tostring(wishCount))
-    row.count:SetTextColor(unpack(wishCount > 0 and CYAN or MUTED))
+    row.count:SetTextColor(unpack(wishCount > 0 and COLOR.focusText or COLOR.textMuted))
     row.selectedBackground:SetShown(selected)
+    row.selectedAccent:SetShown(selected)
+    row.hoverBackground:Hide()
 end
 
 local function ApplyItemVisual(button)
     if not button.qualityR then return end
     button.qualityBorder:SetVertexColor(button.qualityR, button.qualityG, button.qualityB, 1)
     button.name:SetTextColor(button.qualityR, button.qualityG, button.qualityB)
-    button.selectedBackground:SetShown(button.selected and not button.isSummary)
+    local isBrowseSelection = button.selected and not button.isSummary
+    button.selectedBackground:SetShown(isBrowseSelection)
+    button.selectedAccent:SetShown(isBrowseSelection)
+    button.hoverBackground:Hide()
     button.summaryBackground:SetShown(button.isSummary)
     button.divider:SetShown(button.isSummary)
     button.removeIcon:SetShown(button.isSummary)
@@ -653,20 +714,28 @@ local function CreateItemButton(parent)
     local hover = button:CreateTexture(nil, "BACKGROUND")
     hover:SetAllPoints()
     hover:SetTexture("Interface/Buttons/WHITE8x8")
-    hover:SetVertexColor(unpack(ITEM_HOVER))
+    hover:SetVertexColor(unpack(COLOR.rowHoverWash))
+    hover:Hide()
     button.hoverBackground = hover
-    button:SetHighlightTexture(hover)
 
     button.selectedBackground = button:CreateTexture(nil, "BACKGROUND")
     button.selectedBackground:SetAllPoints()
     button.selectedBackground:SetTexture("Interface/Buttons/WHITE8x8")
-    button.selectedBackground:SetVertexColor(unpack(ITEM_SELECTED))
+    button.selectedBackground:SetVertexColor(unpack(COLOR.selected))
     button.selectedBackground:Hide()
+
+    button.selectedAccent = button:CreateTexture(nil, "ARTWORK")
+    button.selectedAccent:SetPoint("BOTTOMLEFT", 1, 1)
+    button.selectedAccent:SetPoint("BOTTOMRIGHT", -1, 1)
+    button.selectedAccent:SetHeight(2)
+    button.selectedAccent:SetTexture("Interface/Buttons/WHITE8x8")
+    button.selectedAccent:SetVertexColor(unpack(COLOR.focus))
+    button.selectedAccent:Hide()
 
     button.summaryBackground = button:CreateTexture(nil, "BACKGROUND")
     button.summaryBackground:SetAllPoints()
     button.summaryBackground:SetTexture("Interface/Buttons/WHITE8x8")
-    button.summaryBackground:SetVertexColor(0.02, 0.12, 0.14, 0.34)
+    button.summaryBackground:SetVertexColor(unpack(COLOR.header))
     button.summaryBackground:Hide()
 
     button.qualityBorder = button:CreateTexture(nil, "BACKGROUND")
@@ -692,8 +761,8 @@ local function CreateItemButton(parent)
     button.name:SetWordWrap(false)
 
     button.meta = button:CreateFontString(nil, "OVERLAY")
-    button.meta:SetFont(BIAOGE_TEXT_FONT, 10, "OUTLINE")
-    button.meta:SetTextColor(0.82, 0.84, 0.84)
+    button.meta:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
+    button.meta:SetTextColor(unpack(COLOR.textSecondary))
     button.meta:SetJustifyH("LEFT")
     button.meta:SetWordWrap(false)
     button.meta:Hide()
@@ -703,7 +772,7 @@ local function CreateItemButton(parent)
     button.divider:SetPoint("BOTTOMRIGHT", -3, 0)
     button.divider:SetHeight(1)
     button.divider:SetTexture("Interface/Buttons/WHITE8x8")
-    button.divider:SetVertexColor(unpack(BORDER))
+    button.divider:SetVertexColor(unpack(COLOR.border))
     button.divider:Hide()
 
     button.removeIcon = button:CreateTexture(nil, "OVERLAY")
@@ -712,29 +781,42 @@ local function CreateItemButton(parent)
     button.removeIcon:SetTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Up")
     button.removeIcon:SetTexCoord(0.20, 0.80, 0.20, 0.80)
     button.removeIcon:SetDesaturated(true)
-    button.removeIcon:SetVertexColor(unpack(CYAN))
+    button.removeIcon:SetVertexColor(unpack(COLOR.danger))
     button.removeIcon:Hide()
 
     button:SetScript("OnClick", function(self)
         if self.action then self.action() end
     end)
     button:SetScript("OnEnter", function(self)
+        if not (self.selected and not self.isSummary) then
+            self.hoverBackground:Show()
+        end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:ClearLines()
         local _, itemLink = GetItemInfo(self.itemID)
         if itemLink then
             GameTooltip:SetHyperlink(itemLink)
         else
-            GameTooltip:AddLine("#" .. tostring(self.itemID), 1, 1, 1)
+            GameTooltip:AddLine(
+                "#" .. tostring(self.itemID),
+                COLOR.textPrimary[1], COLOR.textPrimary[2], COLOR.textPrimary[3]
+            )
         end
         if self.sourceBosses and #self.sourceBosses > 0 then
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(string.format(L["来源：%s"], FormatBossNames(self.FB, self.sourceBosses)), 0, 0.75, 1, true)
+            GameTooltip:AddLine(
+                string.format(L["来源：%s"], FormatBossNames(self.FB, self.sourceBosses)),
+                COLOR.focusText[1], COLOR.focusText[2], COLOR.focusText[3], true
+            )
         end
-        GameTooltip:AddLine(self.selected and L["再次点击取消心愿"] or L["点击设为心愿"], 1, 0.82, 0, true)
+        GameTooltip:AddLine(
+            self.selected and L["再次点击取消心愿"] or L["点击设为心愿"],
+            COLOR.textSecondary[1], COLOR.textSecondary[2], COLOR.textSecondary[3], true
+        )
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function(self)
+        self.hoverBackground:Hide()
         ApplyItemVisual(self)
         GameTooltip:Hide()
     end)
@@ -846,15 +928,14 @@ local function ToggleWish(FB, entry, bossIndex)
         SendFeedback(string.format(L["已加入心愿：%s"], link))
         BG.PlaySound(2)
     else
-        UIErrorsFrame:AddMessage(L["只能选择Titan团本BOSS正常掉落的装备"], 1, 0, 0)
+        UIErrorsFrame:AddMessage(L["只能选择Titan团本BOSS正常掉落的装备"], unpack(COLOR.danger))
     end
 end
 
 local function AddSectionTitle(parent, x, y, titleText)
     local title = AcquireLabel(parent)
     title:SetPoint("TOPLEFT", x, y)
-    title:SetFont(BIAOGE_TEXT_FONT, 16, "OUTLINE")
-    title:SetTextColor(unpack(GOLD))
+    Design.Style(title, "text", { role = "heading", color = "focusText" })
     title:SetText(titleText)
     return y - 30
 end
@@ -894,8 +975,7 @@ local function RenderSummary(parent, FB, entries, x, y, width, height)
     title:SetWidth(math.max(1, width - 24))
     title:SetJustifyH("LEFT")
     title:SetWordWrap(false)
-    title:SetFont(BIAOGE_TEXT_FONT, 14, "OUTLINE")
-    title:SetTextColor(unpack(CYAN))
+    Design.Style(title, "text", { role = "heading", color = "focusText" })
     title:SetText(string.format(L["本阶段心愿（%d）"], #entries))
     y = y - 32
 
@@ -912,8 +992,7 @@ local function RenderSummary(parent, FB, entries, x, y, width, height)
         empty:SetWidth(width - 24)
         empty:SetJustifyH("LEFT")
         empty:SetWordWrap(true)
-        empty:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
-        empty:SetTextColor(unpack(MUTED))
+        Design.Style(empty, "text", { role = "label", color = "textMuted" })
         empty:SetText(L["当前阶段尚无心愿；可以从职业套装或首领掉落中选择。"])
     else
         local scroll = ui.summaryScroll
@@ -956,8 +1035,7 @@ local function RenderSetGroups(parent, FB, groups, x, y, width)
         local empty = AcquireLabel(parent)
         empty:SetPoint("TOPLEFT", x + 12, y)
         empty:SetWidth(width - 24)
-        empty:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-        empty:SetTextColor(unpack(MUTED))
+        Design.Style(empty, "text", { role = "caption" })
         empty:SetText(L["当前阶段没有可用的职业套装兑换物。"])
         y = y - 36
         panel:SetHeight(top - y)
@@ -997,17 +1075,21 @@ local function RenderSetGroups(parent, FB, groups, x, y, width)
         header.title:ClearAllPoints()
         header.title:SetPoint("LEFT", 13, 0)
         header.title:SetPoint("RIGHT", -42, 0)
-        header.title:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
+        Design.Style(header.title, "text", {
+            role = "label",
+            color = selected and "focusText" or "textPrimary",
+        })
         header.title:SetWordWrap(false)
         header.title:SetText(FormatClassGroup(group.classes))
-        header.title:SetTextColor(unpack(WHITE))
         header.subtitle:Hide()
         header.arrow:SetText("")
         header.checkmark:SetShown(selected)
-        header.restingBorderColor = selected and CYAN or BORDER
+        header.selected = selected
+        header.restingSurfaceColor = selected and COLOR.selected or COLOR.raised
+        header.restingBorderColor = selected and COLOR.focus or COLOR.borderStrong
+        header:SetBackdropColor(unpack(header.restingSurfaceColor))
         header:SetBackdropBorderColor(unpack(header.restingBorderColor))
-        header.stripe:SetVertexColor(selected and CYAN[1] or GOLD[1],
-            selected and CYAN[2] or GOLD[2], selected and CYAN[3] or GOLD[3], 1)
+        header.stripe:SetVertexColor(unpack(selected and COLOR.focus or COLOR.borderStrong))
         header.action = function()
             ui.activeSetGroup[FB] = currentGroup.key
             Wishlist.Refresh()
@@ -1018,8 +1100,7 @@ local function RenderSetGroups(parent, FB, groups, x, y, width)
     y = y - 2
     local count = AcquireLabel(parent)
     count:SetPoint("TOPLEFT", x + 12, y)
-    count:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-    count:SetTextColor(unpack(MUTED))
+    Design.Style(count, "text", { role = "caption" })
     count:SetText(string.format(L["%d 件套装兑换物"], #activeGroup.items))
     y = y - 26
 
@@ -1041,11 +1122,6 @@ local function RenderBossDetail(parent, FB, bossModel, x, y, width, height)
     local top = y
     local bossIndex = bossModel.bossIndex
     local boss = GetBossInfo(FB, bossIndex)
-    local bossColor = boss and boss.color or "FFD100"
-    local r = tonumber(bossColor:sub(1, 2), 16) / 255
-    local g = tonumber(bossColor:sub(3, 4), 16) / 255
-    local b = tonumber(bossColor:sub(5, 6), 16) / 255
-
     local panel = AcquirePanel(parent)
     panel:SetPoint("TOPLEFT", x, top)
     panel:SetSize(width, height)
@@ -1067,12 +1143,12 @@ local function RenderBossDetail(parent, FB, bossModel, x, y, width, height)
     header.title:ClearAllPoints()
     header.title:SetPoint("LEFT", header.portrait, "RIGHT", 10, 0)
     header.title:SetPoint("RIGHT", header, "RIGHT", -12, 0)
+    Design.Style(header.title, "text", { role = "heading", color = "textPrimary" })
     header.title:SetText(GetBossDisplayName(FB, bossIndex, boss))
-    header.title:SetTextColor(r, g, b)
     header.subtitle:Hide()
     header.arrow:SetText("")
     header.checkmark:Hide()
-    header.stripe:SetVertexColor(r, g, b, 1)
+    header.stripe:SetVertexColor(unpack(COLOR.focus))
     y = y - 52
 
     if #bossModel.items > 0 then
@@ -1113,8 +1189,7 @@ local function RenderBossDetail(parent, FB, bossModel, x, y, width, height)
         local note = AcquireLabel(parent)
         note:SetPoint("TOPLEFT", x + 12, y)
         note:SetWidth(width - 24)
-        note:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-        note:SetTextColor(unpack(MUTED))
+        Design.Style(note, "text", { role = "caption" })
         note:SetText(L["此首领的可选物品均已归入上方职业套装模块。"])
     end
     return height, panel
@@ -1218,8 +1293,7 @@ local function RenderBosses(parent, FB, bosses, entries, x, y, width, minimumHei
         local empty = AcquireLabel(parent)
         empty:SetPoint("TOPLEFT", detailX + 12, bodyTop - 14)
         empty:SetWidth(detailWidth - 24)
-        empty:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-        empty:SetTextColor(unpack(MUTED))
+        Design.Style(empty, "text", { role = "caption" })
         empty:SetText(L["当前副本没有可供选择的首领掉落。"])
     else
         RenderBossDetail(parent, FB, activeBoss, detailX, bodyTop, detailWidth, bodyHeight)
@@ -1254,7 +1328,14 @@ function Wishlist.Refresh()
     local FB = BG.FB1
     local child = frame.child
     local scroll = frame.scroll
-    local oldOffset = scroll:GetVerticalScroll()
+    local raidChanged = outerScrollKey ~= FB
+    local oldOffset = raidChanged and 0 or scroll:GetVerticalScroll()
+    if raidChanged then
+        scroll:SetVerticalScroll(0)
+        if ui.bossDirectoryScroll then ui.bossDirectoryScroll:SetVerticalScroll(0) end
+        if ui.bossDetailScroll then ui.bossDetailScroll:SetVerticalScroll(0) end
+        if ui.summaryScroll then ui.summaryScroll:SetVerticalScroll(0) end
+    end
     local viewportWidth = scroll:GetWidth()
     local width = child:GetWidth()
     if viewportWidth and viewportWidth > 60 then
@@ -1286,11 +1367,16 @@ function Wishlist.Refresh()
 
     frame.clearButton:ClearAllPoints()
     frame.clearButton:SetPoint("TOPLEFT", child, "TOPLEFT", rightX + 10, -rightHeight + 37)
-    frame.clearButton:SetSize(rightWidth - 20, 25)
+    frame.clearButton:SetSize(rightWidth - 20, Design.Token("size", "control"))
 
     child:SetHeight(math.max(1, contentHeight + 14))
     scroll:UpdateScrollChildRect()
-    scroll:SetVerticalScroll(math.min(oldOffset, math.max(0, child:GetHeight() - scroll:GetHeight())))
+    local maxOffset = math.max(0, child:GetHeight() - scroll:GetHeight())
+    local hasOverflow = maxOffset > 1
+    scroll:SetVerticalScroll(hasOverflow and math.min(oldOffset, maxOffset) or 0)
+    scroll.ScrollBar:SetShown(hasOverflow)
+    scroll:EnableMouseWheel(hasOverflow)
+    outerScrollKey = FB
 end
 
 function Wishlist.CreateUI()
@@ -1302,42 +1388,52 @@ function Wishlist.CreateUI()
     local headerSurface = frame:CreateTexture(nil, "BACKGROUND")
     headerSurface:SetTexture("Interface/Buttons/WHITE8x8")
     local navigationHeight = BG.MainNavigationHeight or 0
-    headerSurface:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 18, -48 - navigationHeight)
-    headerSurface:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -18, -48 - navigationHeight)
+    local headerTop = -56 - navigationHeight
+    headerSurface:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 0, headerTop)
+    headerSurface:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", 0, headerTop)
     headerSurface:SetHeight(66)
-    headerSurface:SetVertexColor(0.015, 0.055, 0.065, 0.88)
+    headerSurface:SetVertexColor(unpack(COLOR.header))
+    frame.headerSurface = headerSurface
 
     local accent = frame:CreateTexture(nil, "ARTWORK")
     accent:SetTexture("Interface/Buttons/WHITE8x8")
-    accent:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 18, -48 - navigationHeight)
-    accent:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -18, -48 - navigationHeight)
-    accent:SetHeight(1)
-    accent:SetVertexColor(unpack(GOLD))
+    accent:SetPoint("TOPLEFT", headerSurface, "TOPLEFT", 0, 0)
+    accent:SetPoint("BOTTOMLEFT", headerSurface, "BOTTOMLEFT", 0, 0)
+    accent:SetWidth(2)
+    accent:SetVertexColor(unpack(COLOR.focus))
+    frame.headerAccent = accent
 
     local title = frame:CreateFontString(nil, "OVERLAY")
-    title:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 30, -61 - navigationHeight)
-    title:SetFont(BIAOGE_TEXT_FONT, 20, "OUTLINE")
-    title:SetTextColor(unpack(GOLD))
+    title:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 18, headerTop - 13)
+    Design.Style(title, "text", { role = "title" })
     title:SetText(L["个人心愿单"])
+    frame.pageTitle = title
 
     local description = frame:CreateFontString(nil, "OVERLAY")
     description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
-    description:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-    description:SetTextColor(unpack(MUTED))
+    Design.Style(description, "text", { role = "caption" })
     description:SetText(L["按职业套装与首领掉落建立心愿；实际掉落会提醒，拍卖时保持展开。"])
 
     if BG.SpecGearFilter and BG.SpecGearFilter.CreateControls then
         local filterControls = BG.SpecGearFilter.CreateControls(frame)
         if filterControls then
-            filterControls:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -34, -68 - navigationHeight)
+            filterControls:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -16, headerTop - 20)
+            local filterLabel = filterControls.label
+            if filterLabel and type(filterLabel) ~= "function" then
+                Design.Style(filterLabel, "text", { role = "label" })
+            end
             frame.filterControls = filterControls
         end
     end
 
     local clearButton = BG.CreateButton(frame)
-    clearButton:SetSize(112, 25)
-    clearButton:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -28, -58 - navigationHeight)
-    clearButton:SetText(L["清空当前副本"])
+    Design.Style(clearButton, "button", {
+        variant = "danger",
+        text = L["清空当前副本"],
+        width = 112,
+        height = Design.Token("size", "control"),
+    })
+    clearButton:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -16, headerTop - 10)
     frame.clearButton = clearButton
 
     StaticPopupDialogs["BGFORGE_WISHLIST_CLEAR"] = {
@@ -1362,7 +1458,7 @@ function Wishlist.CreateUI()
     end)
 
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 28, -126 - navigationHeight)
+    scroll:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 28, headerTop - 78)
     scroll:SetPoint("BOTTOMRIGHT", BG.MainFrame, "BOTTOMRIGHT", -38, 54)
     scroll.ScrollBar.scrollStep = BG.scrollStep
     BG.CreateSrollBarBackdrop(scroll.ScrollBar)
@@ -1463,12 +1559,22 @@ function Wishlist.CreateUI()
         self:SetVerticalScroll(math.max(0, math.min(maxOffset, offset)))
     end)
 
-    scroll:SetScript("OnSizeChanged", function(self, width)
+    scroll:SetScript("OnSizeChanged", function(self, width, height)
         local newWidth = math.max(1, width - 28)
-        if math.abs(child:GetWidth() - newWidth) > 1 then
+        local widthChanged = math.abs(child:GetWidth() - newWidth) > 1
+        local lastHeight = viewportHeight
+        local heightChanged = not lastHeight or math.abs(lastHeight - height) > 1
+        viewportHeight = height
+        if widthChanged then
             child:SetWidth(newWidth)
-            Wishlist.Refresh()
         end
+        if not widthChanged and not heightChanged then return end
+        if heightChanged then
+            self:SetVerticalScroll(0)
+            self.ScrollBar:Hide()
+            self:EnableMouseWheel(false)
+        end
+        RefreshAfterFrameResize(frame)
     end)
 
     frame:SetScript("OnShow", function()
