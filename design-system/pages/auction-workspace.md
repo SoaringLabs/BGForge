@@ -19,6 +19,24 @@ Use the selected Arcane Archive structure:
 5. Collapsible recent-auction tray along the bottom.
 6. Bottom search, equipment filters, and secondary actions.
 
+## Header navigation
+
+- Keep the auction-record toggle as the only frequent task destination on the left.
+- Keep low-frequency utilities on the right: notification positioning, about, then settings.
+- The raid-leader-only auction-generation selector sits immediately before the utility group.
+- Utility anchors are independent of the selector so gaining or losing raid-leader status does not move them.
+- Close remains the rightmost control and is not mixed into either navigation group.
+
+## Primary module navigation
+
+- Place the full-page module tabs directly below the global header and above the instance selector.
+- Keep the module order: table, character overview, wishlist, reconciliation, then mail history.
+- Character overview is a full-page workspace module. Selecting it replaces the current module inside the BGForge main frame, like wishlist and reconciliation; it must not open another overlay.
+- Hide the contextual instance selector while character overview is selected. The minimap hover overview remains an independent quick-access surface and reuses the same renderer.
+- Treat the instance selector as contextual secondary navigation beneath the module tabs.
+- The migration changes position only; existing class-color default, hover, and selected treatments remain until the tab styling migration is approved separately.
+- Remove the former bottom attachment point so the primary navigation remains visible before users scan the workspace.
+
 ## Ledger
 
 - Use stable columns for item, equipment/meta, buyer, amount, status, expense/subsidy, net, split count, wage, and note where applicable.

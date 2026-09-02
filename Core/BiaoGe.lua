@@ -20,6 +20,11 @@ local player = BG.playerName
 local IsAddOnLoaded = IsAddOnLoaded or C_AddOns.IsAddOnLoaded
 local GetLootMethod = GetLootMethod or C_PartyInfo.GetLootMethod
 
+-- The primary module navigation now lives below the title bar. Keep this
+-- offset separate from the raid selector so every full-page module shares the
+-- same vertical rhythm without changing its existing interaction styling.
+BG.MainNavigationHeight = 30
+
 BG.Init(function()
     pcall(function()
     ----------主界面----------
@@ -189,7 +194,7 @@ BG.Init(function()
             end
         end) ]]
 
-        BG.MainFrame:SetHeight(BG.FBHeight[BG.FB1])
+        BG.MainFrame:SetHeight(BG.FBHeight[BG.FB1] + BG.MainNavigationHeight)
         BG.MainFrame:SetWidth(BG.FBWidth[BG.FB1])
 
         -- 报错
@@ -462,15 +467,20 @@ BG.Init(function()
         BG.TopLeftButtonJianGe = 7
 
         function BG.LayoutMainMenuButtons()
-            local menuButtonNames = {
-                "ButtonMove",
+            -- 高频任务入口保持在左侧；低频工具从关闭按钮向左反排。
+            -- 两组锚点彼此独立，团长专属的拍卖版本选择器显隐时不会
+            -- 让通用工具按钮跳位。
+            local leftMenuButtonNames = {
                 "ButtonAuctionLog",
-                "ButtonRaidLockout",
-                "ShuoMingShu",
-                "ButtonSheZhi",
             }
+            local rightMenuButtonNames = {
+                "ButtonSheZhi",
+                "ShuoMingShu",
+                "ButtonMove",
+            }
+
             local previousButton
-            for _, name in ipairs(menuButtonNames) do
+            for _, name in ipairs(leftMenuButtonNames) do
                 local button = BG[name]
                 if button then
                     button:ClearAllPoints()
@@ -481,6 +491,20 @@ BG.Init(function()
                     end
                     previousButton = button
                 end
+            end
+
+            previousButton = BG.MainFrame.CloseButton
+            for _, name in ipairs(rightMenuButtonNames) do
+                local button = BG[name]
+                if button then
+                    button:ClearAllPoints()
+                    button:SetPoint("RIGHT", previousButton, "LEFT", -BG.TopLeftButtonJianGe, 0)
+                    previousButton = button
+                end
+            end
+
+            if BG.LayoutAuctionVersionButton then
+                BG.LayoutAuctionVersionButton()
             end
         end
 
@@ -951,7 +975,7 @@ BG.Init(function()
         end
 
         BG.TabButtonsFB = CreateFrame("Frame", nil, BG.MainFrame)
-        BG.TabButtonsFB:SetPoint("TOP", BG.MainFrame, "TOP", 0, -28)
+        BG.TabButtonsFB:SetPoint("TOP", BG.MainFrame, "TOP", 0, -28 - BG.MainNavigationHeight)
         BG.TabButtonsFB:SetHeight(20)
 
         if BG.IsWLK_80 then
@@ -995,8 +1019,14 @@ BG.Init(function()
     ----------模块切换按钮----------
     do
         BG.tabButtons = {}
+        BG.mainNavigationButtons = {}
+
+        BG.TabButtonsMain = CreateFrame("Frame", nil, BG.MainFrame)
+        BG.TabButtonsMain:SetPoint("TOP", BG.MainFrame, "TOP", 0, -24)
+        BG.TabButtonsMain:SetSize(1, 28)
 
         BG.FBMainFrameTabNum = 1
+        BG.RaidLockoutMainFrameTabNum = 2
         BG.WishlistMainFrameTabNum = 3
         BG.DuiZhangMainFrameTabNum = 4
         -- Lite: 交易/邮件记录面板 tab 编号（对齐 v2.3.5，避让 1-8 主 tab 编号段）
@@ -1005,6 +1035,7 @@ BG.Init(function()
 
         local r, g, b = GetClassRGB(nil, "player")
         local onEnterDelay = .6
+        local tabGap = 3
 
         local function SetColor(bt, isOnEnter, alpha)
             alpha = alpha or BiaoGe.options.alpha
@@ -1043,22 +1074,31 @@ BG.Init(function()
             end
         end
 
-        function BG.Create_TabButton(num, text, frame, width) -- 1,L["当前表格 "],BG["Frame" .. BG.FB1],150
-            local bt = CreateFrame("Button", nil, BG.MainFrame, "BackdropTemplate")
+        function BG.LayoutMainTabButtons()
+            local previousButton
+            local width = 0
+            for _, button in ipairs(BG.mainNavigationButtons) do
+                button:ClearAllPoints()
+                if previousButton then
+                    button:SetPoint("LEFT", previousButton, "RIGHT", tabGap, 0)
+                    width = width + tabGap
+                else
+                    button:SetPoint("LEFT", BG.TabButtonsMain, "LEFT", 0, 0)
+                end
+                width = width + button:GetWidth()
+                previousButton = button
+            end
+            BG.TabButtonsMain:SetWidth(math.max(1, width))
+        end
+
+        local function CreateMainNavigationButton(text, width)
+            local bt = CreateFrame("Button", nil, BG.TabButtonsMain, "BackdropTemplate")
             bt:SetBackdrop({
                 edgeFile = "Interface/ChatFrame/ChatFrameBackground",
                 edgeSize = 1,
             })
             bt:SetBackdropBorderColor(GetClassRGB(nil, "player", BG.borderAlpha))
             bt:SetSize(width or 90, 28)
-            if #BG.tabButtons == 0 then
-                bt:SetPoint("TOPLEFT", BG.MainFrame, "BOTTOM", -95, 1)
-                elseif false then
-                    -- 什么都没
-                    bt:SetPoint("TOPLEFT", BG.MainFrame, "BOTTOM", -220 - 55, 1)
-            else
-                bt:SetPoint("LEFT", BG.tabButtons[#BG.tabButtons].button, "RIGHT", 3, 0)
-            end
             bt.bg = bt:CreateTexture(nil, "BACKGROUND")
             bt.bg:SetAllPoints()
             bt.bg:SetTexture("Interface\\Buttons\\WHITE8x8")
@@ -1068,6 +1108,31 @@ BG.Init(function()
             t:SetText(text)
             t:SetWordWrap(false)
             bt:SetFontString(t)
+            tinsert(BG.mainNavigationButtons, bt)
+            SetColor(bt, false)
+            bt:GetFontString():SetTextColor(1, .82, 0)
+            BG.LayoutMainTabButtons()
+            return bt
+        end
+
+        function BG.Create_MainNavigationAction(text, onClick, width)
+            local bt = CreateMainNavigationButton(text, width)
+            bt:SetScript("OnClick", function(self)
+                onClick(self)
+                BG.PlaySound(1)
+            end)
+            bt:SetScript("OnEnter", function(self)
+                SetColor(self, true)
+            end)
+            bt:SetScript("OnLeave", function(self)
+                GameTooltip:Hide()
+                SetColor(self, false)
+            end)
+            return bt
+        end
+
+        function BG.Create_TabButton(num, text, frame, width) -- 1,L["当前表格 "],BG["Frame" .. BG.FB1],150
+            local bt = CreateMainNavigationButton(text, width)
             tinsert(BG.tabButtons, {
                 button = bt,
                 frame = frame,
@@ -1097,6 +1162,10 @@ BG.Init(function()
             GameTooltip:Show()
         end, onEnterDelay, true)
 
+        if BG.CreateRaidLockoutMainFrameTab then
+            BG.CreateRaidLockoutMainFrameTab()
+        end
+
         if BG.Wishlist and BG.Wishlist.CreateUI then
             BG.Wishlist.CreateUI()
         end
@@ -1113,6 +1182,13 @@ BG.Init(function()
         for i = #BG.tabButtons, 1, -1 do
             if BG.tabButtons[i].num == BG.TradeHistoryMainFrameTabNum then
                 tremove(BG.tabButtons, i)
+                for ii = #BG.mainNavigationButtons, 1, -1 do
+                    if BG.mainNavigationButtons[ii] == bt then
+                        tremove(BG.mainNavigationButtons, ii)
+                        break
+                    end
+                end
+                BG.LayoutMainTabButtons()
                 break
             end
         end
@@ -1549,7 +1625,7 @@ BG.Init(function()
     do
         local bt = BG.CreateButton(BG.FBMainFrame)
         bt:SetSize(80, 25)
-        bt:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -42, -27)
+        bt:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -42, -27 - BG.MainNavigationHeight)
         -- bt:SetPoint("RIGHT", BG.ButtonZhangDan, "LEFT", -80, 0)
         bt:SetText(L["撤销删除"])
         bt:Hide()

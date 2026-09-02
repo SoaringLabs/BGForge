@@ -104,10 +104,6 @@ BG.Init(function()
         bt:SetScript("OnLeave", GameTooltip_Hide)
     end
 
-    if BG.CreateRaidLockoutMainMenuButton then
-        BG.CreateRaidLockoutMainMenuButton(bt)
-    end
-
     local frame, child, scroll
     local CancelAllChoose
     local drag = {}
@@ -124,7 +120,7 @@ BG.Init(function()
             })
             f:SetBackdropColor(0, 0, 0, 0.8)
             f:SetBackdropBorderColor(GetClassRGB(nil, "player", BG.borderAlpha))
-            f:SetSize(220, BG.FBHeight[BG.FB1])
+            f:SetSize(220, BG.FBHeight[BG.FB1] + (BG.MainNavigationHeight or 0))
             f:SetPoint("TOPRIGHT", BG.MainFrame, "TOPLEFT", 1, 0)
             f:EnableMouse(true)
             f:SetShown(BiaoGe.options.showAuctionLogFrame == 1)
@@ -1818,7 +1814,7 @@ BG.Init(function()
     end
 
     local function UpdateFrameSize()
-        BG.auctionLogFrame:SetHeight(BG.FBHeight[BG.FB1])
+        BG.auctionLogFrame:SetHeight(BG.FBHeight[BG.FB1] + (BG.MainNavigationHeight or 0))
         child:SetHeight(scroll:GetHeight())
     end
 

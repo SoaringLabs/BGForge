@@ -861,6 +861,8 @@ local deletedThisSession = {}
 local overviewFrame
 local hoverFrame
 local hoverAnchor
+local hoverEmbedded = false
+local hoverFloatingFrameLevel
 local hoverHideSerial = 0
 local updateOverviewFrame
 local updateHoverFrame
@@ -2524,6 +2526,7 @@ local function CreateHoverFrame()
     })
     hoverFrame:SetBackdropColor(unpack(COLOR.panel))
     hoverFrame:Hide()
+    hoverFloatingFrameLevel = hoverFrame:GetFrameLevel()
 
     local innerBorder = CreateFrame("Frame", nil, hoverFrame, "BackdropTemplate")
     innerBorder:SetPoint("TOPLEFT", 6, -6)
@@ -2619,14 +2622,20 @@ local function CreateHoverFrame()
     local close = CreateIconButton("Interface\\Buttons\\UI-Panel-MinimizeButton-Up", L["关闭"])
     close:SetPoint("TOPRIGHT", -ui.padding - 6, -ui.padding - 6)
     close:SetScript("OnClick", function()
-        hoverFrame:Hide()
+        if hoverEmbedded and BG.ClickTabButton and BG.FBMainFrameTabNum then
+            BG.ClickTabButton(BG.FBMainFrameTabNum)
+        else
+            hoverFrame:Hide()
+        end
         GameTooltip:Hide()
     end)
 
     local settings = CreateIconButton("Interface\\Icons\\Trade_Engineering", L["设置"])
     settings:SetPoint("RIGHT", close, "LEFT", -5, 0)
     settings:SetScript("OnClick", function()
-        hoverFrame:Hide()
+        if not hoverEmbedded then
+            hoverFrame:Hide()
+        end
         GameTooltip:Hide()
         if BG.OpenRaidLockoutOptions then
             BG.OpenRaidLockoutOptions()
@@ -2650,6 +2659,17 @@ local function CreateHoverFrame()
     resetText:SetWordWrap(false)
     resetText:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
     resetText:SetTextColor(unpack(COLOR.textSecondary))
+
+    hoverFrame.chrome = {
+        innerBorder = innerBorder,
+        logo = logo,
+        brandTitle = brandTitle,
+        titleDivider = titleDivider,
+        title = title,
+        close = close,
+        settings = settings,
+        refresh = refresh,
+    }
 
     local raidTitleCell = CreateTableCell(contentFrame, COLOR.headerStrong, { left = true })
     raidTitleCell:SetPoint("TOPLEFT", ui.padding, 0)
@@ -2956,10 +2976,19 @@ local function CreateHoverFrame()
             ui.padding * 2 + ui.nameWidth + compactColumnsWidth,
             ui.padding * 2 + compactResourceWidth
         )
-        local viewportWidth, horizontalOverflow = renderContext.calculateHorizontalViewport(
-            width,
-            UIParent:GetWidth()
-        )
+        local viewportWidth
+        local horizontalOverflow
+        if hoverEmbedded and BG.MainFrame then
+            local availableWidth = max(320, BG.MainFrame:GetWidth() - ui.padding * 2)
+            width = max(width, availableWidth)
+            viewportWidth = availableWidth
+            horizontalOverflow = max(0, width - viewportWidth)
+        else
+            viewportWidth, horizontalOverflow = renderContext.calculateHorizontalViewport(
+                width,
+                UIParent:GetWidth()
+            )
+        end
         local columnWidths, lockoutsWidth = renderContext.calculateColumnWidths(
             visibleColumns,
             width - ui.padding * 2 - ui.nameWidth,
@@ -3410,7 +3439,86 @@ local function CreateHoverFrame()
     updateHoverFrame()
 end
 
+local function SetEmbeddedChrome(isEmbedded)
+    local chrome = hoverFrame and hoverFrame.chrome
+    if not chrome then
+        return
+    end
+
+    chrome.title:ClearAllPoints()
+    chrome.refresh:ClearAllPoints()
+    if isEmbedded then
+        chrome.innerBorder:Hide()
+        chrome.logo:Hide()
+        chrome.brandTitle:Hide()
+        chrome.titleDivider:Hide()
+        chrome.close:Hide()
+        chrome.settings:Hide()
+        chrome.title:SetPoint("LEFT", 10, 0)
+        chrome.refresh:SetPoint("TOPRIGHT", -SMALL_UI.padding - 6, -SMALL_UI.padding - 6)
+    else
+        chrome.innerBorder:Show()
+        chrome.logo:Show()
+        chrome.brandTitle:Show()
+        chrome.titleDivider:Show()
+        chrome.close:Show()
+        chrome.settings:Show()
+        chrome.title:SetPoint("LEFT", chrome.titleDivider, "RIGHT", 9, 0)
+        chrome.refresh:SetPoint("RIGHT", chrome.settings, "LEFT", -5, 0)
+    end
+end
+
+local function RestoreFloatingHoverFrame()
+    if not hoverFrame then
+        return
+    end
+
+    hoverEmbedded = false
+    hoverFrame:Hide()
+    hoverFrame:SetParent(UIParent)
+    hoverFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+    if hoverFloatingFrameLevel then
+        hoverFrame:SetFrameLevel(hoverFloatingFrameLevel)
+    end
+    hoverFrame:SetClampedToScreen(true)
+    hoverFrame:ClearAllPoints()
+    hoverFrame:SetScript("OnEnter", nil)
+    hoverFrame:SetScript("OnLeave", nil)
+    SetEmbeddedChrome(false)
+end
+
+local function ShowEmbeddedOverview(parent)
+    CreateHoverFrame()
+    hoverHideSerial = hoverHideSerial + 1
+    hoverAnchor = nil
+    hoverEmbedded = true
+
+    hoverFrame:Hide()
+    hoverFrame:SetParent(parent)
+    hoverFrame:SetFrameStrata(BG.MainFrame:GetFrameStrata())
+    hoverFrame:SetFrameLevel(parent:GetFrameLevel() + 1)
+    hoverFrame:SetClampedToScreen(false)
+    hoverFrame:ClearAllPoints()
+    hoverFrame:SetPoint("TOP", parent, "TOP", 0, -58)
+    hoverFrame:SetScript("OnEnter", nil)
+    hoverFrame:SetScript("OnLeave", nil)
+    SetEmbeddedChrome(true)
+
+    CaptureCurrentQuestProgress()
+    CaptureCurrentResources()
+    updateHoverFrame()
+    hoverFrame:Show()
+
+    if not currentCharacter.ready
+        or not currentCharacter.lastRequestAt
+        or GetTime() - currentCharacter.lastRequestAt > 15
+    then
+        RequestCurrentRaidInfo()
+    end
+end
+
 local function PositionHoverFrame(anchor)
+    RestoreFloatingHoverFrame()
     hoverFrame:ClearAllPoints()
 
     if BG.ButtonIsInRight(anchor) then
@@ -3437,6 +3545,9 @@ local function IsPointerOver(frame)
 end
 
 local function ScheduleHoverHide()
+    if hoverEmbedded then
+        return
+    end
     hoverHideSerial = hoverHideSerial + 1
     local serial = hoverHideSerial
     BG.After(0.12, function()
@@ -3453,7 +3564,7 @@ local function ScheduleHoverHide()
 end
 
 function BG.ShowRaidLockoutHover(anchor)
-    if not anchor then
+    if not anchor or hoverEmbedded then
         return
     end
 
@@ -3479,7 +3590,7 @@ function BG.ShowRaidLockoutHover(anchor)
 end
 
 function BG.HideRaidLockoutHover()
-    if hoverFrame then
+    if hoverFrame and not hoverEmbedded then
         ScheduleHoverHide()
     end
 end
@@ -3552,35 +3663,70 @@ function BG.RefreshRaidLockoutDisplays()
     end
 end
 
+local function CreateRaidLockoutMainFrame()
+    if BG.RaidLockoutMainFrame then
+        return BG.RaidLockoutMainFrame
+    end
+
+    local mainFrame = CreateFrame("Frame", "BG.RaidLockoutMainFrame", BG.MainFrame)
+    mainFrame:SetAllPoints(BG.MainFrame)
+    mainFrame:Hide()
+    mainFrame:SetScript("OnShow", function(self)
+        BG.FrameHide(0)
+        BiaoGe.lastFrame = "RaidLockout"
+        if BG.TabButtonsFB then
+            BG.TabButtonsFB:Hide()
+        end
+        if BG.NanDuDropDown then
+            BG.NanDuDropDown.DropDown:Hide()
+        end
+        ShowEmbeddedOverview(self)
+    end)
+    mainFrame:SetScript("OnHide", function()
+        if hoverEmbedded then
+            RestoreFloatingHoverFrame()
+        end
+    end)
+    BG.RaidLockoutMainFrame = mainFrame
+    return mainFrame
+end
+
 function BG.RoleOverviewUI()
-    CreateOverviewFrame()
+    CreateRaidLockoutMainFrame()
 end
 
 function BG.ToggleRaidLockoutOverview()
-    CreateOverviewFrame()
     BG.HideRaidLockoutHover()
-    overviewFrame:SetShown(not overviewFrame:IsShown())
-end
-
-function BG.CreateRaidLockoutMainMenuButton(anchor)
-    if BG.ButtonRaidLockout or not anchor then
+    local mainFrame = CreateRaidLockoutMainFrame()
+    if BG.MainFrame and BG.ClickTabButton and BG.RaidLockoutMainFrameTabNum then
+        if BG.MainFrame:IsVisible() and mainFrame:IsVisible() then
+            BG.MainFrame:Hide()
+        else
+            BG.MainFrame:Show()
+            BG.ClickTabButton(BG.RaidLockoutMainFrameTabNum)
+        end
         return
     end
 
-    local button = CreateFrame("Button", nil, BG.MainFrame)
-    button:SetPoint("LEFT", anchor, "RIGHT", BG.TopLeftButtonJianGe, 0)
-    button:SetNormalFontObject(BG.FontGreen15)
-    button:SetDisabledFontObject(BG.FontDis15)
-    button:SetHighlightFontObject(BG.FontWhite15)
-    button:SetText(L["全角色总览"])
-    button:SetSize(button:GetFontString():GetWidth(), 20)
-    BG.SetTextHighlightTexture(button)
-    button:SetScript("OnClick", function()
-        BG.ToggleRaidLockoutOverview()
-        BG.PlaySound(1)
-    end)
+    -- Initialization fallback: the primary navigation is registered later in
+    -- BiaoGe.lua. This path is only reachable if another addon invokes the API
+    -- during that narrow window.
+    CreateOverviewFrame()
+    overviewFrame:SetShown(not overviewFrame:IsShown())
+end
+
+function BG.CreateRaidLockoutMainFrameTab()
+    if BG.ButtonRaidLockout or not BG.Create_TabButton then
+        return
+    end
+
+    local mainFrame = CreateRaidLockoutMainFrame()
+    local button = BG.Create_TabButton(
+        BG.RaidLockoutMainFrameTabNum or 2,
+        L["角色总览"],
+        mainFrame
+    )
     BG.ButtonRaidLockout = button
-    BG.LayoutMainMenuButtons()
 end
 
 BG.RegisterEvent("UPDATE_INSTANCE_INFO", CaptureRaidInfo)

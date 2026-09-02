@@ -1179,7 +1179,7 @@ function BG.FrameDongHua()
     local FB = BG.FB1
     local h1 = BG.MainFrame:GetHeight()
     local w1 = BG.MainFrame:GetWidth()
-    local h2 = BG.FBHeight[FB]
+    local h2 = BG.FBHeight[FB] + (BG.MainNavigationHeight or 0)
     local w2 = BG.FBWidth[FB]
     local Time = 0.5
     local needWidth = w1 ~= w2

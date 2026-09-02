@@ -1301,20 +1301,21 @@ function Wishlist.CreateUI()
 
     local headerSurface = frame:CreateTexture(nil, "BACKGROUND")
     headerSurface:SetTexture("Interface/Buttons/WHITE8x8")
-    headerSurface:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 18, -48)
-    headerSurface:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -18, -48)
+    local navigationHeight = BG.MainNavigationHeight or 0
+    headerSurface:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 18, -48 - navigationHeight)
+    headerSurface:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -18, -48 - navigationHeight)
     headerSurface:SetHeight(66)
     headerSurface:SetVertexColor(0.015, 0.055, 0.065, 0.88)
 
     local accent = frame:CreateTexture(nil, "ARTWORK")
     accent:SetTexture("Interface/Buttons/WHITE8x8")
-    accent:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 18, -48)
-    accent:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -18, -48)
+    accent:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 18, -48 - navigationHeight)
+    accent:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -18, -48 - navigationHeight)
     accent:SetHeight(1)
     accent:SetVertexColor(unpack(GOLD))
 
     local title = frame:CreateFontString(nil, "OVERLAY")
-    title:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 30, -61)
+    title:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 30, -61 - navigationHeight)
     title:SetFont(BIAOGE_TEXT_FONT, 20, "OUTLINE")
     title:SetTextColor(unpack(GOLD))
     title:SetText(L["个人心愿单"])
@@ -1328,14 +1329,14 @@ function Wishlist.CreateUI()
     if BG.SpecGearFilter and BG.SpecGearFilter.CreateControls then
         local filterControls = BG.SpecGearFilter.CreateControls(frame)
         if filterControls then
-            filterControls:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -34, -68)
+            filterControls:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -34, -68 - navigationHeight)
             frame.filterControls = filterControls
         end
     end
 
     local clearButton = BG.CreateButton(frame)
     clearButton:SetSize(112, 25)
-    clearButton:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -28, -58)
+    clearButton:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -28, -58 - navigationHeight)
     clearButton:SetText(L["清空当前副本"])
     frame.clearButton = clearButton
 
@@ -1361,7 +1362,7 @@ function Wishlist.CreateUI()
     end)
 
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 28, -126)
+    scroll:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 28, -126 - navigationHeight)
     scroll:SetPoint("BOTTOMRIGHT", BG.MainFrame, "BOTTOMRIGHT", -38, 54)
     scroll.ScrollBar.scrollStep = BG.scrollStep
     BG.CreateSrollBarBackdrop(scroll.ScrollBar)
