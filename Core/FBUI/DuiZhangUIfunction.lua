@@ -81,7 +81,7 @@ function BG.DuiZhangBiaoTiUI(FB, t, b, bb, i, ii)
     if b == 1 and i == 1 then
         local version = BG["DuiZhangFrame" .. FB]:CreateFontString()
         if t == 1 then
-            version:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 13, -60)
+            version:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 13, -60 - (BG.MainNavigationHeight or 0))
         else
             version:SetPoint("TOPLEFT", frameright, "TOPLEFT", 105, 0)
         end

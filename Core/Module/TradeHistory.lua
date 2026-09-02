@@ -269,7 +269,7 @@ local function RoadTrade()
             })
             f:SetBackdropColor(0, 0, 0, 0.4)
             f:SetBackdropBorderColor(1, 1, 1, .8)
-            f:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 10, -65)
+            f:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 10, -65 - (BG.MainNavigationHeight or 0))
             f:SetSize(WIDTH + 5, HEIGHT)
             f:EnableMouse(true)
             mainFrame.frame = f

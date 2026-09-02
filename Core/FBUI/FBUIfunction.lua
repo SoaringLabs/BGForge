@@ -250,7 +250,7 @@ function BG.FBTitleUI(FB, t)
     local parent = BG["Frame" .. FB]
     local version = parent:CreateFontString()
     if t == 1 then
-        version:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 13, -60)
+        version:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 13, -60 - (BG.MainNavigationHeight or 0))
     else
         version:SetPoint("TOPLEFT", frameright, "TOPLEFT", 100, 0)
     end

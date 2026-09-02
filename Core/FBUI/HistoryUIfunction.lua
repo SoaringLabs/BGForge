@@ -34,7 +34,7 @@ function BG.HistoryTitleUI(FB, t)
     local fontsize = 15
     local version = BG["HistoryFrame" .. FB]:CreateFontString()
     if t == 1 then
-        version:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 13, -60)
+        version:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 13, -60 - (BG.MainNavigationHeight or 0))
     else
         version:SetPoint("TOPLEFT", frameright, "TOPLEFT", 100, 0)
     end

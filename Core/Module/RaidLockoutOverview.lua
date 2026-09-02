@@ -695,19 +695,33 @@ local function CaptureLegendaryFragmentItems()
     return items
 end
 
+local function DesignColor(token, alpha)
+    local color = BG.UI.Token("color", token)
+    if alpha ~= nil then
+        color[4] = alpha
+    end
+    return color
+end
+
 local COLOR = {
-    panel = { 0.015, 0.055, 0.075, 0.98 },
-    panelTop = { 0.02, 0.075, 0.095, 0.98 },
-    header = { 0.025, 0.105, 0.13, 0.98 },
-    headerStrong = { 0.035, 0.13, 0.155, 0.98 },
-    rowOdd = { 0.018, 0.07, 0.09, 0.9 },
-    rowEven = { 0.025, 0.095, 0.115, 0.9 },
-    current = { 0.24, 0.18, 0.05, 0.7 },
-    gold = { 0.84, 0.55, 0.18, 0.95 },
-    goldDim = { 0.42, 0.29, 0.13, 0.82 },
-    grid = { 0.34, 0.25, 0.15, 0.72 },
-    complete = { 0.1, 0.31, 0.14, 0.62 },
-    partial = { 0.36, 0.19, 0.035, 0.48 },
+    panel = DesignColor("canvas"),
+    panelTop = DesignColor("header"),
+    header = DesignColor("header"),
+    headerStrong = DesignColor("raised"),
+    row = DesignColor("row"),
+    rowHoverWash = DesignColor("rowHoverWash"),
+    current = DesignColor("focusSurface"),
+    gold = DesignColor("forgeGold"),
+    grid = DesignColor("borderSubtle"),
+    gridStrong = DesignColor("borderStrong"),
+    focus = DesignColor("focus"),
+    focusText = DesignColor("focusText"),
+    textPrimary = DesignColor("textPrimary"),
+    textSecondary = DesignColor("textSecondary"),
+    textMuted = DesignColor("textMuted"),
+    complete = DesignColor("successSurface"),
+    partial = DesignColor("warningSurface"),
+    warning = DesignColor("warning"),
 }
 
 local function GetLockoutOptionKey(columnID)
@@ -847,6 +861,8 @@ local deletedThisSession = {}
 local overviewFrame
 local hoverFrame
 local hoverAnchor
+local hoverEmbedded = false
+local hoverFloatingFrameLevel
 local hoverHideSerial = 0
 local updateOverviewFrame
 local updateHoverFrame
@@ -1632,7 +1648,7 @@ local function UpdateProfessionCooldownStatusDisplay(status, character)
     local summary = GetProfessionCooldownSummary(character)
     if summary.unknown then
         status.text:SetText("?")
-        status.text:SetTextColor(0.48, 0.48, 0.48)
+        status.text:SetTextColor(unpack(COLOR.textMuted))
     elseif summary.total == 0 then
         return
     elseif summary.ready == summary.total then
@@ -1646,7 +1662,7 @@ local function UpdateProfessionCooldownStatusDisplay(status, character)
         else
             status.text:SetText(FormatCompactCooldownTime(summary.earliestEndTime - GetServerTime()))
         end
-        status.text:SetTextColor(1, 0.68, 0.18)
+        status.text:SetTextColor(unpack(COLOR.warning))
         if status.background then
             status.background:SetColorTexture(unpack(COLOR.partial))
         end
@@ -1754,10 +1770,10 @@ local function UpdateStatusDisplay(status, character, lockout, compact, blankWhe
 
     if not character.ready then
         status.text:SetText("…")
-        status.text:SetTextColor(0.55, 0.55, 0.55)
+        status.text:SetTextColor(unpack(COLOR.textMuted))
     elseif not lockout then
         status.text:SetText(blankWhenAvailable and "" or "—")
-        status.text:SetTextColor(0.38, 0.38, 0.38)
+        status.text:SetTextColor(unpack(COLOR.textMuted))
     elseif compact then
         status.text:SetText("")
         if (lockout.killedCount or 0) > 0 then
@@ -1775,11 +1791,10 @@ local function UpdateStatusDisplay(status, character, lockout, compact, blankWhe
     else
         status.text:SetFormattedText("%d/%d", lockout.killedCount, lockout.numEncounters)
         if status.background then
-            status.text:SetTextColor(1, 0.68, 0.18)
+            status.text:SetTextColor(unpack(COLOR.warning))
             status.background:SetColorTexture(unpack(COLOR.partial))
         else
-            -- 大界面沿用原有颜色；本轮只重构小界面。
-            status.text:SetTextColor(1, 0.82, 0)
+            status.text:SetTextColor(unpack(COLOR.warning))
         end
     end
 end
@@ -2024,8 +2039,8 @@ local function CreateOverviewFrame()
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
     })
-    overviewFrame:SetBackdropColor(0.025, 0.025, 0.035, 0.96)
-    overviewFrame:SetBackdropBorderColor(0, 0.75, 1, 0.9)
+    overviewFrame:SetBackdropColor(unpack(COLOR.panel))
+    overviewFrame:SetBackdropBorderColor(unpack(COLOR.gridStrong))
     overviewFrame:Hide()
     tinsert(UISpecialFrames, overviewFrame:GetName())
 
@@ -2045,12 +2060,12 @@ local function CreateOverviewFrame()
     local title = overviewFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOP", 0, -14)
     title:SetText(L["所有角色团本锁定总览"])
-    title:SetTextColor(0, 0.75, 1)
+    title:SetTextColor(unpack(COLOR.focusText))
 
     local subtitle = overviewFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     subtitle:SetPoint("TOP", title, "BOTTOM", 0, -5)
     subtitle:SetText(L["汇总当前服务器下已在本机记录的角色本周团本进度"])
-    subtitle:SetTextColor(0.55, 0.75, 0.8)
+    subtitle:SetTextColor(unpack(COLOR.textSecondary))
 
     local refresh = CreateFrame("Button", nil, overviewFrame, "UIPanelButtonTemplate")
     refresh:SetSize(64, 22)
@@ -2067,7 +2082,7 @@ local function CreateOverviewFrame()
     characterHeader:SetWidth(nameWidth)
     characterHeader:SetHeight(headerGroupHeight + headerSubHeight)
     characterHeader:SetJustifyH("LEFT")
-    characterHeader:SetTextColor(0, 0.75, 1)
+    characterHeader:SetTextColor(unpack(COLOR.focusText))
 
     for columnIndex, column in ipairs(LOCKOUT_COLUMNS) do
         local header = overviewFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -2076,7 +2091,7 @@ local function CreateOverviewFrame()
         header:SetHeight(column.groupID and headerSubHeight or (headerGroupHeight + headerSubHeight))
         header:SetJustifyH("CENTER")
         header:SetText(column.name)
-        header:SetTextColor(0, 0.75, 1)
+        header:SetTextColor(unpack(COLOR.focusText))
         headers[column.id] = header
     end
     for _, group in ipairs(QUEST_HEADER_GROUPS) do
@@ -2084,7 +2099,7 @@ local function CreateOverviewFrame()
         header:SetHeight(headerGroupHeight)
         header:SetJustifyH("CENTER")
         header:SetText(group.name)
-        header:SetTextColor(0, 0.75, 1)
+        header:SetTextColor(unpack(COLOR.focusText))
         header:Hide()
         groupHeaders[group.id] = header
     end
@@ -2093,6 +2108,7 @@ local function CreateOverviewFrame()
     statusText:SetPoint("RIGHT", refresh, "LEFT", -8, 0)
     statusText:SetWidth(260)
     statusText:SetJustifyH("RIGHT")
+    statusText:SetTextColor(unpack(COLOR.textSecondary))
 
     local function EnsureRow(rowIndex)
         if rows[rowIndex] then
@@ -2105,7 +2121,7 @@ local function CreateOverviewFrame()
 
         local highlight = row:CreateTexture(nil, "BACKGROUND")
         highlight:SetAllPoints()
-        highlight:SetColorTexture(0, 0.55, 1, 0.18)
+        highlight:SetColorTexture(unpack(COLOR.current))
         highlight:Hide()
         row.highlight = highlight
 
@@ -2243,7 +2259,7 @@ local function CreateHoverFrame()
         cell:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8X8",
         })
-        cell:SetBackdropColor(unpack(backgroundColor or COLOR.rowOdd))
+        cell:SetBackdropColor(unpack(backgroundColor or COLOR.row))
 
         borders = borders or {}
         local function AddVerticalBorder(point)
@@ -2292,7 +2308,7 @@ local function CreateHoverFrame()
     end
 
     local function CreateResourceNumberText(cell)
-        local text = CreateCellText(cell, nil, nil, { 0.95, 0.67, 0.29, 1 }, "CENTER")
+        local text = CreateCellText(cell, nil, nil, COLOR.gold, "CENTER")
         text:SetFont(RESOURCE_NUMBER_FONT, RESOURCE_NUMBER_FONT_SIZE, "OUTLINE")
         return text
     end
@@ -2314,7 +2330,7 @@ local function CreateHoverFrame()
             edgeFile = "Interface\\Buttons\\WHITE8X8",
             edgeSize = 1,
         })
-        tile:SetBackdropColor(0.02, 0.02, 0.02, 1)
+        tile:SetBackdropColor(unpack(COLOR.panel))
 
         local icon = tile:CreateTexture(nil, "ARTWORK")
         icon:SetPoint("TOPLEFT", 1, -1)
@@ -2411,7 +2427,7 @@ local function CreateHoverFrame()
         local overlay = cell:CreateTexture(nil, "ARTWORK", nil, -8)
         overlay:SetPoint("TOPLEFT", 1, -1)
         overlay:SetPoint("BOTTOMRIGHT", -1, 1)
-        overlay:SetColorTexture(0.95, 0.62, 0.2, 1)
+        overlay:SetColorTexture(unpack(COLOR.rowHoverWash))
         overlay:SetAlpha(0)
         overlays[#overlays + 1] = overlay
     end
@@ -2423,22 +2439,8 @@ local function CreateHoverFrame()
         end
     end
 
-    local function AnimateRowHover(controller, targetAlpha)
-        controller.hoverStartAlpha = controller.hoverAlpha or 0
-        controller.hoverTargetAlpha = targetAlpha
-        controller.hoverElapsed = 0
-        controller:SetScript("OnUpdate", function(self, elapsed)
-            self.hoverElapsed = self.hoverElapsed + elapsed
-            local progress = min(1, self.hoverElapsed / 0.1)
-            local eased = 1 - (1 - progress) * (1 - progress)
-            SetRowHoverAlpha(
-                self,
-                self.hoverStartAlpha + (self.hoverTargetAlpha - self.hoverStartAlpha) * eased
-            )
-            if progress >= 1 then
-                self:SetScript("OnUpdate", nil)
-            end
-        end)
+    local function SetRowHoverVisible(controller, visible)
+        SetRowHoverAlpha(controller, visible and not controller.isCurrent and 1 or 0)
     end
 
     local function CreateRowHoverController(overlays)
@@ -2449,46 +2451,68 @@ local function CreateHoverFrame()
         controller.hoverAlpha = 0
         controller:SetScript("OnEnter", function(self)
             hoverHideSerial = hoverHideSerial + 1
-            AnimateRowHover(self, 0.16)
+            SetRowHoverVisible(self, true)
         end)
         controller:SetScript("OnLeave", function(self)
-            AnimateRowHover(self, 0)
+            SetRowHoverVisible(self, false)
         end)
         return controller
     end
 
     local function ShowButtonTooltip(button)
         GameTooltip:SetOwner(button, "ANCHOR_TOP")
-        GameTooltip:SetText(button.tooltipText, 1, 0.82, 0)
+        GameTooltip:SetText(
+            button.tooltipText,
+            COLOR.textPrimary[1], COLOR.textPrimary[2], COLOR.textPrimary[3]
+        )
         GameTooltip:Show()
+    end
+
+    local function SetIconButtonVisual(button, background, border, iconColor)
+        button:SetBackdropColor(unpack(background))
+        button:SetBackdropBorderColor(unpack(border))
+        button.icon:SetVertexColor(unpack(iconColor))
+    end
+
+    local function SetIconButtonBorder(button, border)
+        button:SetBackdropBorderColor(unpack(border))
     end
 
     local function CreateIconButton(texture, tooltipText)
         local button = CreateFrame("Button", nil, hoverFrame, "BackdropTemplate")
-        button:SetSize(23, 23)
+        button:SetSize(24, 24)
         button:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8X8",
             edgeFile = "Interface\\Buttons\\WHITE8X8",
             edgeSize = 1,
         })
-        button:SetBackdropColor(0.04, 0.09, 0.1, 0.96)
-        button:SetBackdropBorderColor(unpack(COLOR.goldDim))
 
         local icon = button:CreateTexture(nil, "ARTWORK")
         icon:SetPoint("TOPLEFT", 3, -3)
         icon:SetPoint("BOTTOMRIGHT", -3, 3)
         icon:SetTexture(texture)
         icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        icon:SetVertexColor(0.95, 0.67, 0.28)
         button.icon = icon
-
-        local highlight = button:CreateTexture(nil, "HIGHLIGHT")
-        highlight:SetPoint("TOPLEFT", 2, -2)
-        highlight:SetPoint("BOTTOMRIGHT", -2, 2)
-        highlight:SetColorTexture(1, 0.72, 0.25, 0.18)
+        SetIconButtonVisual(button, COLOR.headerStrong, COLOR.gridStrong, COLOR.textPrimary)
         button.tooltipText = tooltipText
-        button:SetScript("OnEnter", ShowButtonTooltip)
-        button:SetScript("OnLeave", GameTooltip_Hide)
+        button:SetScript("OnEnter", function(self)
+            SetIconButtonBorder(self, COLOR.focus)
+            ShowButtonTooltip(self)
+        end)
+        button:SetScript("OnLeave", function(self)
+            SetIconButtonBorder(self, COLOR.gridStrong)
+            GameTooltip_Hide()
+        end)
+        button:SetScript("OnMouseDown", function(self, mouseButton)
+            if mouseButton == "LeftButton" then
+                SetIconButtonBorder(self, COLOR.focusText)
+            end
+        end)
+        button:SetScript("OnMouseUp", function(self, mouseButton)
+            if mouseButton == "LeftButton" then
+                SetIconButtonBorder(self, COLOR.focus)
+            end
+        end)
         return button
     end
 
@@ -2502,6 +2526,7 @@ local function CreateHoverFrame()
     })
     hoverFrame:SetBackdropColor(unpack(COLOR.panel))
     hoverFrame:Hide()
+    hoverFloatingFrameLevel = hoverFrame:GetFrameLevel()
 
     local innerBorder = CreateFrame("Frame", nil, hoverFrame, "BackdropTemplate")
     innerBorder:SetPoint("TOPLEFT", 6, -6)
@@ -2510,7 +2535,7 @@ local function CreateHoverFrame()
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
     })
-    innerBorder:SetBackdropBorderColor(0.3, 0.22, 0.12, 0.82)
+    innerBorder:SetBackdropBorderColor(unpack(COLOR.gridStrong))
 
     local contentScroll = CreateFrame("ScrollFrame", nil, hoverFrame)
     contentScroll:EnableMouseWheel(true)
@@ -2534,12 +2559,12 @@ local function CreateHoverFrame()
     scrollTrack:SetPoint("LEFT", 0, 0)
     scrollTrack:SetPoint("RIGHT", 0, 0)
     scrollTrack:SetHeight(3)
-    scrollTrack:SetColorTexture(0.35, 0.25, 0.12, 0.8)
+    scrollTrack:SetColorTexture(unpack(COLOR.gridStrong))
 
     horizontalScrollBar:SetThumbTexture("Interface\\Buttons\\WHITE8X8")
     local scrollThumb = horizontalScrollBar:GetThumbTexture()
     scrollThumb:SetSize(32, 8)
-    scrollThumb:SetColorTexture(0.95, 0.62, 0.2, 0.9)
+    scrollThumb:SetColorTexture(unpack(COLOR.focus))
 
     horizontalScrollBar:SetScript("OnValueChanged", function(_, value)
         contentScroll:SetHorizontalScroll(value)
@@ -2577,23 +2602,40 @@ local function CreateHoverFrame()
     logo:SetPoint("LEFT", 8, 0)
     logo:SetTexture("Interface\\AddOns\\BGForge\\Media\\icon\\icon-128.tga")
 
+    local brandTitle = topBar:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    brandTitle:SetPoint("LEFT", logo, "RIGHT", 7, 0)
+    brandTitle:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+    brandTitle:SetText("BGForge")
+    brandTitle:SetTextColor(unpack(COLOR.gold))
+
+    local titleDivider = topBar:CreateTexture(nil, "ARTWORK")
+    titleDivider:SetPoint("LEFT", brandTitle, "RIGHT", 9, 0)
+    titleDivider:SetSize(1, 15)
+    titleDivider:SetColorTexture(unpack(COLOR.gridStrong))
+
     local title = topBar:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    title:SetPoint("LEFT", logo, "RIGHT", 7, 0)
+    title:SetPoint("LEFT", titleDivider, "RIGHT", 9, 0)
     title:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-    title:SetText(L["BGForge · 全角色总览"])
-    title:SetTextColor(unpack(COLOR.gold))
+    title:SetText(L["全角色总览"])
+    title:SetTextColor(unpack(COLOR.textPrimary))
 
     local close = CreateIconButton("Interface\\Buttons\\UI-Panel-MinimizeButton-Up", L["关闭"])
     close:SetPoint("TOPRIGHT", -ui.padding - 6, -ui.padding - 6)
     close:SetScript("OnClick", function()
-        hoverFrame:Hide()
+        if hoverEmbedded and BG.ClickTabButton and BG.FBMainFrameTabNum then
+            BG.ClickTabButton(BG.FBMainFrameTabNum)
+        else
+            hoverFrame:Hide()
+        end
         GameTooltip:Hide()
     end)
 
     local settings = CreateIconButton("Interface\\Icons\\Trade_Engineering", L["设置"])
     settings:SetPoint("RIGHT", close, "LEFT", -5, 0)
     settings:SetScript("OnClick", function()
-        hoverFrame:Hide()
+        if not hoverEmbedded then
+            hoverFrame:Hide()
+        end
         GameTooltip:Hide()
         if BG.OpenRaidLockoutOptions then
             BG.OpenRaidLockoutOptions()
@@ -2616,7 +2658,18 @@ local function CreateHoverFrame()
     resetText:SetJustifyH("RIGHT")
     resetText:SetWordWrap(false)
     resetText:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
-    resetText:SetTextColor(0.72, 0.66, 0.55)
+    resetText:SetTextColor(unpack(COLOR.textSecondary))
+
+    hoverFrame.chrome = {
+        innerBorder = innerBorder,
+        logo = logo,
+        brandTitle = brandTitle,
+        titleDivider = titleDivider,
+        title = title,
+        close = close,
+        settings = settings,
+        refresh = refresh,
+    }
 
     local raidTitleCell = CreateTableCell(contentFrame, COLOR.headerStrong, { left = true })
     raidTitleCell:SetPoint("TOPLEFT", ui.padding, 0)
@@ -2625,8 +2678,8 @@ local function CreateHoverFrame()
     raidTitleAccent:SetPoint("TOPLEFT", 5, -5)
     raidTitleAccent:SetPoint("BOTTOMLEFT", 5, 5)
     raidTitleAccent:SetWidth(3)
-    raidTitleAccent:SetColorTexture(unpack(COLOR.gold))
-    local raidTitle = CreateCellText(raidTitleCell, "GameFontNormal", 12, COLOR.gold, "LEFT")
+    raidTitleAccent:SetColorTexture(unpack(COLOR.focus))
+    local raidTitle = CreateCellText(raidTitleCell, "GameFontNormal", 12, COLOR.textPrimary, "LEFT")
     raidTitle:ClearAllPoints()
     raidTitle:SetPoint("LEFT", 14, 0)
     raidTitle:SetPoint("RIGHT", -7, 0)
@@ -2638,14 +2691,14 @@ local function CreateHoverFrame()
             column.groupID and ui.raidHeaderSubHeight
                 or (ui.raidHeaderGroupHeight + ui.raidHeaderSubHeight)
         )
-        local text = CreateCellText(header, "GameFontNormal", 12, COLOR.gold, "CENTER")
+        local text = CreateCellText(header, "GameFontNormal", 12, COLOR.textSecondary, "CENTER")
         text:SetText(column.name)
         headers[column.id] = header
     end
     for _, group in ipairs(QUEST_HEADER_GROUPS) do
         local header = CreateTableCell(contentFrame, COLOR.headerStrong)
         header:SetSize(1, ui.raidHeaderGroupHeight)
-        local text = CreateCellText(header, "GameFontNormal", 12, COLOR.gold, "CENTER")
+        local text = CreateCellText(header, "GameFontNormal", 12, COLOR.focusText, "CENTER")
         text:SetText(group.name)
         header:Hide()
         groupHeaders[group.id] = header
@@ -2657,15 +2710,15 @@ local function CreateHoverFrame()
     resourceAccent:SetPoint("TOPLEFT", 5, -5)
     resourceAccent:SetPoint("BOTTOMLEFT", 5, 5)
     resourceAccent:SetWidth(3)
-    resourceAccent:SetColorTexture(unpack(COLOR.gold))
-    local resourceTitle = CreateCellText(resourceTitleCell, "GameFontNormal", 12, COLOR.gold, "LEFT")
+    resourceAccent:SetColorTexture(unpack(COLOR.focus))
+    local resourceTitle = CreateCellText(resourceTitleCell, "GameFontNormal", 12, COLOR.textPrimary, "LEFT")
     resourceTitle:ClearAllPoints()
     resourceTitle:SetPoint("LEFT", 14, 0)
     resourceTitle:SetPoint("RIGHT", -7, 0)
 
     local professionHeader = CreateTableCell(contentFrame, COLOR.headerStrong, { top = true })
     professionHeader:SetSize(ui.professionWidth, ui.resourceGroupHeight + ui.resourceSubHeaderHeight)
-    local professionHeaderText = CreateCellText(professionHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    local professionHeaderText = CreateCellText(professionHeader, "GameFontNormal", 12, COLOR.textSecondary, "CENTER")
     professionHeaderText:SetText(L["专业"])
 
     local equipmentHeader = CreateTableCell(contentFrame, COLOR.headerStrong, { top = true })
@@ -2673,54 +2726,54 @@ local function CreateHoverFrame()
         ui.legendaryWidth + ui.fragmentWidth + ui.upgradeWidth + ui.trinketWidth,
         ui.resourceGroupHeight
     )
-    local equipmentHeaderText = CreateCellText(equipmentHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    local equipmentHeaderText = CreateCellText(equipmentHeader, "GameFontNormal", 12, COLOR.focusText, "CENTER")
     equipmentHeaderText:SetText(L["装备"])
 
     local legendaryHeader = CreateTableCell(contentFrame, COLOR.header)
     legendaryHeader:SetSize(ui.legendaryWidth, ui.resourceSubHeaderHeight)
-    local legendaryHeaderText = CreateCellText(legendaryHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    local legendaryHeaderText = CreateCellText(legendaryHeader, "GameFontNormal", 12, COLOR.textSecondary, "CENTER")
     legendaryHeaderText:SetText(L["橙装"])
 
     local fragmentHeader = CreateTableCell(contentFrame, COLOR.header)
     fragmentHeader:SetSize(ui.fragmentWidth, ui.resourceSubHeaderHeight)
-    local fragmentHeaderText = CreateCellText(fragmentHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    local fragmentHeaderText = CreateCellText(fragmentHeader, "GameFontNormal", 12, COLOR.textSecondary, "CENTER")
     fragmentHeaderText:SetText(L["橙武碎片"])
 
     local upgradeHeader = CreateTableCell(contentFrame, COLOR.header)
     upgradeHeader:SetSize(ui.upgradeWidth, ui.resourceSubHeaderHeight)
-    local upgradeHeaderText = CreateCellText(upgradeHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    local upgradeHeaderText = CreateCellText(upgradeHeader, "GameFontNormal", 12, COLOR.textSecondary, "CENTER")
     upgradeHeaderText:SetText(L["升级物品"])
 
     local trinketHeader = CreateTableCell(contentFrame, COLOR.header)
     trinketHeader:SetSize(ui.trinketWidth, ui.resourceSubHeaderHeight)
-    local trinketHeaderText = CreateCellText(trinketHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    local trinketHeaderText = CreateCellText(trinketHeader, "GameFontNormal", 12, COLOR.textSecondary, "CENTER")
     trinketHeaderText:SetText(L["饰品"])
 
     local commonHeader = CreateTableCell(contentFrame, COLOR.headerStrong, { top = true })
     commonHeader:SetSize(ui.goldWidth + ui.emberWidth + ui.shardWidth, ui.resourceGroupHeight)
-    local commonHeaderText = CreateCellText(commonHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    local commonHeaderText = CreateCellText(commonHeader, "GameFontNormal", 12, COLOR.focusText, "CENTER")
     commonHeaderText:SetText(L["通用资源"])
 
     local goldHeader = CreateTableCell(contentFrame, COLOR.header)
     goldHeader:SetSize(ui.goldWidth, ui.resourceSubHeaderHeight)
-    local goldHeaderText = CreateCellText(goldHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    local goldHeaderText = CreateCellText(goldHeader, "GameFontNormal", 12, COLOR.textSecondary, "CENTER")
     goldHeaderText:SetText(L["金币"])
 
     local emberHeader = CreateTableCell(contentFrame, COLOR.header)
     emberHeader:SetSize(ui.emberWidth, ui.resourceSubHeaderHeight)
-    local emberHeaderText = CreateCellText(emberHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    local emberHeaderText = CreateCellText(emberHeader, "GameFontNormal", 12, COLOR.textSecondary, "CENTER")
     emberHeaderText:SetText(L["泰坦余烬"])
 
     local shardHeader = CreateTableCell(contentFrame, COLOR.header)
     shardHeader:SetSize(ui.shardWidth, ui.resourceSubHeaderHeight)
-    local shardHeaderText = CreateCellText(shardHeader, "GameFontNormal", 12, COLOR.gold, "CENTER")
+    local shardHeaderText = CreateCellText(shardHeader, "GameFontNormal", 12, COLOR.textSecondary, "CENTER")
     shardHeaderText:SetText(L["泰坦碎片"])
 
     local footerText = contentFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     footerText:SetJustifyH("LEFT")
     footerText:SetWordWrap(false)
     footerText:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-    footerText:SetTextColor(0.58, 0.52, 0.43)
+    footerText:SetTextColor(unpack(COLOR.textMuted))
 
     local function EnsureRow(rowIndex)
         if rows[rowIndex] then
@@ -2736,6 +2789,15 @@ local function CreateHoverFrame()
         row.raidNameCell = CreateTableCell(contentFrame, nil, { left = true })
         row.raidNameCell:SetSize(ui.nameWidth, ui.rowHeight)
         row.raidName = CreateCellText(row.raidNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
+        row.raidName:ClearAllPoints()
+        row.raidName:SetPoint("LEFT", 11, 0)
+        row.raidName:SetPoint("RIGHT", -7, 0)
+        row.raidCurrentAccent = row.raidNameCell:CreateTexture(nil, "ARTWORK")
+        row.raidCurrentAccent:SetPoint("TOPLEFT", 1, -1)
+        row.raidCurrentAccent:SetPoint("BOTTOMLEFT", 1, 1)
+        row.raidCurrentAccent:SetWidth(2)
+        row.raidCurrentAccent:SetColorTexture(unpack(COLOR.focus))
+        row.raidCurrentAccent:Hide()
         CreateRowHoverOverlay(row.raidNameCell, row.raidHoverOverlays)
 
         for _, column in ipairs(LOCKOUT_COLUMNS) do
@@ -2748,13 +2810,13 @@ local function CreateHoverFrame()
                 cell:SetScript("OnEnter", function(self)
                     hoverHideSerial = hoverHideSerial + 1
                     if row.raidHover then
-                        AnimateRowHover(row.raidHover, 0.16)
+                        SetRowHoverVisible(row.raidHover, true)
                     end
                     ShowProfessionCooldownTooltip(self)
                 end)
                 cell:SetScript("OnLeave", function()
                     if row.raidHover then
-                        AnimateRowHover(row.raidHover, 0)
+                        SetRowHoverVisible(row.raidHover, false)
                     end
                     GameTooltip:Hide()
                 end)
@@ -2765,6 +2827,15 @@ local function CreateHoverFrame()
         row.resourceNameCell = CreateTableCell(contentFrame, nil, { left = true })
         row.resourceNameCell:SetSize(ui.nameWidth, ui.rowHeight)
         row.resourceName = CreateCellText(row.resourceNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
+        row.resourceName:ClearAllPoints()
+        row.resourceName:SetPoint("LEFT", 11, 0)
+        row.resourceName:SetPoint("RIGHT", -7, 0)
+        row.resourceCurrentAccent = row.resourceNameCell:CreateTexture(nil, "ARTWORK")
+        row.resourceCurrentAccent:SetPoint("TOPLEFT", 1, -1)
+        row.resourceCurrentAccent:SetPoint("BOTTOMLEFT", 1, 1)
+        row.resourceCurrentAccent:SetWidth(2)
+        row.resourceCurrentAccent:SetColorTexture(unpack(COLOR.focus))
+        row.resourceCurrentAccent:Hide()
         CreateRowHoverOverlay(row.resourceNameCell, row.resourceHoverOverlays)
 
         row.professionCell = CreateTableCell(contentFrame)
@@ -2905,10 +2976,19 @@ local function CreateHoverFrame()
             ui.padding * 2 + ui.nameWidth + compactColumnsWidth,
             ui.padding * 2 + compactResourceWidth
         )
-        local viewportWidth, horizontalOverflow = renderContext.calculateHorizontalViewport(
-            width,
-            UIParent:GetWidth()
-        )
+        local viewportWidth
+        local horizontalOverflow
+        if hoverEmbedded and BG.MainFrame then
+            local availableWidth = max(320, BG.MainFrame:GetWidth() - ui.padding * 2)
+            width = max(width, availableWidth)
+            viewportWidth = availableWidth
+            horizontalOverflow = max(0, width - viewportWidth)
+        else
+            viewportWidth, horizontalOverflow = renderContext.calculateHorizontalViewport(
+                width,
+                UIParent:GetWidth()
+            )
+        end
         local columnWidths, lockoutsWidth = renderContext.calculateColumnWidths(
             visibleColumns,
             width - ui.padding * 2 - ui.nameWidth,
@@ -3068,7 +3148,7 @@ local function CreateHoverFrame()
         for rowIndex, character in ipairs(raidCharacters) do
             local row = renderContext.ensureRow(rowIndex)
             local rowColor = character.isCurrent and renderContext.color.current
-                or (rowIndex % 2 == 0 and renderContext.color.rowEven or renderContext.color.rowOdd)
+                or renderContext.color.row
             local rowY = raidRowsTop + (rowIndex - 1) * ui.rowHeight
 
             row.raidNameCell:Show()
@@ -3076,6 +3156,11 @@ local function CreateHoverFrame()
             row.raidNameCell:SetPoint("TOPLEFT", ui.padding, -rowY)
             renderContext.setCellColor(row.raidNameCell, rowColor)
             row.raidName:SetText(renderContext.getCharacterDisplayName(character, "itemLevel"))
+            if character.isCurrent then
+                row.raidCurrentAccent:Show()
+            else
+                row.raidCurrentAccent:Hide()
+            end
 
             for _, cell in pairs(row.raidCells) do
                 cell:Hide()
@@ -3107,6 +3192,7 @@ local function CreateHoverFrame()
             row.raidHover:ClearAllPoints()
             row.raidHover:SetPoint("TOPLEFT", ui.padding, -rowY)
             row.raidHover:SetSize(ui.nameWidth + lockoutsWidth, ui.rowHeight)
+            row.raidHover.isCurrent = character.isCurrent
             row.raidHover:Show()
         end
 
@@ -3119,7 +3205,7 @@ local function CreateHoverFrame()
         for rowIndex, character in ipairs(resourceCharacters) do
             local row = renderContext.ensureRow(rowIndex)
             local rowColor = character.isCurrent and renderContext.color.current
-                or (rowIndex % 2 == 0 and renderContext.color.rowEven or renderContext.color.rowOdd)
+                or renderContext.color.row
             local resourceRowY = resourceRowsTop + (rowIndex - 1) * ui.rowHeight
             local professionX = ui.padding + ui.nameWidth
             local legendaryX = professionX + professionWidth
@@ -3135,6 +3221,11 @@ local function CreateHoverFrame()
             row.resourceNameCell:SetPoint("TOPLEFT", ui.padding, -resourceRowY)
             renderContext.setCellColor(row.resourceNameCell, rowColor)
             row.resourceName:SetText(renderContext.getCharacterDisplayName(character, "level"))
+            if character.isCurrent then
+                row.resourceCurrentAccent:Show()
+            else
+                row.resourceCurrentAccent:Hide()
+            end
 
             row.professionCell:Show()
             row.professionCell:SetWidth(professionWidth)
@@ -3219,6 +3310,7 @@ local function CreateHoverFrame()
             row.resourceHover:ClearAllPoints()
             row.resourceHover:SetPoint("TOPLEFT", ui.padding, -resourceRowY)
             row.resourceHover:SetSize(resourceWidth, ui.rowHeight)
+            row.resourceHover.isCurrent = character.isCurrent
             row.resourceHover:Show()
 
             goldTotal = goldTotal + (gold or 0)
@@ -3250,7 +3342,6 @@ local function CreateHoverFrame()
             local row = rows[rowIndex]
             row.raidNameCell:Hide()
             row.raidHover:Hide()
-            row.raidHover:SetScript("OnUpdate", nil)
             renderContext.setRowHoverAlpha(row.raidHover, 0)
             for _, cell in pairs(row.raidCells) do
                 cell:Hide()
@@ -3269,7 +3360,6 @@ local function CreateHoverFrame()
             row.emberCell:Hide()
             row.shardCell:Hide()
             row.resourceHover:Hide()
-            row.resourceHover:SetScript("OnUpdate", nil)
             renderContext.setRowHoverAlpha(row.resourceHover, 0)
         end
 
@@ -3349,7 +3439,86 @@ local function CreateHoverFrame()
     updateHoverFrame()
 end
 
+local function SetEmbeddedChrome(isEmbedded)
+    local chrome = hoverFrame and hoverFrame.chrome
+    if not chrome then
+        return
+    end
+
+    chrome.title:ClearAllPoints()
+    chrome.refresh:ClearAllPoints()
+    if isEmbedded then
+        chrome.innerBorder:Hide()
+        chrome.logo:Hide()
+        chrome.brandTitle:Hide()
+        chrome.titleDivider:Hide()
+        chrome.close:Hide()
+        chrome.settings:Hide()
+        chrome.title:SetPoint("LEFT", 10, 0)
+        chrome.refresh:SetPoint("TOPRIGHT", -SMALL_UI.padding - 6, -SMALL_UI.padding - 6)
+    else
+        chrome.innerBorder:Show()
+        chrome.logo:Show()
+        chrome.brandTitle:Show()
+        chrome.titleDivider:Show()
+        chrome.close:Show()
+        chrome.settings:Show()
+        chrome.title:SetPoint("LEFT", chrome.titleDivider, "RIGHT", 9, 0)
+        chrome.refresh:SetPoint("RIGHT", chrome.settings, "LEFT", -5, 0)
+    end
+end
+
+local function RestoreFloatingHoverFrame()
+    if not hoverFrame then
+        return
+    end
+
+    hoverEmbedded = false
+    hoverFrame:Hide()
+    hoverFrame:SetParent(UIParent)
+    hoverFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+    if hoverFloatingFrameLevel then
+        hoverFrame:SetFrameLevel(hoverFloatingFrameLevel)
+    end
+    hoverFrame:SetClampedToScreen(true)
+    hoverFrame:ClearAllPoints()
+    hoverFrame:SetScript("OnEnter", nil)
+    hoverFrame:SetScript("OnLeave", nil)
+    SetEmbeddedChrome(false)
+end
+
+local function ShowEmbeddedOverview(parent)
+    CreateHoverFrame()
+    hoverHideSerial = hoverHideSerial + 1
+    hoverAnchor = nil
+    hoverEmbedded = true
+
+    hoverFrame:Hide()
+    hoverFrame:SetParent(parent)
+    hoverFrame:SetFrameStrata(BG.MainFrame:GetFrameStrata())
+    hoverFrame:SetFrameLevel(parent:GetFrameLevel() + 1)
+    hoverFrame:SetClampedToScreen(false)
+    hoverFrame:ClearAllPoints()
+    hoverFrame:SetPoint("TOP", parent, "TOP", 0, -58)
+    hoverFrame:SetScript("OnEnter", nil)
+    hoverFrame:SetScript("OnLeave", nil)
+    SetEmbeddedChrome(true)
+
+    CaptureCurrentQuestProgress()
+    CaptureCurrentResources()
+    updateHoverFrame()
+    hoverFrame:Show()
+
+    if not currentCharacter.ready
+        or not currentCharacter.lastRequestAt
+        or GetTime() - currentCharacter.lastRequestAt > 15
+    then
+        RequestCurrentRaidInfo()
+    end
+end
+
 local function PositionHoverFrame(anchor)
+    RestoreFloatingHoverFrame()
     hoverFrame:ClearAllPoints()
 
     if BG.ButtonIsInRight(anchor) then
@@ -3376,6 +3545,9 @@ local function IsPointerOver(frame)
 end
 
 local function ScheduleHoverHide()
+    if hoverEmbedded then
+        return
+    end
     hoverHideSerial = hoverHideSerial + 1
     local serial = hoverHideSerial
     BG.After(0.12, function()
@@ -3392,7 +3564,7 @@ local function ScheduleHoverHide()
 end
 
 function BG.ShowRaidLockoutHover(anchor)
-    if not anchor then
+    if not anchor or hoverEmbedded then
         return
     end
 
@@ -3418,7 +3590,7 @@ function BG.ShowRaidLockoutHover(anchor)
 end
 
 function BG.HideRaidLockoutHover()
-    if hoverFrame then
+    if hoverFrame and not hoverEmbedded then
         ScheduleHoverHide()
     end
 end
@@ -3491,35 +3663,70 @@ function BG.RefreshRaidLockoutDisplays()
     end
 end
 
+local function CreateRaidLockoutMainFrame()
+    if BG.RaidLockoutMainFrame then
+        return BG.RaidLockoutMainFrame
+    end
+
+    local mainFrame = CreateFrame("Frame", "BG.RaidLockoutMainFrame", BG.MainFrame)
+    mainFrame:SetAllPoints(BG.MainFrame)
+    mainFrame:Hide()
+    mainFrame:SetScript("OnShow", function(self)
+        BG.FrameHide(0)
+        BiaoGe.lastFrame = "RaidLockout"
+        if BG.TabButtonsFB then
+            BG.TabButtonsFB:Hide()
+        end
+        if BG.NanDuDropDown then
+            BG.NanDuDropDown.DropDown:Hide()
+        end
+        ShowEmbeddedOverview(self)
+    end)
+    mainFrame:SetScript("OnHide", function()
+        if hoverEmbedded then
+            RestoreFloatingHoverFrame()
+        end
+    end)
+    BG.RaidLockoutMainFrame = mainFrame
+    return mainFrame
+end
+
 function BG.RoleOverviewUI()
-    CreateOverviewFrame()
+    CreateRaidLockoutMainFrame()
 end
 
 function BG.ToggleRaidLockoutOverview()
-    CreateOverviewFrame()
     BG.HideRaidLockoutHover()
-    overviewFrame:SetShown(not overviewFrame:IsShown())
-end
-
-function BG.CreateRaidLockoutMainMenuButton(anchor)
-    if BG.ButtonRaidLockout or not anchor then
+    local mainFrame = CreateRaidLockoutMainFrame()
+    if BG.MainFrame and BG.ClickTabButton and BG.RaidLockoutMainFrameTabNum then
+        if BG.MainFrame:IsVisible() and mainFrame:IsVisible() then
+            BG.MainFrame:Hide()
+        else
+            BG.MainFrame:Show()
+            BG.ClickTabButton(BG.RaidLockoutMainFrameTabNum)
+        end
         return
     end
 
-    local button = CreateFrame("Button", nil, BG.MainFrame)
-    button:SetPoint("LEFT", anchor, "RIGHT", BG.TopLeftButtonJianGe, 0)
-    button:SetNormalFontObject(BG.FontGreen15)
-    button:SetDisabledFontObject(BG.FontDis15)
-    button:SetHighlightFontObject(BG.FontWhite15)
-    button:SetText(L["全角色总览"])
-    button:SetSize(button:GetFontString():GetWidth(), 20)
-    BG.SetTextHighlightTexture(button)
-    button:SetScript("OnClick", function()
-        BG.ToggleRaidLockoutOverview()
-        BG.PlaySound(1)
-    end)
+    -- Initialization fallback: the primary navigation is registered later in
+    -- BiaoGe.lua. This path is only reachable if another addon invokes the API
+    -- during that narrow window.
+    CreateOverviewFrame()
+    overviewFrame:SetShown(not overviewFrame:IsShown())
+end
+
+function BG.CreateRaidLockoutMainFrameTab()
+    if BG.ButtonRaidLockout or not BG.Create_TabButton then
+        return
+    end
+
+    local mainFrame = CreateRaidLockoutMainFrame()
+    local button = BG.Create_TabButton(
+        BG.RaidLockoutMainFrameTabNum or 2,
+        L["角色总览"],
+        mainFrame
+    )
     BG.ButtonRaidLockout = button
-    BG.LayoutMainMenuButtons()
 end
 
 BG.RegisterEvent("UPDATE_INSTANCE_INFO", CaptureRaidInfo)

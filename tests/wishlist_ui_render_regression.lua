@@ -4,6 +4,7 @@ unpack = unpack or table.unpack
 
 local Region = {}
 Region.__index = function(_, key)
+    if type(key) == "string" and key:match("^_bgforge") then return nil end
     return Region[key] or function() end
 end
 
@@ -198,6 +199,7 @@ local namespace = {
 
 local dataChunk = assert(loadfile("Core/Module/Wishlist.lua"))
 dataChunk("BGForge", namespace)
+assert(loadfile("Core/UI/DesignSystem.lua"))("BGForge", namespace)
 local uiChunk = assert(loadfile("Core/Module/WishlistUI.lua"))
 uiChunk("BGForge", namespace)
 
@@ -344,29 +346,54 @@ assert(selectedBrowseItem.level:GetText() == "245", "item level should be embedd
 assert(not rawget(selectedBrowseItem, "check"), "selected items should not render a glyph over the item icon")
 assert(selectedBrowseItem.selectedBackground:IsShown(),
     "selected browse items should keep a persistent row highlight")
-assert(selectedBrowseItem.selectedBackground.vertexColor[1] == 0.36
-    and selectedBrowseItem.selectedBackground.vertexColor[2] == 0.25
-    and selectedBrowseItem.selectedBackground.vertexColor[3] == 0.06
-    and selectedBrowseItem.selectedBackground.vertexColor[4] == 0.82,
-    "selected browse items should use the brighter brown selected state")
-assert(selectedBrowseItem.highlightTexture == selectedBrowseItem.hoverBackground,
-    "browse item rows should register their hover background as the highlight texture")
-assert(selectedBrowseItem.hoverBackground.vertexColor[1] == 0.28
-    and selectedBrowseItem.hoverBackground.vertexColor[2] == 0.18
-    and selectedBrowseItem.hoverBackground.vertexColor[3] == 0.05
-    and selectedBrowseItem.hoverBackground.vertexColor[4] == 0.26,
-    "item hover should use the darker brown hover overlay")
+local focusSurface = BG.UI.Token("color", "focusSurface")
+local rowHoverWash = BG.UI.Token("color", "rowHoverWash")
+local focus = BG.UI.Token("color", "focus")
+local focusText = BG.UI.Token("color", "focusText")
+local textMuted = BG.UI.Token("color", "textMuted")
+assert(selectedBrowseItem.selectedBackground.vertexColor[1] == focusSurface[1]
+    and selectedBrowseItem.selectedBackground.vertexColor[2] == focusSurface[2]
+    and selectedBrowseItem.selectedBackground.vertexColor[3] == focusSurface[3]
+    and selectedBrowseItem.selectedBackground.vertexColor[4] == focusSurface[4],
+    "selected browse items should use the design-system focus surface")
+assert(selectedBrowseItem.selectedAccent:IsShown()
+    and selectedBrowseItem.selectedAccent.vertexColor[1] == focus[1],
+    "selected browse items should include the Rune Blue focus line")
+assert(rawget(selectedBrowseItem, "highlightTexture") == nil,
+    "wishlist hover washes should avoid WoW's native highlight-texture alpha path")
+assert(selectedBrowseItem.hoverBackground.vertexColor[1] == rowHoverWash[1]
+    and selectedBrowseItem.hoverBackground.vertexColor[2] == rowHoverWash[2]
+    and selectedBrowseItem.hoverBackground.vertexColor[3] == rowHoverWash[3]
+    and selectedBrowseItem.hoverBackground.vertexColor[4] == rowHoverWash[4],
+    "item hover should use the neutral design-system row wash")
+assert(not selectedBrowseItem.hoverBackground:IsShown(),
+    "hover wash should not stack on an already-selected item")
 assert(selectedBrowseItem.name.textColor[1] == ITEM_QUALITY_COLORS[4].r
     and selectedBrowseItem.name.textColor[2] == ITEM_QUALITY_COLORS[4].g
     and selectedBrowseItem.name.textColor[3] == ITEM_QUALITY_COLORS[4].b,
     "selected item names should keep their quality color")
 selectedBrowseItem.sourceBosses = rawget(selectedBrowseItem, "sourceBosses") or {}
 selectedBrowseItem.scripts.OnEnter(selectedBrowseItem)
+assert(not selectedBrowseItem.hoverBackground:IsShown(),
+    "hovering a selected item should keep its hover wash suppressed")
 assert(selectedBrowseItem.name.textColor[1] == ITEM_QUALITY_COLORS[4].r
     and selectedBrowseItem.name.textColor[2] == ITEM_QUALITY_COLORS[4].g
     and selectedBrowseItem.name.textColor[3] == ITEM_QUALITY_COLORS[4].b,
     "hovering an item should not replace its quality-colored name")
 selectedBrowseItem.scripts.OnLeave(selectedBrowseItem)
+assert(not selectedBrowseItem.hoverBackground:IsShown(),
+    "leaving a selected item should keep its hover wash hidden")
+assert(rawget(setBrowseItem, "highlightTexture") == nil,
+    "unselected item rows should also use the manual hover path")
+assert(not setBrowseItem.hoverBackground:IsShown(),
+    "unselected item hover washes should start hidden")
+setBrowseItem.sourceBosses = rawget(setBrowseItem, "sourceBosses") or {}
+setBrowseItem.scripts.OnEnter(setBrowseItem)
+assert(setBrowseItem.hoverBackground:IsShown(),
+    "entering an unselected item should reveal the low-alpha hover wash")
+setBrowseItem.scripts.OnLeave(setBrowseItem)
+assert(not setBrowseItem.hoverBackground:IsShown(),
+    "leaving an unselected item should hide the hover wash")
 assert(summaryItem:GetHeight() == 42, "wishlist summary items should use separated action rows")
 assert(summaryItem:GetParent() == BG.WishlistMainFrame.summaryChild,
     "wishlist summary items should be clipped by the summary scroll child")
@@ -405,10 +432,47 @@ assert(bossRows[1].count:GetText() == "1" and bossRows[2].count:GetText() == "0"
 assert(bossRows[1].selectedBackground:IsShown() and not bossRows[2].selectedBackground:IsShown()
     and not bossRows[3].selectedBackground:IsShown(),
     "the active boss should use the persistent selected-row background")
-assert(bossRows[1].count.textColor[1] == 0 and bossRows[1].count.textColor[2] == 0.75,
-    "non-zero boss wish counts should use cyan emphasis")
-assert(bossRows[2].count.textColor[1] == 0.63 and bossRows[2].count.textColor[2] == 0.67,
+assert(bossRows[1].selectedAccent:IsShown() and not bossRows[2].selectedAccent:IsShown(),
+    "the active boss should include the Rune Blue leading marker")
+assert(rawget(bossRows[1], "highlightTexture") == nil
+    and rawget(bossRows[2], "highlightTexture") == nil,
+    "boss rows should avoid WoW's native highlight-texture alpha path")
+assert(not bossRows[1].hoverBackground:IsShown(),
+    "the selected boss row should suppress its hover wash")
+bossRows[1].scripts.OnEnter(bossRows[1])
+assert(not bossRows[1].hoverBackground:IsShown(),
+    "hovering the selected boss should not stack another surface")
+bossRows[2].scripts.OnEnter(bossRows[2])
+assert(bossRows[2].hoverBackground:IsShown(),
+    "hovering an unselected boss should reveal the low-alpha hover wash")
+bossRows[2].scripts.OnLeave(bossRows[2])
+assert(not bossRows[2].hoverBackground:IsShown(),
+    "leaving an unselected boss should hide the hover wash")
+assert(bossRows[1].count.textColor[1] == focusText[1]
+    and bossRows[1].count.textColor[2] == focusText[2],
+    "non-zero boss wish counts should use focus-text emphasis")
+assert(bossRows[2].count.textColor[1] == textMuted[1]
+    and bossRows[2].count.textColor[2] == textMuted[2],
     "zero boss wish counts should stay muted")
+
+assert(BG.WishlistMainFrame.clearButton._bgforgeVariant == "danger"
+    and BG.WishlistMainFrame.clearButton:GetHeight() == 28,
+    "the clear action should use the standard danger-button treatment")
+assert(BG.WishlistMainFrame.pageTitle.textColor[1] == BG.UI.Token("color", "textPrimary")[1],
+    "the wishlist page title should use primary text rather than Forge Gold")
+assert(BG.WishlistMainFrame.headerAccent.vertexColor[1] == focus[1],
+    "the wishlist header accent should use Rune Blue")
+local headerPoints = BG.WishlistMainFrame.headerSurface.pointCalls
+assert(headerPoints and headerPoints[1][1] == "TOPLEFT"
+    and headerPoints[1][2] == BG.MainFrame and headerPoints[1][3] == "TOPLEFT"
+    and headerPoints[1][4] == 0 and headerPoints[1][5] == -56
+    and headerPoints[2][1] == "TOPRIGHT" and headerPoints[2][4] == 0,
+    "the wishlist page header should span the full main-frame width below the raid navigation")
+local accentPoints = BG.WishlistMainFrame.headerAccent.pointCalls
+assert(BG.WishlistMainFrame.headerAccent:GetWidth() == 2
+    and accentPoints and accentPoints[1][1] == "TOPLEFT"
+    and accentPoints[2][1] == "BOTTOMLEFT",
+    "the wishlist header should use a vertical accent instead of duplicating the raid-navigation rule")
 
 bossRows[3].action()
 local refreshedBossRows = {}
@@ -591,5 +655,29 @@ local oldSummaryOffset = BG.WishlistMainFrame.summaryScroll:GetVerticalScroll()
 BG.WishlistMainFrame.summaryScroll.scripts.OnMouseWheel(BG.WishlistMainFrame.summaryScroll, -1)
 assert(BG.WishlistMainFrame.summaryScroll:GetVerticalScroll() > oldSummaryOffset,
     "mouse-wheel input over the wishlist should scroll only its item list")
+
+assert(BG.Wishlist.Clear("RAID_A"),
+    "the resize regression should start from an empty wishlist")
+local outerScroll = BG.WishlistMainFrame.scroll
+outerScroll:SetHeight(800)
+BG.Wishlist.Refresh()
+outerScroll:SetVerticalScroll(180)
+outerScroll.ScrollBar:Show()
+BG.FrameDongHuaFrame = {}
+outerScroll:SetHeight(620)
+outerScroll.scripts.OnSizeChanged(outerScroll, outerScroll:GetWidth(), outerScroll:GetHeight())
+assert(BG.WishlistMainFrame.scripts.OnUpdate,
+    "a frame-height animation should queue one final wishlist layout refresh")
+BG.FrameDongHuaFrame = nil
+BG.WishlistMainFrame.scripts.OnUpdate(BG.WishlistMainFrame)
+assert(outerScroll:GetVerticalScroll() == 0,
+    "shrinking the main frame should discard the previous raid's outer scroll offset")
+assert(BG.WishlistMainFrame.child:GetHeight() <= outerScroll:GetHeight(),
+    "the empty wishlist page should shrink its scroll child to the new viewport height")
+assert(not outerScroll.ScrollBar:IsShown(),
+    "the outer scrollbar should stay hidden when the resized wishlist has no overflow")
+assert(not BG.WishlistMainFrame.summaryScroll:IsShown()
+    and BG.WishlistMainFrame.summaryScroll:GetVerticalScroll() == 0,
+    "an empty raid switch should also reset the summary scroll state")
 
 print("Wishlist UI render regression tests passed")

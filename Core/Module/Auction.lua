@@ -372,7 +372,19 @@ BG.Init(function()
             button:SetBackdropColor(0.025, 0.075, 0.085, 0.98)
             button:SetBackdropBorderColor(COLOR_BORDER[1], COLOR_BORDER[2], COLOR_BORDER[3], 1)
             button:SetSize(SELECT_WIDTH, SELECT_HEIGHT)
-            button:SetPoint("RIGHT", BG.MainFrame.CloseButton, "LEFT", -2, 0)
+
+            local function LayoutAuctionVersionButton()
+                button:ClearAllPoints()
+                button:SetPoint(
+                    "RIGHT",
+                    BG.ButtonMove or BG.MainFrame.CloseButton,
+                    "LEFT",
+                    -BG.TopLeftButtonJianGe,
+                    0
+                )
+            end
+            BG.LayoutAuctionVersionButton = LayoutAuctionVersionButton
+            LayoutAuctionVersionButton()
 
             local text = button:CreateFontString(nil, "ARTWORK")
             text:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
@@ -686,6 +698,7 @@ BG.Init(function()
             BG.ButtonAuctionVersion = button
             BG.AuctionVersionPanel = panel
             BG.RefreshAuctionVersionCompatibility = UpdateCompatibility
+            BG.LayoutMainMenuButtons()
             UpdateSelection()
             UpdateVisibility()
         end

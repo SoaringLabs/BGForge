@@ -133,6 +133,7 @@ local function ResetEnvironment()
         end,
     })
 
+    assert(loadfile("Core/UI/DesignSystem.lua"))("BGForge", {})
     assert(loadfile(sourcePath))("BGForge", { L = L, BG = BG })
     return BG, events
 end
@@ -367,6 +368,27 @@ local function TestHoverFrameStaysWithinTitanUpvalueLimit()
     assert(count <= 60, "CreateHoverFrame exceeded Titan's 60-upvalue compiler limit")
 end
 
+local function TestHoverFrameUsesDesignSystemPalette()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local colors = FindUpvalue(createHoverFrame, "COLOR")
+    assert(colors, "hover frame palette is missing")
+
+    local focus = BG.UI.Token("color", "focus")
+    local forgeGold = BG.UI.Token("color", "forgeGold")
+    assert(colors.focus[1] == focus[1] and colors.focus[2] == focus[2]
+        and colors.focus[3] == focus[3],
+        "hover interactions must use the shared focus color")
+    assert(colors.gold[1] == forgeGold[1] and colors.gold[2] == forgeGold[2]
+        and colors.gold[3] == forgeGold[3],
+        "brand and resource emphasis must use the shared forge-gold color")
+    assert(colors.row and not colors.rowEven,
+        "standard character rows must share one base surface")
+    assert(colors.current[1] ~= colors.gold[1] or colors.current[2] ~= colors.gold[2],
+        "current-character selection must not fall back to the legacy gold row tint")
+end
+
 local function TestEquipmentUsesIconTilesWithTopLeftValues()
     local BG = ResetEnvironment()
     local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
@@ -526,13 +548,15 @@ local function TestTitanProfessionCooldownSnapshotsAndSummary()
     }
     local character = BG.GetRaidLockoutStoredCharacters(100)[1]
     updateCooldownStatus(status, character)
-    assert(status.text.value == "2/3" and status.background.color[1] == 0.36,
+    local warningSurface = BG.UI.Token("color", "warningSurface")
+    assert(status.text.value == "2/3" and status.background.color[1] == warningSurface[1],
         "mixed cooldowns must render the compact ready/total summary")
 
     character.professionCooldowns.jewelcraftingIcyPrism.endTime = nil
     updateCooldownStatus(status, character)
-    assert(status.check.shown and status.background.color[1] == 0.1,
-        "all-ready crafting cooldowns must render the existing green-check state")
+    local successSurface = BG.UI.Token("color", "successSurface")
+    assert(status.check.shown and status.background.color[1] == successSurface[1],
+        "all-ready crafting cooldowns must render the semantic success state")
 end
 
 local function TestAlchemyTransmutesCollapseIntoOneSharedCooldown()
@@ -655,7 +679,8 @@ local function TestRelevantUnscannedProfessionRendersUnknown()
 
     local character = BG.GetRaidLockoutStoredCharacters(100)[1]
     updateCooldownStatus(status, character)
-    assert(status.text.value == "?" and status.text.color[1] == 0.48,
+    local muted = BG.UI.Token("color", "textMuted")
+    assert(status.text.value == "?" and status.text.color[1] == muted[1],
         "a relevant but unscanned profession must render the gray unknown state")
 
     local tooltipLines = {}
@@ -1019,7 +1044,8 @@ local function TestQuestColumnsFollowVaultInTwoGroups()
         ready = true,
         questCompletions = { fishingDaily = { questID = 13836 } },
     }, { id = "fishingDaily" })
-    assert(status.check.shown and status.background.color[1] == 0.1,
+    local successSurface = BG.UI.Token("color", "successSurface")
+    assert(status.check.shown and status.background.color[1] == successSurface[1],
         "completed profession dailies must render a green check")
 end
 
@@ -1132,6 +1158,7 @@ local tests = {
     wide_font_headers = TestWideFontHeadersExpandColumns,
     wide_table_viewport = TestWideTablesUseScreenBoundedViewport,
     hover_upvalues = TestHoverFrameStaysWithinTitanUpvalueLimit,
+    hover_design_system = TestHoverFrameUsesDesignSystemPalette,
     item_tiles = TestEquipmentUsesIconTilesWithTopLeftValues,
     profession_tiles = TestProfessionsUseMatchingIconTilesWithFixedColor,
     collapsed_headers = TestCollapsedSkillHeadersExpandOnceWithoutEventLoop,
@@ -1159,6 +1186,7 @@ else
         "wide_font_headers", "item_tiles",
         "wide_table_viewport",
         "hover_upvalues",
+        "hover_design_system",
         "profession_tiles",
         "collapsed_headers",
         "debounce",
