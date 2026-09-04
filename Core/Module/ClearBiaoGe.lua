@@ -17,25 +17,53 @@ local GetLootMethod = GetLootMethod or C_PartyInfo.GetLootMethod
 
 -- A "new CD" is evaluated at the shared ledger level. Titan phases can map
 -- several instance IDs to one FB, so any locked sibling must preserve the table.
-local function ShouldAutoClearStage(instanceID, savedInstanceCount, getSavedInstanceInfo)
+-- When the stage is unlocked, only stale rows belonging to the current instance
+-- are destructive enough to justify an automatic clear. Sibling-only data is
+-- preserved for manual review rather than inferred from raid-member identities.
+local function GetAutoClearDecision(instanceID, savedInstanceCount, getSavedInstanceInfo, hasLedgerItem)
     local FB = BG.FBIDtable[instanceID]
-    if not FB then return false end
+    if not FB then
+        return { shouldClear = false, reason = "unknown-instance" }
+    end
 
     savedInstanceCount = savedInstanceCount or GetNumSavedInstances()
     getSavedInstanceInfo = getSavedInstanceInfo or GetSavedInstanceInfo
     for i = 1, savedInstanceCount do
         local _, _, _, _, locked, _, _, _, _, _, _, _, _, savedInstanceID = getSavedInstanceInfo(i)
         if locked and BG.FBIDtable[savedInstanceID] == FB then
-            return false, FB
+            return { shouldClear = false, FB = FB, reason = "stage-locked" }
         end
     end
-    return true, FB
+
+    local range = BG.bossPositionStartEnd[instanceID]
+    if type(range) ~= "table" then
+        return { shouldClear = false, FB = FB, reason = "unknown-boss-range" }
+    end
+
+    hasLedgerItem = hasLedgerItem or BG.BiaoGeHavedItem
+    if hasLedgerItem(FB, "autoQingKong", instanceID) then
+        return {
+            shouldClear = true,
+            FB = FB,
+            reason = "current-instance-has-old-data",
+            startBoss = range[1],
+            endBoss = range[2],
+        }
+    end
+
+    return { shouldClear = false, FB = FB, reason = "current-instance-empty" }
 end
 
-local function ClearCurrentStage(FB)
+local function ClearCurrentStage(decision)
+    local FB = decision.FB
     BG.ClickFBbutton(FB)
     local num = BG.ClearBiaoGe("biaoge", FB)
     BG.SendSystemMessage(format(L["已自动清空表格< %s >，分钱人数已改为%s人。"], BG.GetFBinfo(FB, "shortName"), num))
+    if decision.reason == "current-instance-has-old-data" then
+        BG.SendSystemMessage(L['自动清空表格的原因：1.当前副本你是新CD；2.%s']:format(
+            L['当前副本所在的表格BOSS编号（%s-%s）格子中存在旧记录。']:format(
+                decision.startBoss, decision.endBoss)))
+    end
     BG.PlaySound("qingkong")
 end
 
@@ -230,9 +258,9 @@ function BG.ClearBiaoGeUI()
                 SendTips(FB)
                 if BG.IsTBCFB(FB) and not ns.canShowTBC then return end
                 if not (FB and IsInInstance()) then return end
-                local shouldClear = ShouldAutoClearStage(instanceID)
-                if shouldClear then
-                    ClearCurrentStage(FB)
+                local decision = GetAutoClearDecision(instanceID)
+                if decision.shouldClear then
+                    ClearCurrentStage(decision)
                 end
             end)
         end

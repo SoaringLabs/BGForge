@@ -96,6 +96,9 @@ local title = BG.UI.Create("text", panel, { role = "title", text = "BGForge" })
 assert(title.font == BIAOGE_TEXT_FONT and title.fontSize == 16, "Title typography was not applied")
 assert(title.text == "BGForge", "Title text was not set")
 
+local compactNumber = BG.UI.Create("text", panel, { role = "numberCompact", text = "238" })
+assert(compactNumber.fontSize == 12, "Compact number typography must remain smaller than row text")
+
 local tab = BG.UI.Create("tab", panel, {
     text = "纳克萨玛斯",
     state = "selected",

@@ -1180,6 +1180,12 @@ BG.Init(function()
     if not BiaoGe.options then
         BiaoGe.options = {}
     end
+    -- The main navigation is created before Options.lua initializes its controls.
+    -- Seed this value here so a freshly reset profile never passes nil to SetAlpha.
+    if type(BiaoGe.options.alpha) ~= "number" then
+        local legacyAlpha = BiaoGe.Alpha
+        BiaoGe.options.alpha = type(legacyAlpha) == "number" and legacyAlpha or 0.8
+    end
     -- BGLite 2.4.1 makes new-lockout clearing mandatory. Keep the legacy
     -- numeric value for compatibility and override users who previously disabled it.
     BiaoGe.options.autoQingKong = 1

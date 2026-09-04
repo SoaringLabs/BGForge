@@ -11,8 +11,8 @@ auction_log="Core/Module/AuctionLog.lua"
 history_store="Core/Module/HistoryStore.lua"
 utf8_data="Libs/UTF8/utf8data.lua"
 
-rg -q $'^## Version: 1\\.1\\.0\\r?$' "$toc"
-rg -q $'^## X-Upstream-Version: 2\\.4\\.1\\r?$' "$toc"
+rg -q $'^## Version: 1\\.2\\.0\\r?$' "$toc"
+rg -q $'^## X-Upstream-Version: 2\\.4\\.2\\r?$' "$toc"
 rg -q $'^Core\\\\Module\\\\CharacterDetails\\.lua\\r?$' "$toc"
 [[ ! -e addon_version.txt ]]
 
@@ -22,11 +22,14 @@ if rg -n 'local name = "autoQingKong"|buttonautoQingKong|进本自动清空表�
     exit 1
 fi
 if rg -n 'BiaoGe\.options\["autoQingKong"\] ~= 1|IsNotSameTeam|raidRosterInfo|clearType|BG\.SaveBiaoGe' "$clear_module"; then
-    echo "Automatic clearing still depends on an old option, roster, content, or history backup" >&2
+    echo "Automatic clearing depends on a removed option, raid identity data, or history backup" >&2
     exit 1
 fi
-rg -q 'BG\.FBIDtable\[savedInstanceID\] == FB' "$clear_module"
+rg -q 'local function GetAutoClearDecision' "$clear_module"
 rg -q 'if locked and BG\.FBIDtable\[savedInstanceID\] == FB then' "$clear_module"
+rg -q 'BG\.BiaoGeHavedItem' "$clear_module"
+rg -Fq 'hasLedgerItem(FB, "autoQingKong", instanceID)' "$clear_module"
+rg -q 'reason = "current-instance-has-old-data"' "$clear_module"
 
 rg -q 'local name = "retainExpenses"' "$options"
 rg -q 'local name = "retainExpensesMoney"' "$options"
@@ -62,9 +65,13 @@ rg -q '支援常規 BiaoGe 拍賣協議' Locales/zhTW.lua
 rg -q 'L\["总欠款："\] = true' Locales/zhCN.lua
 rg -q 'L\["总欠款："\] = "Total amount owed:"' Locales/enUS.lua
 rg -q 'L\["总欠款："\] = "總欠款："' Locales/zhTW.lua
-if rg -n '自动清空表格时保存表格|进本自动清空表格|当前团队名单暂不可用|自动清空表格的原因' Locales; then
-    echo "Removed automatic-clear or roster copy is still localized" >&2
+if rg -n '自动清空表格时保存表格|进本自动清空表格|当前团队名单暂不可用' Locales; then
+    echo "Removed automatic-clear option or roster copy is still localized" >&2
     exit 1
 fi
+for locale in Locales/zhCN.lua Locales/zhTW.lua Locales/enUS.lua; do
+    rg -Fq "L['当前副本所在的表格BOSS编号（%s-%s）格子中存在旧记录。']" "$locale"
+    rg -Fq "L['自动清空表格的原因：1.当前副本你是新CD；2.%s']" "$locale"
+done
 
-echo "BGLite v1.2 synchronization integration checks passed"
+echo "BGLite v1.3 synchronization integration checks passed"

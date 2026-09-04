@@ -75,7 +75,7 @@ local function ResetEnvironment()
     end
     GetItemInfoInstant = function(itemInfo)
         local itemID = tonumber(tostring(itemInfo):match("item:(%d+)") or itemInfo)
-        return itemID, nil, nil, ""
+        return itemID, nil, nil, "", nil, 15
     end
 
     C_Item = {
@@ -142,7 +142,7 @@ local function ResetEnvironment()
 
     assert(loadfile("Core/UI/DesignSystem.lua"))("BGForge", {})
     assert(loadfile(sourcePath))("BGForge", { L = L, BG = BG })
-    return BG, events
+    return BG, events, L
 end
 
 local function GetStoredCharacter()
@@ -373,6 +373,22 @@ local function TestHoverFrameStaysWithinTitanUpvalueLimit()
         count = count + 1
     end
     assert(count <= 60, "CreateHoverFrame exceeded Titan's 60-upvalue compiler limit")
+end
+
+local function TestPerCharacterEmberWeeklyProgressFormatting()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local formatResourceNumber = FindUpvalue(createHoverFrame, "FormatResourceNumber")
+    local formatResourceAmount = FindUpvalue(createHoverFrame, "FormatResourceAmount")
+    assert(formatResourceNumber and formatResourceAmount,
+        "resource number formatters are missing")
+    assert(formatResourceNumber(146, 13, 20) == "146（13/20）",
+        "per-character Titan Ember progress did not include the weekly amount")
+    assert(formatResourceNumber(146) == "146",
+        "resources without weekly data must keep the compact amount")
+    assert(not formatResourceAmount(349, 237048):find("（", 1, true),
+        "the total Titan Ember row must not include weekly progress")
 end
 
 local function TestHoverFrameUsesDesignSystemPalette()
@@ -624,6 +640,7 @@ local function TestBackpackSnapshotStoresOnlyMinimalDisplayFields()
     local _, events = ResetEnvironment()
     local firstLink = "|cff0070dd|Hitem:2001:0:0:0:0:0|h[Test Stack]|h|r"
     local secondLink = "|cffa335ee|Hitem:2002:0:0:0:0:0|h[Test Item]|h|r"
+    local thirdLink = "|cff1eff00|Hitem:2003:0:0:0:0:0|h[Test Bag]|h|r"
     C_Container.GetContainerNumSlots = function(bagID)
         return bagID == 0 and 4 or 0
     end
@@ -636,37 +653,136 @@ local function TestBackpackSnapshotStoresOnlyMinimalDisplayFields()
             return { itemID = 2001, stackCount = 2, hyperlink = firstLink, quality = 3 }
         elseif slotID == 3 then
             return { itemID = 2002, stackCount = 1, hyperlink = secondLink, quality = 4 }
+        elseif slotID == 4 then
+            return { itemID = 2003, stackCount = 1, hyperlink = thirdLink, quality = 2 }
         end
     end
     GetItemInfoInstant = function(link)
         if link == secondLink then
-            return 2002, nil, nil, "INVTYPE_CHEST"
+            return 2002, nil, nil, "INVTYPE_CHEST", nil, 4
+        elseif link == thirdLink then
+            return 2003, nil, nil, "INVTYPE_BAG", nil, 1
         end
-        return 2001, nil, nil, ""
+        return 2001, nil, nil, "", nil, 0
     end
     C_Item.GetDetailedItemLevelInfo = function(link)
-        return link == secondLink and 238 or nil
+        if link == secondLink then
+            return 238
+        elseif link == thirdLink then
+            return 20
+        end
     end
 
     events.BAG_UPDATE_DELAYED()
 
     local backpack = GetStoredCharacter().details.backpack
     assert(backpack.updatedAt == 1700000000, "backpack snapshot did not use server time")
-    assert(backpack.totalSlots == 4 and backpack.usedSlots == 3,
+    assert(backpack.totalSlots == 4 and backpack.usedSlots == 4,
         "backpack slot summary was not captured")
-    assert(#backpack.items == 2, "identical backpack item links were not compacted")
+    assert(#backpack.items == 3, "identical backpack item links were not compacted")
     assert(backpack.items[1].link == firstLink and backpack.items[1].count == 5,
         "stacked backpack item counts were not merged")
     assert(backpack.items[2].link == secondLink and backpack.items[2].count == 1
-        and backpack.items[2].itemLevel == 238,
+        and backpack.items[2].itemLevel == 238 and backpack.items[2].isEquipment == true
+        and backpack.items[2].classID == 4,
         "equippable backpack item did not retain its display item level")
-    assert(backpack.items[1].itemLevel == nil,
-        "ordinary backpack item unexpectedly received an item level")
+    assert(backpack.items[1].itemLevel == nil and backpack.items[1].isEquipment == false
+        and backpack.items[1].classID == 0,
+        "ordinary backpack item was not explicitly classified without an item level")
+    assert(backpack.items[3].classID == 1 and backpack.items[3].isEquipment == false
+        and backpack.items[3].itemLevel == nil,
+        "containers must not be classified as weapon or armor equipment")
     assert(backpack.items[1].itemID == nil
         and backpack.items[1].quality == nil
         and backpack.items[1].bagID == nil
         and backpack.items[1].slotID == nil,
         "backpack snapshot persisted fields outside the approved minimal model")
+end
+
+local function TestBackpackBadgesFollowExplicitItemType()
+    local BG, _, L = ResetEnvironment()
+    GetItemInfo = function()
+        return nil
+    end
+    GetItemInfoInstant = function(link)
+        if link == "item:2002" then
+            return 2002, nil, nil, "INVTYPE_CHEST", 4002, 4
+        elseif link == "item:2003" then
+            return 2003, nil, nil, "INVTYPE_BAG", 4003, 1
+        end
+        return 2001, nil, nil, "", 4001, 0
+    end
+    assert(loadfile("Core/Module/CharacterDetails.lua"))("BGForge", { L = L })
+
+    local renderBackpack = FindUpvalue(BG.CharacterDetails.Refresh, "RenderBackpack")
+    local setBackpackItemButton = FindUpvalue(renderBackpack, "SetBackpackItemButton")
+    assert(setBackpackItemButton, "backpack item-button renderer is missing")
+
+    local button = {
+        icon = {
+            SetTexture = function(self, value) self.texture = value end,
+            SetDesaturated = function(self, value) self.desaturated = value end,
+        },
+        level = {
+            SetText = function(self, value) self.text = tostring(value) end,
+            SetTextColor = function() end,
+        },
+        SetBackdropBorderColor = function() end,
+    }
+    setBackpackItemButton(button, {
+        link = "item:2002",
+        count = 1,
+        itemLevel = 238,
+        isEquipment = true,
+        classID = 4,
+    })
+    assert(button.level.text == "238", "backpack equipment must display its item level")
+
+    setBackpackItemButton(button, {
+        link = "item:2001",
+        count = 1,
+        itemLevel = 75,
+        isEquipment = false,
+    })
+    assert(button.level.text == "",
+        "ordinary backpack items with quantity one must hide their badge")
+
+    setBackpackItemButton(button, {
+        link = "item:2001",
+        count = 35,
+        isEquipment = false,
+    })
+    assert(button.level.text == "35", "stacked ordinary backpack items must display quantity")
+
+    setBackpackItemButton(button, {
+        link = "item:2003",
+        count = 2,
+        itemLevel = 20,
+        isEquipment = true,
+        classID = 1,
+    })
+    assert(button.level.text == "2", "containers with equip locations must still display quantity")
+end
+
+local function TestBackpackItemsAreGroupedByStableItemClass()
+    local BG, _, L = ResetEnvironment()
+    assert(loadfile("Core/Module/CharacterDetails.lua"))("BGForge", { L = L })
+    local renderBackpack = FindUpvalue(BG.CharacterDetails.Refresh, "RenderBackpack")
+    local buildBackpackGroups = FindUpvalue(renderBackpack, "BuildBackpackGroups")
+    assert(buildBackpackGroups, "backpack renderer is missing stable item-class grouping")
+
+    local groups = buildBackpackGroups({
+        { link = "item:1", count = 5, classID = 0, isEquipment = false },
+        { link = "item:2", count = 2, classID = 7, isEquipment = false },
+        { link = "item:3", count = 1, classID = 4, isEquipment = true, itemLevel = 238 },
+    })
+    assert(#groups == 3, "expected three non-empty backpack groups")
+    assert(groups[1].id == "consumable" and groups[1].items[1].link == "item:1",
+        "consumables were not placed in the first group")
+    assert(groups[2].id == "miscellaneous" and groups[2].items[1].link == "item:2",
+        "non-consumable items were not placed in the miscellaneous group")
+    assert(groups[3].id == "equipment" and groups[3].items[1].link == "item:3",
+        "equipment was not placed in the equipment group")
 end
 
 local function TestBackpackSnapshotCommitsAtomicallyAfterItemDataLoads()
@@ -775,8 +891,9 @@ local function TestTitanProfessionCooldownSnapshotsAndSummary()
         and cooldowns.jewelcraftingBrilliantGlass.endTime == nil,
         "ready Brilliant Glass was not retained as a known cooldown recipe")
     assert(cooldowns.jewelcraftingIcyPrism
-        and cooldowns.jewelcraftingIcyPrism.endTime == 1700071500,
-        "active Icy Prism cooldown did not persist its server end time")
+        and cooldowns.jewelcraftingIcyPrism.endTime == 1700071500
+        and cooldowns.jewelcraftingIcyPrism.duration == 72000,
+        "active Icy Prism cooldown did not persist its server end time and duration")
     assert(cooldowns.tailoringGlacialBag and cooldowns.tailoringGlacialBag.endTime == nil,
         "ready Glacial Bag was not retained as a known cooldown recipe")
     assert(cooldowns.tailoringSpellweave == nil and cooldowns.titansteel == nil,
@@ -968,6 +1085,72 @@ local function TestRelevantUnscannedProfessionRendersUnknown()
     updateCooldownStatus(status, character)
     assert(status.text.value == "" and not status.check.shown,
         "a scanned profession with no learned cooldown recipes must render blank")
+end
+
+local function TestProfessionTracksExposeDynamicTitanCooldowns()
+    local BG = ResetEnvironment()
+    assert(BG.GetRaidLockoutProfessionTracks,
+        "profession-resource detail model is missing")
+
+    local tracks = BG.GetRaidLockoutProfessionTracks({
+        professions = {
+            { skillLineID = 773, rank = 450, maxRank = 450, iconFileID = 237171 },
+            { skillLineID = 197, rank = 440, maxRank = 450, iconFileID = 136249 },
+        },
+        professionCooldownScans = {
+            [773] = 1699999000,
+            [197] = 1699999000,
+        },
+        professionCooldowns = {
+            inscriptionNorthrendResearch = {
+                spellID = 61177,
+                endTime = 1700003600,
+                observedAt = 1700000000,
+                duration = 86400,
+            },
+            inscriptionMinorResearch = {
+                spellID = 61288,
+                observedAt = 1700000000,
+            },
+            tailoringGlacialBag = {
+                spellID = 56005,
+                observedAt = 1700000000,
+            },
+        },
+    }, 1700000000)
+
+    assert(#tracks == 2
+        and tracks[1].skillLineID == 773
+        and tracks[1].iconFileID == 237171
+        and tracks[1].rank == 450
+        and tracks[1].maxRank == 450,
+        "profession track did not retain the client's skill-line icon and rank")
+    assert(#tracks[1].entries == 2
+        and tracks[1].entries[1].spellID == 61177
+        and tracks[1].entries[1].state == "cooling"
+        and tracks[1].entries[1].remaining == 3600
+        and tracks[1].entries[1].duration == 86400
+        and tracks[1].entries[2].state == "ready",
+        "Inscription's two independent Titan cooldown items were not exposed")
+    assert(#tracks[2].entries == 1
+        and tracks[2].entries[1].spellID == 56005
+        and tracks[2].entries[1].state == "ready",
+        "Tailoring's tracked Titan cooldown item was not exposed")
+
+    tracks = BG.GetRaidLockoutProfessionTracks({
+        professions = {
+            { skillLineID = 755, rank = 450, maxRank = 450, iconFileID = 134071 },
+            { skillLineID = 202, rank = 450, maxRank = 450, iconFileID = 136243 },
+        },
+        professionCooldowns = {},
+        professionCooldownScans = {},
+    }, 1700000000)
+    assert(#tracks[1].entries == 2
+        and tracks[1].entries[1].state == "unknown"
+        and tracks[1].entries[2].state == "unknown",
+        "an unscanned Jewelcrafting track must expose both candidate recipes as unknown")
+    assert(not tracks[2].hasTrackedCooldowns and #tracks[2].entries == 0,
+        "a profession without Titan long cooldowns must remain an explicit empty track")
 end
 
 local function TestUpgradeItemsAreExcludedFromFinishedLegendaries()
@@ -1412,6 +1595,7 @@ local tests = {
     wide_font_headers = TestWideFontHeadersExpandColumns,
     wide_table_viewport = TestWideTablesUseScreenBoundedViewport,
     hover_upvalues = TestHoverFrameStaysWithinTitanUpvalueLimit,
+    ember_weekly = TestPerCharacterEmberWeeklyProgressFormatting,
     hover_design_system = TestHoverFrameUsesDesignSystemPalette,
     item_tiles = TestEquipmentUsesIconTilesWithTopLeftValues,
     profession_tiles = TestProfessionsUseMatchingIconTilesWithFixedColor,
@@ -1421,6 +1605,8 @@ local tests = {
     equipment_atomic = TestEquipmentSnapshotCommitsAtomicallyAfterItemDataLoads,
     equipment_debounce = TestEquipmentRefreshEventsAreDebounced,
     backpack_snapshot = TestBackpackSnapshotStoresOnlyMinimalDisplayFields,
+    backpack_badges = TestBackpackBadgesFollowExplicitItemType,
+    backpack_groups = TestBackpackItemsAreGroupedByStableItemClass,
     backpack_atomic = TestBackpackSnapshotCommitsAtomicallyAfterItemDataLoads,
     backpack_debounce = TestBackpackRefreshEventsAreDebounced,
     profession_cooldowns = TestTitanProfessionCooldownSnapshotsAndSummary,
@@ -1428,6 +1614,7 @@ local tests = {
     trade_skill_cooldown = TestOpenTradeSkillCooldownIsCapturedByRecipeIndex,
     trade_skill_isolation = TestTradeSkillScanPreservesOtherProfessionCooldowns,
     profession_cooldown_unknown = TestRelevantUnscannedProfessionRendersUnknown,
+    profession_tracks = TestProfessionTracksExposeDynamicTitanCooldowns,
     legendary_classification = TestUpgradeItemsAreExcludedFromFinishedLegendaries,
     item_quality = TestItemTileDisplayUsesRequestedQualitySemantics,
     character_visibility = TestCharacterVisibilityCanBeRestored,
@@ -1446,6 +1633,7 @@ else
         "wide_font_headers", "item_tiles",
         "wide_table_viewport",
         "hover_upvalues",
+        "ember_weekly",
         "hover_design_system",
         "profession_tiles",
         "collapsed_headers",
@@ -1454,6 +1642,8 @@ else
         "equipment_atomic",
         "equipment_debounce",
         "backpack_snapshot",
+        "backpack_badges",
+        "backpack_groups",
         "backpack_atomic",
         "backpack_debounce",
         "profession_cooldowns",
@@ -1461,6 +1651,7 @@ else
         "trade_skill_cooldown",
         "trade_skill_isolation",
         "profession_cooldown_unknown",
+        "profession_tracks",
         "legendary_classification",
         "item_quality",
         "character_visibility",

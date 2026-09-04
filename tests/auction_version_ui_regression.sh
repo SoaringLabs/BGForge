@@ -4,6 +4,13 @@ set -euo pipefail
 auction_module="Core/Module/Auction.lua"
 main_frame="Core/BiaoGe.lua"
 overview_module="Core/Module/RaidLockoutOverview.lua"
+database_module="Core/DB/DB.lua"
+
+if ! rg -Fq 'if type(BiaoGe.options.alpha) ~= "number" then' "$database_module" \
+    || ! rg -Fq 'BiaoGe.options.alpha = type(legacyAlpha) == "number" and legacyAlpha or 0.8' "$database_module"; then
+    echo "fresh saved variables do not initialize background alpha before the main navigation" >&2
+    exit 1
+fi
 
 if ! rg -q 'BiaoGe\.Auction\.gen ~= 1 and BiaoGe\.Auction\.gen ~= 2' "$auction_module" \
     || ! rg -q 'BiaoGe\.Auction\.gen = 2' "$auction_module"; then

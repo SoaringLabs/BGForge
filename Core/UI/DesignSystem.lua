@@ -92,6 +92,7 @@ local TEXT_STYLES = {
     body = { size = 14, color = "textPrimary" },
     label = { size = 12, color = "textSecondary" },
     caption = { size = 11, color = "textMuted" },
+    numberCompact = { size = 12, color = "textPrimary", font = NUMBER_FONT },
     number = { size = 14, color = "textPrimary", font = NUMBER_FONT },
     numberStrong = { size = 16, color = "forgeGold", font = NUMBER_FONT },
 }

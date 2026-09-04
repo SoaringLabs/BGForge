@@ -135,3 +135,96 @@ Blocked for the same reason. The harness verifies frame structure, dimensions, a
 historical result: blocked
 
 final result: passed
+
+## Character Details · Professions & Resources — 2026-09-04
+
+**Source visual truth**
+
+- Selected state-and-hierarchy reference: `/Users/liushuxiang/.codex/generated_images/01a06bd9-f1fe-7491-af67-5f708e8a8c7e/exec-62e74b32-79ff-402f-978c-4493df6c3835.png`.
+- Source pixels: 2001 × 786.
+- Intended state: daily Jewelcrafting/Cooking/Fishing summary, two dynamic primary-profession tracks with 0–2 Titan crafting cooldowns each, and the approved full-width horizontal resource overview.
+- Asset correction from the user: mock artwork is not implementation truth. Every visible icon must resolve from a usable in-game file ID, spell texture, currency snapshot, item snapshot, or Blizzard UI texture.
+
+**Implementation evidence**
+
+- Production UI: `Core/Module/CharacterDetails.lua`.
+- Profession/cooldown display model and optional cooldown duration: `Core/Module/RaidLockoutOverview.lua`.
+- Localization: `Locales/zhCN.lua`, `Locales/zhTW.lua`, and `Locales/enUS.lua`.
+- Automated evidence: Character Details integration, Raid Lockout Overview regression, Design System regression, and Lua 5.1 syntax loading all pass.
+- Pre-fix implementation screenshot: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-718d057c-e638-49ca-b42e-a2e646798c1d.png`.
+- Implementation pixels: 3502 × 2322. The target addon frame is the Titan main-frame `大界面`; CSS viewport and browser density are not applicable.
+- Width-normalized full comparison: `/Users/liushuxiang/.codex/visualizations/2026/09/04/01a06bd9-f1fe-7491-af67-5f708e8a8c7e/profession-reference-vs-actual.png` (2001 × 2129; reference first, implementation second).
+- Width-normalized focused comparison: `/Users/liushuxiang/.codex/visualizations/2026/09/04/01a06bd9-f1fe-7491-af67-5f708e8a8c7e/profession-content-reference-vs-actual.png` (1668 × 1898; reference first, implementation second).
+- Compared state: reference uses Inscription/Tailoring; implementation uses Jewelcrafting/Blacksmithing. Profession-specific content and real client icons therefore differ intentionally, while composition, density, hierarchy, and resource-strip treatment remain directly comparable.
+
+**Full-view comparison evidence**
+
+The pre-fix implementation diverges materially from the reference. The resource overview is pinned to the bottom of a much taller inherited raid frame, leaving a large empty vertical region between the second profession and the resources. The implementation also uses a brighter raised surface for the profession rows, making them read as large empty containers rather than compact tracks.
+
+**Focused-region comparison evidence**
+
+The focused comparison confirms that the reference uses a narrow profession identity column, a cyan left-edge accent, asymmetric cooldown space, and one enclosed resource strip with internal dividers. The pre-fix implementation has a wider identity column, equal fixed-width cooldown cards, no track accent, and loose resource tiles without a shared inner surface.
+
+**Findings**
+
+- [P1] Large vertical void breaks the intended compact overview.
+  Location: Character Overview `大界面` → `专业与资源`.
+  Evidence: the pre-fix resource section is pinned near the frame bottom, hundreds of pixels below the second profession; the reference places it immediately after the tracks.
+  Impact: the screen feels unfinished and forces the eye to cross empty space to reach related information.
+  Fix applied: the profession/resource content now owns a compact fixed-height surface and the resource section follows the second profession at a fixed rhythm.
+- [P2] Profession rows use the wrong surface hierarchy.
+  Location: both profession tracks.
+  Evidence: the pre-fix rows use the brighter `raised` token and lack the reference's cyan left accent.
+  Impact: the tracks dominate the page while their actual status content feels sparse.
+  Fix applied: changed the outer content and tracks to the darker `panel` surface, cooldown cards to `canvas`, and added the design-system `focus` accent.
+- [P2] Resource overview lacks a coherent horizontal strip.
+  Location: bottom resource section.
+  Evidence: the pre-fix resources float independently on the panel with large irregular gaps and no internal separators.
+  Impact: values do not scan as one resource summary.
+  Fix applied: added one inset `canvas` strip, consistent item widths, vertical dividers, quality-aware borders, and Forge Gold emphasis for values and the upgrade-material group.
+- [P2] Daily and status hierarchy is too abbreviated.
+  Location: daily cards and unknown cooldown states.
+  Evidence: the pre-fix cards omit “日常” and the reset/status lines are collapsed; unknown states use the same question-mark treatment as unfinished dailies.
+  Impact: daily cadence and data confidence are harder to distinguish.
+  Fix applied: restored the full daily names, added a reset/eligibility meta line, and separated Blizzard ready, waiting, and information textures.
+- [P2] A revised in-client capture is still required.
+  Location: full revised screen.
+  Evidence: code and structural checks pass, but the new layout cannot be rendered by the local Lua harness.
+  Impact: post-fix font wrapping, atlas availability, and final UI-scale fit remain unverified.
+  Fix: reload BGForge and capture the same screen again.
+
+**Required fidelity surfaces**
+
+- Typography: the existing BGForge font roles and sizes are retained; the pre-fix capture shows readable weights, but revised wrapping needs a new capture.
+- Spacing/layout: the major vertical-gap and resource-grouping defects were corrected in code; post-fix visual confirmation is pending.
+- Colors/tokens: tracks now use `panel`/`canvas`, Rune Blue `focus`, semantic success/warning, and Forge Gold instead of the over-bright raised blocks.
+- Image quality/assets: profession and daily icons remain client file IDs; recipes remain spell textures; resources remain currency/item textures. Gold now prefers Blizzard's `auctionhouse-icon-coin-gold` atlas with the game texture as fallback. No mock artwork is referenced.
+- Copy/content: daily names, reset/eligibility context, scan guidance, cooldown states, and the “传说级升级材料” label now match the chosen hierarchy more closely.
+
+**Implementation checklist**
+
+- [x] Third tab is enabled and navigable.
+- [x] Daily status cards use real in-game profession textures and Blizzard status textures.
+- [x] Profession tracks derive their icon and rank from the saved client profession snapshot.
+- [x] Recipe cards derive their icon from the tracked spell ID at runtime.
+- [x] Alchemy, Inscription, Jewelcrafting, and Tailoring may each expose their Titan cooldown definitions; other professions render an explicit no-long-CD state.
+- [x] Ready, cooling, unscanned, and no-long-CD states are distinct.
+- [x] Cooling progress is shown only when the client supplied a valid long-cooldown duration.
+- [x] Horizontal resource overview uses gold, currency, fragment-item, and upgrade-item game textures.
+- [x] No generated mock artwork is referenced by addon code.
+- [x] Snapshot-only privacy boundary is preserved.
+- [x] Resource strip follows the profession tracks instead of the inherited frame bottom.
+- [x] Profession surfaces, left accents, and identity-column proportions are corrected.
+- [x] Resource strip has one containing surface, dividers, and semantic borders.
+- [ ] Capture and compare the revised in-client view.
+
+**Comparison history**
+
+- Implementation pass 1: enabled the third tab, added daily cards, two dynamic profession tracks, explicit cooldown states, and the horizontal resource strip.
+- Implementation pass 2: replaced every mock-icon assumption with an explicit game-resource source and added regression guards against generated-image paths.
+- Implementation pass 3: preserved real cooldown duration so the amber progress rail does not invent timing precision.
+- Visual QA iteration 1: the first in-client capture exposed the bottom-pinned resource strip, large empty middle region, bright profession surfaces, missing accents, and loose resource grouping.
+- Visual QA iteration 1 fixes: converted the screen to a compact content-owned surface, moved resources directly below the tracks, darkened the hierarchy, narrowed the identity column, let the second cooldown region absorb remaining width, and rebuilt resources as one divided strip.
+- Post-fix visual evidence: blocked pending the next in-client capture.
+
+final result: blocked

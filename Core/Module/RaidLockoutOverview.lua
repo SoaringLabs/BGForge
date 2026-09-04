@@ -229,6 +229,13 @@ local TITAN_PRIMARY_PROFESSION_INFO = {
     [L["铭文"]] = { skillLineID = 773, iconFileID = 237171 },
     [L["珠宝加工"]] = { skillLineID = 755, iconFileID = 134071 },
 }
+local titanPrimaryProfessionInfoBySkillLineID = {}
+for professionName, professionInfo in pairs(TITAN_PRIMARY_PROFESSION_INFO) do
+    titanPrimaryProfessionInfoBySkillLineID[professionInfo.skillLineID] = {
+        name = professionName,
+        iconFileID = professionInfo.iconFileID,
+    }
+end
 
 local ITEM_TILE_SIZE = 22
 local ITEM_TILE_GAP = 2
@@ -329,11 +336,21 @@ local function GetCurrencyIconFile(currencyID, fallback)
     return fallback
 end
 
-local function FormatResourceNumber(amount)
+local function FormatResourceNumber(amount, earnedThisWeek, weeklyMaximum)
     if amount == nil then
         return ""
     end
-    return tostring(BG.FormatNumber(amount, 0))
+    local amountText = tostring(BG.FormatNumber(amount, 0))
+    earnedThisWeek = tonumber(earnedThisWeek)
+    weeklyMaximum = tonumber(weeklyMaximum)
+    if earnedThisWeek ~= nil and weeklyMaximum and weeklyMaximum > 0 then
+        return amountText .. string.format(
+            "（%s/%s）",
+            BG.FormatNumber(earnedThisWeek, 0),
+            BG.FormatNumber(weeklyMaximum, 0)
+        )
+    end
+    return amountText
 end
 
 local function GetResourceIconMarkup(iconFile)
@@ -379,6 +396,12 @@ local function GetActualItemLevel(itemInfo)
         itemLevel = select(4, GetItemInfo(itemInfo))
     end
     return tonumber(itemLevel)
+end
+
+local function IsEquipmentItem(equipLoc, classID)
+    classID = tonumber(classID)
+    return equipLoc ~= nil and equipLoc ~= ""
+        and (classID == 2 or classID == 4)
 end
 
 local function CreateItemSnapshot(itemLink, itemID, iconFileID, quality)
@@ -529,7 +552,7 @@ end
 
 local function GetActiveProfessionCooldownRemaining(spellID)
     if not GetSpellCooldown or not GetTime then
-        return 0
+        return 0, 0
     end
 
     local startTime, duration = GetSpellCooldown(spellID)
@@ -537,14 +560,14 @@ local function GetActiveProfessionCooldownRemaining(spellID)
     duration = tonumber(duration) or 0
     -- 忽略公共冷却。这里的候选配方最短也是 20 小时，不应把 1.5 秒 GCD 写进总览。
     if startTime <= 0 or duration < 60 then
-        return 0
+        return 0, 0
     end
 
     local currentTime = GetTime()
     if startTime > currentTime then
         startTime = startTime - 2 ^ 32 / 1000
     end
-    return max(0, startTime + duration - currentTime)
+    return max(0, startTime + duration - currentTime), duration
 end
 
 local function GetTradeSkillRecipeSpellID(index)
@@ -582,11 +605,13 @@ local function ScanOpenTradeSkillCooldowns()
             if definition then
                 scannedSkillLineID = scannedSkillLineID or definition.skillLineID
                 local remaining = tonumber(GetTradeSkillCooldown(index)) or 0
+                local _, duration = GetActiveProfessionCooldownRemaining(spellID)
                 local snapshot = snapshots[definition.id]
                 if not snapshot or remaining > snapshot.remaining then
                     snapshots[definition.id] = {
                         spellID = spellID,
                         remaining = max(0, remaining),
+                        duration = duration > 0 and duration or nil,
                     }
                 end
             end
@@ -979,6 +1004,7 @@ local function NormalizeProfessionCooldownSnapshot(snapshot, definition, now)
         spellID = spellID,
         endTime = endTime,
         observedAt = tonumber(snapshot.observedAt),
+        duration = tonumber(snapshot.duration),
     }
 end
 
@@ -1097,10 +1123,29 @@ local function ClearExpiredRaidData()
                                 if type(item) == "table" and type(item.link) == "string"
                                     and count and count > 0
                                 then
+                                    local classID = tonumber(item.classID)
+                                    local equipLoc
+                                    if GetItemInfoInstant then
+                                        local apiClassID
+                                        _, _, _, equipLoc, _, apiClassID = GetItemInfoInstant(item.link)
+                                        classID = tonumber(apiClassID) or classID
+                                    end
+                                    local isEquipment
+                                    if equipLoc ~= nil and classID then
+                                        isEquipment = IsEquipmentItem(equipLoc, classID)
+                                    elseif type(item.isEquipment) == "boolean" and classID then
+                                        isEquipment = item.isEquipment
+                                            and (classID == 2 or classID == 4)
+                                    else
+                                        -- 类型信息不足时宁可按普通物品显示数量，也不猜测装等。
+                                        isEquipment = false
+                                    end
                                     normalizedItems[#normalizedItems + 1] = {
                                         link = item.link,
                                         count = count,
-                                        itemLevel = tonumber(item.itemLevel),
+                                        classID = classID,
+                                        isEquipment = isEquipment,
+                                        itemLevel = isEquipment and tonumber(item.itemLevel) or nil,
                                     }
                                 end
                             end
@@ -1332,13 +1377,19 @@ local function CaptureCurrentProfessionCooldowns(stored)
             end
             local observedSpellID = tradeSkillSnapshot and tradeSkillSnapshot.spellID or knownSpellIDs[1]
             local remaining = tradeSkillSnapshot and tradeSkillSnapshot.remaining or 0
+            local duration = tradeSkillSnapshot and tradeSkillSnapshot.duration or nil
             for _, spellID in ipairs(knownSpellIDs) do
-                remaining = max(remaining, GetActiveProfessionCooldownRemaining(spellID))
+                local spellRemaining, spellDuration = GetActiveProfessionCooldownRemaining(spellID)
+                if spellRemaining > remaining then
+                    remaining = spellRemaining
+                    duration = spellDuration
+                end
             end
             snapshots[definition.id] = {
                 spellID = observedSpellID,
                 endTime = remaining > 0 and (now + remaining) or nil,
                 observedAt = now,
+                duration = duration and duration >= 60 and duration or nil,
             }
         end
     end
@@ -1601,12 +1652,13 @@ local function CaptureCurrentBackpack()
                 if link then
                     local item = itemByLink[link]
                     local itemLevel
-                    local resolvedItemID, _, _, equipLoc = GetItemInfoInstant(link)
-                    if equipLoc == nil then
+                    local resolvedItemID, _, _, equipLoc, _, classID = GetItemInfoInstant(link)
+                    classID = tonumber(classID)
+                    if equipLoc == nil or not classID then
                         waitingForItemData = true
                         pendingBackpackItemIDs[info.itemID] = true
                         RequestItemData(resolvedItemID or info.itemID)
-                    elseif equipLoc ~= "" then
+                    elseif IsEquipmentItem(equipLoc, classID) then
                         itemLevel = GetActualItemLevel(link)
                         if not itemLevel then
                             waitingForItemData = true
@@ -1618,6 +1670,8 @@ local function CaptureCurrentBackpack()
                         item = {
                             link = link,
                             count = 0,
+                            classID = classID,
+                            isEquipment = IsEquipmentItem(equipLoc, classID),
                             itemLevel = itemLevel,
                         }
                         itemByLink[link] = item
@@ -2959,7 +3013,7 @@ local function CreateHoverFrame()
     detailsHint:SetJustifyH("LEFT")
     detailsHint:SetWordWrap(false)
     detailsHint:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-    detailsHint:SetText(L["提示：点击角色名称可查看装备和背包"])
+    detailsHint:SetText(L["提示：点击角色名称可查看装备、背包、专业与资源"])
     detailsHint:SetTextColor(unpack(COLOR.focusText))
     detailsHint:Hide()
 
@@ -3185,6 +3239,10 @@ local function CreateHoverFrame()
         row.emberCell = CreateTableCell(contentFrame)
         row.emberCell:SetSize(ui.emberWidth, ui.rowHeight)
         row.ember = CreateResourceNumberText(row.emberCell)
+        row.ember:SetFont(BIAOGE_TEXT_FONT, RESOURCE_NUMBER_FONT_SIZE, "OUTLINE")
+        row.ember:ClearAllPoints()
+        row.ember:SetPoint("LEFT", 3, 0)
+        row.ember:SetPoint("RIGHT", -3, 0)
         CreateRowHoverOverlay(row.emberCell, row.resourceHoverOverlays)
 
         row.shardCell = CreateTableCell(contentFrame)
@@ -3617,7 +3675,11 @@ local function CreateHoverFrame()
             row.emberCell:SetPoint("TOPLEFT", emberX, -resourceRowY)
             row.emberCell.character = character
             renderContext.setCellColor(row.emberCell, rowColor)
-            row.ember:SetText(renderContext.formatResourceNumber(character.titanEmbers))
+            row.ember:SetText(renderContext.formatResourceNumber(
+                character.titanEmbers,
+                character.titanEmbersEarnedThisWeek,
+                character.titanEmbersWeeklyMax
+            ))
 
             row.shardCell:Show()
             row.shardCell:SetWidth(shardWidth)
@@ -3950,6 +4012,62 @@ end
 
 function BG.GetRaidLockoutStoredCharacters(realmID)
     return BuildCharacterRows(realmID or GetCurrentRealmID())
+end
+
+-- 为角色详情“大界面”提供只读展示模型。这里集中维护 Titan 专业与长 CD 的
+-- 对应关系，避免 UI 复制一份很快过期的职业规则。
+function BG.GetRaidLockoutProfessionTracks(character, now)
+    now = tonumber(now) or GetServerTime()
+    character = type(character) == "table" and character or {}
+    local cooldowns = type(character.professionCooldowns) == "table"
+        and character.professionCooldowns or {}
+    local scans = type(character.professionCooldownScans) == "table"
+        and character.professionCooldownScans or {}
+    local tracks = {}
+
+    for _, profession in ipairs(character.professions or {}) do
+        if #tracks >= 2 then
+            break
+        end
+        local skillLineID = tonumber(profession.skillLineID)
+        local professionInfo = skillLineID and titanPrimaryProfessionInfoBySkillLineID[skillLineID]
+        local track = {
+            skillLineID = skillLineID,
+            name = professionInfo and professionInfo.name or UNKNOWN,
+            iconFileID = profession.iconFileID or (professionInfo and professionInfo.iconFileID),
+            rank = tonumber(profession.rank) or 0,
+            maxRank = tonumber(profession.maxRank) or 0,
+            hasTrackedCooldowns = professionCooldownSkillLineSet[skillLineID] and true or false,
+            scanned = scans[skillLineID] and true or false,
+            entries = {},
+        }
+
+        for _, definition in ipairs(PROFESSION_COOLDOWN_DEFINITIONS) do
+            if definition.skillLineID == skillLineID then
+                local snapshot = cooldowns[definition.id]
+                -- 未扫描时展示该专业的候选制造项并明确提示；扫描完成后仅展示
+                -- 角色实际学会的配方，避免把未学习配方伪装成可制造。
+                if snapshot or not track.scanned then
+                    local spellID = snapshot and tonumber(snapshot.spellID)
+                        or definition.spellIDs[1]
+                    local endTime = snapshot and tonumber(snapshot.endTime)
+                    local remaining = endTime and max(0, endTime - now) or 0
+                    track.entries[#track.entries + 1] = {
+                        id = definition.id,
+                        name = definition.name,
+                        spellID = spellID,
+                        state = not snapshot and "unknown"
+                            or (remaining > 0 and "cooling" or "ready"),
+                        remaining = remaining,
+                        duration = snapshot and tonumber(snapshot.duration) or nil,
+                        observedAt = snapshot and tonumber(snapshot.observedAt) or nil,
+                    }
+                end
+            end
+        end
+        tracks[#tracks + 1] = track
+    end
+    return tracks
 end
 
 function BG.SetRaidLockoutCharacterHidden(realmID, characterName, isHidden)

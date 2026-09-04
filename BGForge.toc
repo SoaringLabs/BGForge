@@ -4,10 +4,10 @@
 ## IconTexture: Interface\AddOns\BGForge\Media\icon\icon-128.tga
 ## Author: Soaring Labs
 ## X-Original-Addon: BGLite
-## X-Upstream-Version: 2.4.1
+## X-Upstream-Version: 2.4.2
 ## LoadOnDemand: 0
 ## SavedVariables: BiaoGe
-## Version: 1.1.0
+## Version: 1.2.0
 
 Locales\zhCN.lua
 Locales\zhTW.lua
