@@ -31,6 +31,12 @@
 - “专业与资源”和“进度”页只读取既有本机角色快照，不新增玩家资料采集、同步、广播或传输行为。
 - 自动清表继续只读取副本锁定、当前账本内容和本地副本映射，不新增团队成员身份数据依赖或网络传输。
 
+### 界面预览
+
+![BGForge v1.2.0 角色专业与资源](docs/images/v1.2.0-character-professions-resources.png)
+
+![BGForge v1.2.0 角色团本进度](docs/images/v1.2.0-character-progress.png)
+
 ## v1.1.0 - 2026-09-04
 
 ### 新增
