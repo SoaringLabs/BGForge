@@ -77,6 +77,7 @@ local TOKENS = {
         controlCompact = 24,
         control = 28,
         controlComfortable = 32,
+        pageHeader = 58,
         iconSmall = 12,
         icon = 16,
         iconLarge = 20,
@@ -400,6 +401,63 @@ function UI.Create(kind, parent, options)
         error("Unknown BGForge widget kind: " .. tostring(kind))
     end
     return UI.Style(widget, kind, options)
+end
+
+function UI.CreatePageHeader(parent, options)
+    assert(parent, "BGForge UI.CreatePageHeader requires a parent")
+    options = options or {}
+
+    local header = CreateFrame("Frame", nil, parent)
+    header._bgforgeKind = "pageHeader"
+    header:SetHeight(options.height or TOKENS.size.pageHeader)
+
+    local background = header:CreateTexture(nil, "BACKGROUND")
+    background:SetAllPoints(header)
+    background:SetTexture(WHITE_TEXTURE)
+    SetRegionColor(background, "SetVertexColor", "header")
+    header.background = background
+
+    local bottomBorder = header:CreateTexture(nil, "BORDER")
+    bottomBorder:SetPoint("BOTTOMLEFT", 0, 0)
+    bottomBorder:SetPoint("BOTTOMRIGHT", 0, 0)
+    bottomBorder:SetHeight(TOKENS.spacing.hairline)
+    bottomBorder:SetTexture(WHITE_TEXTURE)
+    SetRegionColor(bottomBorder, "SetVertexColor", "borderSubtle")
+    header.bottomBorder = bottomBorder
+
+    local accent = header:CreateTexture(nil, "ARTWORK")
+    accent:SetPoint("TOPLEFT", 0, 0)
+    accent:SetPoint("BOTTOMLEFT", 0, 0)
+    accent:SetWidth(TOKENS.size.focusLine)
+    accent:SetTexture(WHITE_TEXTURE)
+    SetRegionColor(accent, "SetVertexColor", "focus")
+    header.accent = accent
+
+    local leftInset = options.leftInset or 18
+    local contentRightInset = options.contentRightInset or 16
+    local title = UI.Create("text", header, {
+        role = "title",
+        text = options.title or "",
+        layer = "OVERLAY",
+    })
+    title:SetPoint("TOPLEFT", header, "TOPLEFT", leftInset, -9)
+    title:SetPoint("TOPRIGHT", header, "TOPRIGHT", -contentRightInset, -9)
+    title:SetJustifyH("LEFT")
+    title:SetWordWrap(false)
+    header.title = title
+
+    local subtitle = UI.Create("text", header, {
+        role = "caption",
+        text = options.subtitle or "",
+        layer = "OVERLAY",
+    })
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+    subtitle:SetPoint("TOPRIGHT", title, "BOTTOMRIGHT", 0, -3)
+    subtitle:SetJustifyH("LEFT")
+    subtitle:SetWordWrap(false)
+    header.subtitle = subtitle
+
+    return header
 end
 
 function UI.SetState(widget, state)

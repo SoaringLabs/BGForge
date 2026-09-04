@@ -23,6 +23,7 @@ fi
 rg -q 'function UI\.Token' "$module"
 rg -q 'function UI\.Style' "$module"
 rg -q 'function UI\.Create' "$module"
+rg -q 'function UI\.CreatePageHeader' "$module"
 rg -q 'function UI\.SetState' "$module"
 rg -q 'widget\._bgforgeFocusAccent:SetAlpha' "$module"
 
@@ -38,6 +39,9 @@ rg -Fq 'raidCurrentAccent:SetColorTexture(unpack(COLOR.focus))' "$overview"
 rg -Fq 'resourceCurrentAccent:SetColorTexture(unpack(COLOR.focus))' "$overview"
 rg -Fq 'SetIconButtonVisual(button, COLOR.headerStrong, COLOR.gridStrong, COLOR.textPrimary)' "$overview"
 rg -Fq 'SetIconButtonBorder(self, COLOR.focus)' "$overview"
+rg -Fq 'BG.UI.CreatePageHeader(hoverFrame, {' "$overview"
+rg -Fq 'viewportWidth + ui.padding * 2 - BG.UI.Token("spacing", "hairline")' "$overview"
+rg -Fq 'local pageHeaderGap = hoverEmbedded and BG.UI.Token("spacing", "md") or 0' "$overview"
 if rg -q 'SetTextColor\(0, 0\.75, 1\)|SetBackdropBorderColor\(0, 0\.75, 1' "$overview"; then
     echo "Character overview reintroduced the legacy bright-cyan palette" >&2
     exit 1
@@ -65,6 +69,8 @@ rg -Fq 'variant = "danger"' "$wishlist"
 rg -Fq 'row.hoverBackground:SetVertexColor(unpack(COLOR.rowHoverWash))' "$wishlist"
 rg -Fq 'button.selectedBackground:SetVertexColor(unpack(COLOR.selected))' "$wishlist"
 rg -Fq 'button.selectedAccent:SetVertexColor(unpack(COLOR.focus))' "$wishlist"
+rg -Fq 'Design.CreatePageHeader(frame, {' "$wishlist"
+rg -Fq 'local pageHeaderEdgeInset = Design.Token("spacing", "hairline")' "$wishlist"
 if rg -q 'SetHighlightTexture\((row\.hoverBackground|hover)\)' "$wishlist"; then
     echo "Wishlist hover washes must preserve token alpha through manual visibility" >&2
     exit 1

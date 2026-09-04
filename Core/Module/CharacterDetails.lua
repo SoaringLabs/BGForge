@@ -52,6 +52,7 @@ local UNKNOWN_SPEC_TEXTURE = "Interface\\Icons\\INV_Misc_QuestionMark"
 local READY_STATUS_TEXTURE = "Interface\\RaidFrame\\ReadyCheck-Ready"
 local WAITING_STATUS_TEXTURE = "Interface\\RaidFrame\\ReadyCheck-Waiting"
 local UNKNOWN_STATUS_TEXTURE = "Interface\\FriendsFrame\\InformationIcon"
+local PROGRESS_STATUS_TEXTURE = "Interface\\COMMON\\Indicator-Yellow"
 local ALERT_STATUS_TEXTURE_PATH = "Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew"
 local ALERT_STATUS_TEXTURE = (GetFileIDFromPath and GetFileIDFromPath(ALERT_STATUS_TEXTURE_PATH))
     or WAITING_STATUS_TEXTURE
@@ -72,6 +73,12 @@ local PROFESSION_RESOURCES_TOP = PROFESSION_TRACK_TOP
     + PROFESSION_TRACK_COUNT * (PROFESSION_TRACK_HEIGHT + PROFESSION_TRACK_GAP)
 local PROFESSION_PANEL_HEIGHT = PROFESSION_RESOURCES_TOP + PROFESSION_RESOURCES_HEIGHT
 local RESOURCE_UPGRADE_ICON_COUNT = 5
+local PROGRESS_RAID_ROW_HEIGHT = 38
+local PROGRESS_RAID_ROW_GAP = 2
+local PROGRESS_BOSS_ROW_HEIGHT = 28
+local PROGRESS_HEADER_HEIGHT = 46
+local PROGRESS_WEEKLY_HEIGHT = 70
+local PROGRESS_MAX_SEGMENTS = 20
 
 local frame
 local selectedRealmID
@@ -81,6 +88,8 @@ local suppressBackCallback
 local characterOffset = 0
 local activeView = "equipment"
 local SetActiveView
+local selectedProgressRaidID
+local progressSelectionCharacterName
 
 local function Token(name)
     return UI.Token("color", name)
@@ -1013,6 +1022,497 @@ local function RenderProfessionResources(character)
     end
 end
 
+local function FormatProgressResetAt(resetAt, now)
+    resetAt = tonumber(resetAt)
+    now = tonumber(now) or GetServerTime()
+    if not resetAt or resetAt <= now then
+        return "—"
+    end
+    return FormatProfessionCooldownTime(resetAt - now)
+end
+
+local function GetPrimaryProgressLockout(entry)
+    local primary
+    for _, lockout in ipairs(entry and entry.lockouts or {}) do
+        local killedCount = tonumber(lockout.killedCount) or 0
+        local primaryKilledCount = primary and (tonumber(primary.killedCount) or 0) or -1
+        if not primary or killedCount > primaryKilledCount then
+            primary = lockout
+        end
+    end
+    return primary
+end
+
+local function GetProgressBosses(entry)
+    local lockout = GetPrimaryProgressLockout(entry)
+    if lockout and type(lockout.bosses) == "table" and #lockout.bosses > 0 then
+        return lockout, lockout.bosses
+    end
+
+    local bosses = {}
+    local killedCount = lockout and (tonumber(lockout.killedCount) or 0) or 0
+    for index, boss in ipairs(entry and entry.bosses or {}) do
+        bosses[index] = {
+            name = boss.name,
+            killed = index <= killedCount,
+        }
+    end
+    return lockout, bosses
+end
+
+local function SetProgressSegment(segment, completed)
+    local color = Token(completed and "success" or "borderStrong")
+    segment:SetColorTexture(color[1], color[2], color[3], completed and 0.95 or 0.72)
+end
+
+local function CreateProgressRaidRow(parent)
+    local row = UI.Create("button", parent, {
+        variant = "quiet",
+        state = "default",
+        height = PROGRESS_RAID_ROW_HEIGHT,
+    })
+    row._bgforgeText:Hide()
+
+    row.selectedBackground = row:CreateTexture(nil, "ARTWORK", nil, -8)
+    row.selectedBackground:SetPoint("TOPLEFT", 1, -1)
+    row.selectedBackground:SetPoint("BOTTOMRIGHT", -1, 1)
+    row.selectedBackground:SetTexture(WHITE_TEXTURE)
+    row.selectedBackground:SetVertexColor(unpack(Token("focusSurface")))
+    row.selectedBackground:Hide()
+
+    row.selectedAccent = row:CreateTexture(nil, "ARTWORK", nil, 7)
+    row.selectedAccent:SetPoint("TOPLEFT", 1, -1)
+    row.selectedAccent:SetPoint("BOTTOMLEFT", 1, 1)
+    row.selectedAccent:SetWidth(3)
+    row.selectedAccent:SetTexture(WHITE_TEXTURE)
+    row.selectedAccent:SetVertexColor(unpack(Token("focus")))
+    row.selectedAccent:Hide()
+
+    row.toggle = row:CreateTexture(nil, "ARTWORK")
+    row.toggle:SetPoint("LEFT", 8, 0)
+    row.toggle:SetSize(18, 18)
+    row.toggle:SetTexCoord(0, 1, 0, 1)
+
+    row.statusIcon = row:CreateTexture(nil, "ARTWORK")
+    row.statusIcon:SetPoint("LEFT", 34, 0)
+    row.statusIcon:SetSize(16, 16)
+
+    row.name = CreateText(row, "body")
+    row.name:SetPoint("LEFT", 58, 0)
+    row.name:SetWidth(102)
+    row.name:SetJustifyH("LEFT")
+
+    row.segments = {}
+    for index = 1, PROGRESS_MAX_SEGMENTS do
+        local segment = row:CreateTexture(nil, "ARTWORK")
+        segment:SetSize(14, 6)
+        segment:SetPoint("LEFT", 174 + (index - 1) * 17, 0)
+        segment:Hide()
+        row.segments[index] = segment
+    end
+
+    -- 状态可能是中文，不能使用只覆盖数字字形的 number 字体。
+    row.status = CreateText(row, "label")
+    row.status:SetPoint("RIGHT", -12, 0)
+    row.status:SetWidth(92)
+    row.status:SetJustifyH("RIGHT")
+
+    row:SetScript("OnClick", function(self)
+        if not self.canExpand then
+            return
+        end
+        if selectedProgressRaidID == self.raidID then
+            selectedProgressRaidID = nil
+        else
+            selectedProgressRaidID = self.raidID
+        end
+        M.Refresh()
+    end)
+    return row
+end
+
+local function SetProgressRaidRow(row, entry, selected)
+    local lockout, bosses = GetProgressBosses(entry)
+    local killedCount = lockout and (tonumber(lockout.killedCount) or 0) or 0
+    local encounterCount = lockout and (tonumber(lockout.numEncounters) or #bosses) or 0
+    local complete = lockout and encounterCount > 0 and killedCount >= encounterCount
+
+    row.raidID = entry.id
+    row.canExpand = true
+    row.name:SetText(entry.name)
+    row.toggle:SetShown(row.canExpand)
+    if row.canExpand then
+        row.toggle:SetTexture(selected
+            and "Interface\\Buttons\\UI-MinusButton-Up"
+            or "Interface\\Buttons\\UI-PlusButton-Up")
+        row.toggle:SetDesaturated(false)
+        row.toggle:SetVertexColor(1, 1, 1, 1)
+    end
+
+    if not lockout or killedCount == 0 then
+        row.statusIcon:SetTexture(PROGRESS_STATUS_TEXTURE)
+        row.statusIcon:SetDesaturated(true)
+        row.statusIcon:SetVertexColor(1, 1, 1, 1)
+        row.statusIcon:SetAlpha(0.5)
+        row.status:SetText(L["未开始"])
+        SetTextColor(row.status, "textMuted")
+    elseif complete then
+        row.statusIcon:SetTexture(READY_STATUS_TEXTURE)
+        row.statusIcon:SetDesaturated(false)
+        row.statusIcon:SetVertexColor(unpack(Token("success")))
+        row.statusIcon:SetAlpha(1)
+        row.status:SetText(L["已完成"])
+        SetTextColor(row.status, "success")
+    else
+        row.statusIcon:SetTexture(PROGRESS_STATUS_TEXTURE)
+        row.statusIcon:SetDesaturated(false)
+        row.statusIcon:SetVertexColor(1, 1, 1, 1)
+        row.statusIcon:SetAlpha(1)
+        row.status:SetFormattedText("%d/%d", killedCount, encounterCount)
+        SetTextColor(row.status, "warning")
+    end
+
+    for index, segment in ipairs(row.segments) do
+        if lockout and index <= min(encounterCount, PROGRESS_MAX_SEGMENTS) then
+            local boss = bosses[index]
+            SetProgressSegment(segment, boss and boss.killed or index <= killedCount)
+            segment:Show()
+        else
+            segment:Hide()
+        end
+    end
+
+    UI.SetState(row, "default")
+    row.selectedBackground:SetShown(selected)
+    row.selectedAccent:SetShown(selected)
+    row:Show()
+    return lockout, bosses
+end
+
+local function CreateProgressBossRow(parent)
+    local row = CreateSurface(parent, "row")
+    row:SetHeight(PROGRESS_BOSS_ROW_HEIGHT)
+    row.index = CreateText(row, "numberCompact")
+    row.index:SetPoint("LEFT", 8, 0)
+    row.index:SetWidth(24)
+    row.index:SetJustifyH("RIGHT")
+    row.statusIcon = row:CreateTexture(nil, "ARTWORK")
+    row.statusIcon:SetPoint("LEFT", 42, 0)
+    row.statusIcon:SetSize(14, 14)
+    row.name = CreateText(row, "label")
+    row.name:SetPoint("LEFT", row.statusIcon, "RIGHT", 7, 0)
+    row.name:SetPoint("RIGHT", -104, 0)
+    row.name:SetJustifyH("LEFT")
+    row.name:SetWordWrap(false)
+    row.status = CreateText(row, "label")
+    row.status:SetPoint("RIGHT", -8, 0)
+    row.status:SetWidth(88)
+    row.status:SetJustifyH("RIGHT")
+    return row
+end
+
+local function SetProgressBossRow(row, boss, index)
+    row.index:SetText(index)
+    row.name:SetText(boss.name or UNKNOWN)
+    if boss.killed then
+        row.statusIcon:SetTexture(READY_STATUS_TEXTURE)
+        row.statusIcon:SetVertexColor(unpack(Token("success")))
+        row.status:SetText(L["已击杀"])
+        SetTextColor(row.status, "success")
+    else
+        row.statusIcon:SetTexture(UNKNOWN_STATUS_TEXTURE)
+        row.statusIcon:SetVertexColor(unpack(Token("textMuted")))
+        row.status:SetText(L["未击杀"])
+        SetTextColor(row.status, "textMuted")
+    end
+    row:Show()
+end
+
+local function SetProgressBossPanel(panel, entry, lockout, bosses)
+    if not entry then
+        panel:Hide()
+        return 0
+    end
+
+    panel.title:SetText(entry.name .. " · " .. L["首领进度"])
+    if lockout then
+        panel.summary:SetFormattedText(
+            "%d/%d",
+            tonumber(lockout.killedCount) or 0,
+            tonumber(lockout.numEncounters) or #bosses
+        )
+    elseif #bosses > 0 then
+        panel.summary:SetFormattedText("0/%d", #bosses)
+    else
+        panel.summary:SetText("—")
+    end
+    panel.empty:SetShown(#bosses == 0)
+    local rowsPerColumn = ceil(#bosses / 2)
+    for index = #panel.rows + 1, #bosses do
+        panel.rows[index] = CreateProgressBossRow(panel)
+    end
+    for index, row in ipairs(panel.rows) do
+        local boss = bosses[index]
+        if boss then
+            row:ClearAllPoints()
+            local column = index > rowsPerColumn and 2 or 1
+            local rowIndex = column == 1 and index or index - rowsPerColumn
+            local top = -36 - (rowIndex - 1) * (PROGRESS_BOSS_ROW_HEIGHT + 2)
+            if column == 1 then
+                row:SetPoint("TOPLEFT", 12, top)
+                row:SetPoint("TOPRIGHT", panel, "TOP", -4, top)
+            else
+                row:SetPoint("TOPLEFT", panel, "TOP", 4, top)
+                row:SetPoint("TOPRIGHT", -12, top)
+            end
+            SetProgressBossRow(row, boss, index)
+        else
+            row:Hide()
+        end
+    end
+
+    local height = #bosses > 0
+        and (44 + rowsPerColumn * (PROGRESS_BOSS_ROW_HEIGHT + 2)) or 74
+    panel:SetHeight(height)
+    panel:Show()
+    return height
+end
+
+local function CreateProgressWeeklyCell(parent)
+    local cell = CreateSurface(parent, "row")
+    cell:SetHeight(34)
+    cell.statusIcon = cell:CreateTexture(nil, "ARTWORK")
+    cell.statusIcon:SetPoint("LEFT", 10, 0)
+    cell.statusIcon:SetSize(16, 16)
+    cell.name = CreateText(cell, "body")
+    cell.name:SetPoint("LEFT", cell.statusIcon, "RIGHT", 8, 0)
+    cell.name:SetPoint("RIGHT", -106, 0)
+    cell.name:SetJustifyH("LEFT")
+    cell.status = CreateText(cell, "label")
+    cell.status:SetPoint("RIGHT", -10, 0)
+    cell.status:SetWidth(92)
+    cell.status:SetJustifyH("RIGHT")
+    return cell
+end
+
+local function SetProgressWeeklyCell(cell, entry)
+    cell.name:SetText(entry.name)
+    if entry.completed then
+        cell.statusIcon:SetTexture(READY_STATUS_TEXTURE)
+        cell.statusIcon:SetVertexColor(unpack(Token("success")))
+        cell.status:SetText(L["已完成"])
+        SetTextColor(cell.status, "success")
+    else
+        cell.statusIcon:SetTexture(ALERT_STATUS_TEXTURE)
+        cell.statusIcon:SetVertexColor(1, 1, 1, 1)
+        cell.status:SetText(L["未完成"])
+        SetTextColor(cell.status, "warning")
+    end
+    cell:Show()
+end
+
+local function UpdateProgressScrollRange()
+    if not frame.progressScroll or not frame.progressScrollBar then
+        return
+    end
+    local viewportHeight = frame.progressScroll:GetHeight() or 0
+    local maximum = max(0, (frame.progressContentHeight or 0) - viewportHeight)
+    local scrollBar = frame.progressScrollBar
+    scrollBar:SetMinMaxValues(0, maximum)
+    scrollBar:SetValue(min(scrollBar:GetValue() or 0, maximum))
+    scrollBar:SetShown(maximum > 0)
+end
+
+local function EnsureProgressView()
+    if frame.progressPanel then
+        return
+    end
+
+    local panel = CreateSurface(frame.right, "panel")
+    panel:SetPoint("TOPLEFT", 8, -50)
+    panel:SetPoint("BOTTOMRIGHT", -8, 8)
+    panel:Hide()
+    frame.progressPanel = panel
+
+    local summary = CreateSurface(panel, "raised")
+    summary:SetPoint("TOPLEFT", 0, 0)
+    summary:SetPoint("TOPRIGHT", 0, 0)
+    summary:SetHeight(PROGRESS_HEADER_HEIGHT)
+    local summaryTitle = CreateText(summary, "heading", L["本周进度"])
+    summaryTitle:SetPoint("LEFT", 12, 0)
+    frame.progressSummary = CreateText(summary, "body")
+    frame.progressSummary:SetPoint("LEFT", summaryTitle, "RIGHT", 18, 0)
+    frame.progressReset = CreateText(summary, "body")
+    frame.progressReset:SetPoint("RIGHT", -12, 0)
+    frame.progressReset:SetJustifyH("RIGHT")
+    SetTextColor(frame.progressReset, "focusText")
+
+    local weekly = CreateSurface(panel, "raised")
+    weekly:SetPoint("BOTTOMLEFT", 0, 0)
+    weekly:SetPoint("BOTTOMRIGHT", 0, 0)
+    weekly:SetHeight(PROGRESS_WEEKLY_HEIGHT)
+    local weeklyTitle = CreateText(weekly, "heading", L["周常"])
+    weeklyTitle:SetPoint("TOPLEFT", 10, -8)
+    weekly.cells = {}
+    for index = 1, 2 do
+        local cell = CreateProgressWeeklyCell(weekly)
+        if index == 1 then
+            cell:SetPoint("TOPLEFT", 8, -29)
+            cell:SetPoint("TOPRIGHT", weekly, "TOP", -4, -29)
+        else
+            cell:SetPoint("TOPLEFT", weekly, "TOP", 4, -29)
+            cell:SetPoint("TOPRIGHT", -8, -29)
+        end
+        weekly.cells[index] = cell
+    end
+    frame.progressWeekly = weekly
+
+    local scroll = CreateFrame("ScrollFrame", nil, panel)
+    scroll:SetPoint("TOPLEFT", 0, -PROGRESS_HEADER_HEIGHT - 8)
+    scroll:SetPoint("BOTTOMRIGHT", -16, PROGRESS_WEEKLY_HEIGHT + 8)
+    scroll:EnableMouseWheel(true)
+    frame.progressScroll = scroll
+
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(1, 1)
+    content:SetPoint("TOPLEFT")
+    scroll:SetScrollChild(content)
+    frame.progressScrollContent = content
+    frame.progressRaidRows = {}
+
+    local bossPanel = CreateSurface(content, "selected")
+    bossPanel.title = CreateText(bossPanel, "heading")
+    bossPanel.title:SetPoint("TOPLEFT", 12, -10)
+    bossPanel.summary = CreateText(bossPanel, "number")
+    bossPanel.summary:SetPoint("TOPRIGHT", -12, -10)
+    SetTextColor(bossPanel.summary, "warning")
+    bossPanel.empty = CreateText(bossPanel, "body", L["暂无首领数据"])
+    bossPanel.empty:SetPoint("TOPLEFT", 12, -40)
+    SetTextColor(bossPanel.empty, "textMuted")
+    bossPanel.rows = {}
+    bossPanel:Hide()
+    frame.progressBossPanel = bossPanel
+
+    local scrollBar = CreateFrame("Slider", nil, panel)
+    scrollBar:SetOrientation("VERTICAL")
+    scrollBar:SetPoint("TOPRIGHT", -3, -PROGRESS_HEADER_HEIGHT - 10)
+    scrollBar:SetPoint("BOTTOMRIGHT", -3, PROGRESS_WEEKLY_HEIGHT + 10)
+    scrollBar:SetWidth(10)
+    scrollBar:SetMinMaxValues(0, 0)
+    scrollBar:SetValue(0)
+    scrollBar:SetValueStep(1)
+    local track = scrollBar:CreateTexture(nil, "BACKGROUND")
+    track:SetPoint("TOP", 0, 0)
+    track:SetPoint("BOTTOM", 0, 0)
+    track:SetWidth(2)
+    track:SetColorTexture(unpack(Token("borderStrong")))
+    scrollBar:SetThumbTexture(WHITE_TEXTURE)
+    local thumb = scrollBar:GetThumbTexture()
+    thumb:SetSize(8, 36)
+    thumb:SetColorTexture(unpack(Token("focus")))
+    scrollBar:SetScript("OnValueChanged", function(_, value)
+        scroll:SetVerticalScroll(value)
+    end)
+    scrollBar:Hide()
+    frame.progressScrollBar = scrollBar
+
+    scroll:SetScript("OnMouseWheel", function(_, delta)
+        local minimum, maximum = scrollBar:GetMinMaxValues()
+        local value = scrollBar:GetValue() - delta * (PROGRESS_RAID_ROW_HEIGHT * 2)
+        scrollBar:SetValue(max(minimum, min(maximum, value)))
+    end)
+    scroll:SetScript("OnSizeChanged", function(_, width)
+        content:SetWidth(max(1, width))
+        UpdateProgressScrollRange()
+    end)
+end
+
+local function RenderProgress(character)
+    EnsureProgressView()
+    local now = GetServerTime()
+    local model = BG.GetRaidLockoutProgressModel
+        and BG.GetRaidLockoutProgressModel(character, now) or nil
+    if not model then
+        return
+    end
+
+    frame.updatedAt:SetText(model.updatedAt > 0
+        and (L["进度更新"] .. " " .. date("%m-%d %H:%M", model.updatedAt))
+        or L["进度尚未记录"])
+    frame.progressSummary:SetFormattedText(
+        L["副本 %d/%d · 周常 %d/%d"],
+        model.raidCount,
+        #model.raids,
+        model.weeklyCompleted,
+        model.weeklyTotal
+    )
+    frame.progressReset:SetFormattedText(
+        L["统一重置 %s"],
+        FormatProgressResetAt(model.resetAt or model.weeklyResetAt, now)
+    )
+
+    if progressSelectionCharacterName ~= character.name then
+        progressSelectionCharacterName = character.name
+        selectedProgressRaidID = nil
+        frame.progressScrollBar:SetValue(0)
+    end
+
+    local selectedEntry
+    local selectedLockout
+    local selectedBosses
+    for _, entry in ipairs(model.raids) do
+        if entry.id == selectedProgressRaidID then
+            local lockout, bosses = GetProgressBosses(entry)
+            selectedEntry = entry
+            selectedLockout = lockout
+            selectedBosses = bosses
+            break
+        end
+    end
+
+    for index = #frame.progressRaidRows + 1, #model.raids do
+        frame.progressRaidRows[index] = CreateProgressRaidRow(frame.progressScrollContent)
+    end
+
+    local bossPanelHeight = SetProgressBossPanel(
+        frame.progressBossPanel,
+        selectedEntry,
+        selectedLockout,
+        selectedBosses or {}
+    )
+    local yOffset = 0
+    for index, row in ipairs(frame.progressRaidRows) do
+        local entry = model.raids[index]
+        if entry then
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 0, -yOffset)
+            row:SetPoint("TOPRIGHT", 0, -yOffset)
+            SetProgressRaidRow(row, entry, entry.id == selectedProgressRaidID)
+            yOffset = yOffset + PROGRESS_RAID_ROW_HEIGHT + PROGRESS_RAID_ROW_GAP
+            if entry.id == selectedProgressRaidID and bossPanelHeight > 0 then
+                frame.progressBossPanel:ClearAllPoints()
+                frame.progressBossPanel:SetPoint("TOPLEFT", 0, -yOffset)
+                frame.progressBossPanel:SetPoint("TOPRIGHT", 0, -yOffset)
+                yOffset = yOffset + bossPanelHeight + PROGRESS_RAID_ROW_GAP
+            end
+        else
+            row:Hide()
+        end
+    end
+    frame.progressContentHeight = max(1, yOffset)
+    frame.progressScrollContent:SetHeight(frame.progressContentHeight)
+
+    for index, cell in ipairs(frame.progressWeekly.cells) do
+        local entry = model.weeklies[index]
+        if entry then
+            SetProgressWeeklyCell(cell, entry)
+        else
+            cell:Hide()
+        end
+    end
+    UpdateProgressScrollRange()
+end
+
 local function CreateFrameContents(parent)
     frame = CreateFrame("Frame", "BGForgeCharacterDetailsFrame", parent, "BackdropTemplate")
     UI.Style(frame, "surface", { role = "canvas" })
@@ -1099,7 +1599,7 @@ local function CreateFrameContents(parent)
     local previous
     frame.tabs = {}
     for index, label in ipairs(tabLabels) do
-        local enabled = index <= 3
+        local enabled = true
         local tab = CreateTab(tabs, label, index == 1, enabled)
         tab:SetWidth(index == 3 and 132 or 102)
         if previous then
@@ -1118,6 +1618,10 @@ local function CreateFrameContents(parent)
         elseif index == 3 then
             tab:SetScript("OnClick", function()
                 SetActiveView("professionResources")
+            end)
+        elseif index == 4 then
+            tab:SetScript("OnClick", function()
+                SetActiveView("progress")
             end)
         end
         frame.tabs[index] = tab
@@ -1400,8 +1904,14 @@ local function RenderBackpack(character)
 end
 
 SetActiveView = function(view)
+    local wasProgress = activeView == "progress"
     activeView = view == "backpack" and "backpack"
-        or (view == "professionResources" and "professionResources" or "equipment")
+        or (view == "professionResources" and "professionResources")
+        or (view == "progress" and "progress" or "equipment")
+    if activeView == "progress" and not wasProgress then
+        selectedProgressRaidID = nil
+        progressSelectionCharacterName = selectedCharacterName
+    end
     local showEquipment = activeView == "equipment"
     frame.paperDoll:SetShown(showEquipment)
     frame.tablePanel:SetShown(showEquipment)
@@ -1409,6 +1919,8 @@ SetActiveView = function(view)
         EnsureBackpackView()
     elseif activeView == "professionResources" then
         EnsureProfessionResourcesView()
+    elseif activeView == "progress" then
+        EnsureProgressView()
     end
     if frame.backpackPanel then
         frame.backpackPanel:SetShown(activeView == "backpack")
@@ -1416,9 +1928,13 @@ SetActiveView = function(view)
     if frame.professionResourcesPanel then
         frame.professionResourcesPanel:SetShown(activeView == "professionResources")
     end
+    if frame.progressPanel then
+        frame.progressPanel:SetShown(activeView == "progress")
+    end
     UI.SetState(frame.tabs[1], showEquipment and "selected" or "default")
     UI.SetState(frame.tabs[2], activeView == "backpack" and "selected" or "default")
     UI.SetState(frame.tabs[3], activeView == "professionResources" and "selected" or "default")
+    UI.SetState(frame.tabs[4], activeView == "progress" and "selected" or "default")
     if frame:IsShown() then
         M.Refresh()
     end
@@ -1455,6 +1971,8 @@ function M.Refresh()
         RenderBackpack(character)
     elseif activeView == "professionResources" then
         RenderProfessionResources(character)
+    elseif activeView == "progress" then
+        RenderProgress(character)
     else
         RenderEquipment(character)
     end

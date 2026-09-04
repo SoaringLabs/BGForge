@@ -278,9 +278,10 @@ assert(BG.WishlistMainFrame.child:GetHeight() > 1, "wishlist scroll child should
 assert(filterControlMounts == 1 and BG.WishlistMainFrame.filterControls,
     "wishlist header should mount one shared gear-filter control group")
 local filterPoints = BG.WishlistMainFrame.filterControls.pointCalls
-assert(filterPoints and filterPoints[1][1] == "TOPRIGHT"
-    and filterPoints[1][2] == BG.MainFrame and filterPoints[1][3] == "TOPRIGHT",
-    "wishlist gear-filter controls should be anchored in the header's top-right area")
+assert(filterPoints and filterPoints[1][1] == "RIGHT"
+    and filterPoints[1][2] == BG.WishlistMainFrame.headerSurface
+    and filterPoints[1][3] == "RIGHT",
+    "wishlist gear-filter controls should be centered in the shared header's right side")
 assert(BG.WishlistMainFrame.child.labelLayer:GetFrameLevel() > BG.WishlistMainFrame.child:GetFrameLevel(),
     "wishlist labels should render above opaque panels")
 assert(BG.WishlistMainFrame.bossDirectoryScroll:IsShown(),
@@ -460,19 +461,32 @@ assert(BG.WishlistMainFrame.clearButton._bgforgeVariant == "danger"
     "the clear action should use the standard danger-button treatment")
 assert(BG.WishlistMainFrame.pageTitle.textColor[1] == BG.UI.Token("color", "textPrimary")[1],
     "the wishlist page title should use primary text rather than Forge Gold")
+assert(BG.WishlistMainFrame.headerSurface._bgforgeKind == "pageHeader"
+    and BG.WishlistMainFrame.headerSurface:GetHeight() == 58,
+    "the wishlist should use the standard shared page header")
+assert(BG.WishlistMainFrame.pageDescription:GetText()
+    == "按职业套装与首领掉落建立心愿；实际掉落会提醒，拍卖时保持展开。",
+    "the shared wishlist header should retain the page description")
 assert(BG.WishlistMainFrame.headerAccent.vertexColor[1] == focus[1],
     "the wishlist header accent should use Rune Blue")
 local headerPoints = BG.WishlistMainFrame.headerSurface.pointCalls
 assert(headerPoints and headerPoints[1][1] == "TOPLEFT"
     and headerPoints[1][2] == BG.MainFrame and headerPoints[1][3] == "TOPLEFT"
     and headerPoints[1][4] == 0 and headerPoints[1][5] == -56
-    and headerPoints[2][1] == "TOPRIGHT" and headerPoints[2][4] == 0,
-    "the wishlist page header should span the full main-frame width below the raid navigation")
+    and headerPoints[2][1] == "TOPRIGHT" and headerPoints[2][4] == -1,
+    "the wishlist page header should preserve the main frame's right border")
 local accentPoints = BG.WishlistMainFrame.headerAccent.pointCalls
 assert(BG.WishlistMainFrame.headerAccent:GetWidth() == 2
     and accentPoints and accentPoints[1][1] == "TOPLEFT"
     and accentPoints[2][1] == "BOTTOMLEFT",
     "the wishlist header should use a vertical accent instead of duplicating the raid-navigation rule")
+
+local outerScrollPoints = BG.WishlistMainFrame.scroll.pointCalls
+assert(outerScrollPoints and outerScrollPoints[1][1] == "TOPLEFT"
+    and outerScrollPoints[1][4] == 18 and outerScrollPoints[1][5] == -126,
+    "wishlist content should keep its 12-pixel gap below the compact shared header")
+assert(BG.WishlistMainFrame.child:GetWidth() == BG.WishlistMainFrame.scroll:GetWidth(),
+    "wishlist columns should fill the usable page width without a second scrollbar reserve")
 
 bossRows[3].action()
 local refreshedBossRows = {}

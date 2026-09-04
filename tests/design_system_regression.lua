@@ -12,6 +12,7 @@ function Region:SetBackdropColor(...) self.backdropColor = { ... } end
 function Region:SetBackdropBorderColor(...) self.backdropBorderColor = { ... } end
 function Region:SetTexture(texture) self.texture = texture end
 function Region:SetColorTexture(...) self.colorTexture = { ... } end
+function Region:SetVertexColor(...) self.vertexColor = { ... } end
 function Region:SetGradient(...) self.gradient = { ... } end
 function Region:SetBlendMode(mode) self.blendMode = mode end
 function Region:SetAlpha(alpha) self.alpha = alpha end
@@ -22,6 +23,7 @@ function Region:SetWidth(width) self.width = width end
 function Region:SetHeight(height) self.height = height end
 function Region:SetJustifyH(value) self.justifyH = value end
 function Region:SetJustifyV(value) self.justifyV = value end
+function Region:SetWordWrap(value) self.wordWrap = value end
 function Region:SetFont(font, size, flags) self.font, self.fontSize, self.fontFlags = font, size, flags end
 function Region:SetTextColor(...) self.textColor = { ... } end
 function Region:SetShadowColor(...) self.shadowColor = { ... } end
@@ -99,13 +101,29 @@ assert(title.text == "BGForge", "Title text was not set")
 local compactNumber = BG.UI.Create("text", panel, { role = "numberCompact", text = "238" })
 assert(compactNumber.fontSize == 12, "Compact number typography must remain smaller than row text")
 
+local expectedFocus = BG.UI.Token("color", "focus")
+local pageHeader = BG.UI.CreatePageHeader(parent, {
+    title = "全角色总览",
+    subtitle = "点击角色名称可查看装备、背包、专业、资源与进度",
+    contentRightInset = 260,
+})
+assert(pageHeader._bgforgeKind == "pageHeader" and pageHeader.height == 58,
+    "Shared page header should use the standard page-header height")
+assert(pageHeader.title.text == "全角色总览" and pageHeader.title.fontSize == 16,
+    "Shared page header should apply title content and typography")
+assert(pageHeader.subtitle.wordWrap == false and pageHeader.subtitle.fontSize == 11,
+    "Shared page-header subtitles should stay compact and single-line")
+assert(pageHeader.accent.width == 2,
+    "Shared page header should use the standard focus-line width")
+assert(NearlyEqual(pageHeader.accent.vertexColor[1], expectedFocus[1]),
+    "Shared page-header accent should use the focus color")
+
 local tab = BG.UI.Create("tab", panel, {
     text = "纳克萨玛斯",
     state = "selected",
     width = 120,
     height = 28,
 })
-local expectedFocus = BG.UI.Token("color", "focus")
 assert(NearlyEqual(tab.backdropBorderColor[1], expectedFocus[1]), "Selected tab is missing focus border")
 assert(tab._bgforgeFocusAccent.alpha == 1, "Selected tab is missing the static focus line")
 assert(tab.hooks.OnUpdate == nil, "Persistent selection must not install an OnUpdate animation")

@@ -5,18 +5,63 @@ local L = ns.L
 -- 隐私边界：只保存本机实际登录过的角色及其本周 CD、资源快照。
 -- 不发送插件消息，也不读取战网账号、GUID、好友、公会或其他设备的数据。
 local RAIDS = {
-    { id = 580, name = L["太阳井"], compactWidth = 50 },
-    { id = 568, name = L["祖阿曼"], compactWidth = 50 },
-    { id = 649, name = L["十字军"], compactWidth = 50 },
-    { id = 309, name = L["祖格"], compactWidth = 42 },
-    { id = 533, name = L["纳克萨玛斯"], compactWidth = 70 },
-    { id = 615, name = L["黑曜石"], compactWidth = 50 },
-    { id = 616, name = L["永恒"], compactWidth = 42 },
-    { id = 548, name = L["毒蛇"], compactWidth = 42 },
-    { id = 550, name = L["风暴"], compactWidth = 42 },
-    { id = 409, name = L["熔火"], compactWidth = 42 },
+    { id = 580, name = L["太阳井"], compactWidth = 50, bossSource = "SWtitan", bossStart = 8, bossEnd = 13 },
+    { id = 568, name = L["祖阿曼"], compactWidth = 50, bossSource = "SWtitan", bossStart = 1, bossEnd = 6 },
+    { id = 649, name = L["十字军"], compactWidth = 50, bossSource = "TOCtitan", bossStart = 11, bossEnd = 15 },
+    { id = 309, name = L["祖格"], compactWidth = 42, bossSource = "TOCtitan", bossStart = 1, bossEnd = 10 },
+    { id = 533, name = L["纳克萨玛斯"], compactWidth = 70, bossSource = "NAXXtitan", bossStart = 1, bossEnd = 15 },
+    { id = 615, name = L["黑曜石"], compactWidth = 50, bossSource = "NAXXtitan", bossStart = 16, bossEnd = 16 },
+    { id = 616, name = L["永恒"], compactWidth = 42, bossSource = "NAXXtitan", bossStart = 17, bossEnd = 17 },
+    { id = 548, name = L["毒蛇"], compactWidth = 42, bossSource = "SSCtitan", bossStart = 1, bossEnd = 6 },
+    { id = 550, name = L["风暴"], compactWidth = 42, bossSource = "SSCtitan", bossStart = 7, bossEnd = 10 },
+    { id = 409, name = L["熔火"], compactWidth = 42, bossSource = "MCtitan", bossStart = 1, bossEnd = 10 },
     { id = 624, name = L["宝库"], compactWidth = 42 },
 }
+
+local raidBossRosterCache = {}
+
+local function GetRaidBossRoster(raid)
+    local cached = raidBossRosterCache[raid.id]
+    if cached then
+        return cached
+    end
+
+    local bosses = {}
+    local source = raid.bossSource and BG.Boss and BG.Boss[raid.bossSource]
+    if source then
+        for index = raid.bossStart, raid.bossEnd do
+            local boss = source["boss" .. index]
+            if boss and boss.name2 then
+                bosses[#bosses + 1] = { name = boss.name2 }
+            end
+        end
+    end
+
+    -- 宝库等没有纳入账本 Boss 表的副本，从客户端副本手册读取本地化顺序。
+    -- 这里只读取静态副本资料，不读取或保存其他玩家信息。
+    if #bosses == 0 and type(EJ_GetInstanceForMap) == "function"
+        and type(EJ_GetEncounterInfoByIndex) == "function" then
+        local ok, journalInstanceID = pcall(EJ_GetInstanceForMap, raid.id)
+        if ok and journalInstanceID then
+            for index = 1, 30 do
+                local encounterOK, name = pcall(
+                    EJ_GetEncounterInfoByIndex,
+                    index,
+                    journalInstanceID
+                )
+                if not encounterOK or not name then
+                    break
+                end
+                bosses[#bosses + 1] = { name = name }
+            end
+        end
+    end
+
+    if #bosses > 0 then
+        raidBossRosterCache[raid.id] = bosses
+    end
+    return bosses
+end
 
 -- 任务候选池沿用原版 BiaoGe 已验证的 Titan/WLK 定义，但完成快照只保存
 -- 在 BGForge 当前本机角色记录中。专业日常只记录完成，不采集专业技能。
@@ -52,6 +97,7 @@ local QUEST_COLUMNS = {
         compactWidth = 44,
         groupID = "professionDaily",
         resetType = "daily",
+        skillLineID = 755,
         questIDs = { 12959, 12962, 12961, 12958, 12963, 12960 },
     },
     {
@@ -2944,6 +2990,14 @@ local function CreateHoverFrame()
     topBar:SetPoint("TOPLEFT", ui.padding, -ui.padding)
     topBar:SetSize(width - ui.padding * 2, ui.topBarHeight)
 
+    local pageHeader = BG.UI.CreatePageHeader(hoverFrame, {
+        title = L["全角色总览"],
+        subtitle = L["点击角色名称可查看装备、背包、专业、资源与进度"],
+        contentRightInset = 310,
+    })
+    pageHeader:SetPoint("TOPLEFT", hoverFrame, "TOPLEFT", -ui.padding, 0)
+    pageHeader:Hide()
+
     local logo = topBar:CreateTexture(nil, "ARTWORK")
     logo:SetSize(22, 22)
     logo:SetPoint("LEFT", 8, 0)
@@ -2999,7 +3053,7 @@ local function CreateHoverFrame()
         BG.PlaySound(1)
     end)
 
-    local resetText = topBar:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    local resetText = hoverFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     resetText:SetPoint("RIGHT", refresh, "LEFT", -10, 0)
     resetText:SetWidth(245)
     resetText:SetJustifyH("RIGHT")
@@ -3007,18 +3061,10 @@ local function CreateHoverFrame()
     resetText:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
     resetText:SetTextColor(unpack(COLOR.textSecondary))
 
-    local detailsHint = topBar:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    detailsHint:SetPoint("LEFT", title, "RIGHT", 18, 0)
-    detailsHint:SetPoint("RIGHT", resetText, "LEFT", -12, 0)
-    detailsHint:SetJustifyH("LEFT")
-    detailsHint:SetWordWrap(false)
-    detailsHint:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-    detailsHint:SetText(L["提示：点击角色名称可查看装备、背包、专业与资源"])
-    detailsHint:SetTextColor(unpack(COLOR.focusText))
-    detailsHint:Hide()
-
     hoverFrame.chrome = {
         innerBorder = innerBorder,
+        topBar = topBar,
+        pageHeader = pageHeader,
         logo = logo,
         brandTitle = brandTitle,
         titleDivider = titleDivider,
@@ -3026,7 +3072,6 @@ local function CreateHoverFrame()
         close = close,
         settings = settings,
         refresh = refresh,
-        detailsHint = detailsHint,
     }
 
     local raidTitleCell = CreateTableCell(contentFrame, COLOR.headerStrong, { left = true })
@@ -3381,10 +3426,25 @@ local function CreateHoverFrame()
         local equipmentWidth = legendaryWidth + fragmentWidth + upgradeWidth + trinketWidth
         local commonWidth = goldWidth + emberWidth + shardWidth
         local resourceWidth = ui.nameWidth + resourceColumnsWidth
+        local topInset = hoverEmbedded and 0 or ui.padding
+        local topBarHeight = hoverEmbedded
+            and BG.UI.Token("size", "pageHeader") or ui.topBarHeight
+        local pageHeaderGap = hoverEmbedded and BG.UI.Token("spacing", "md") or 0
         hoverFrame:SetWidth(viewportWidth)
         topBar:SetWidth(viewportWidth - ui.padding * 2)
+        topBar:SetHeight(ui.topBarHeight)
+        pageHeader:SetWidth(
+            viewportWidth + ui.padding * 2 - BG.UI.Token("spacing", "hairline")
+        )
+        pageHeader:SetHeight(BG.UI.Token("size", "pageHeader"))
         contentScroll:ClearAllPoints()
-        contentScroll:SetPoint("TOPLEFT", hoverFrame, "TOPLEFT", 0, -(ui.padding + ui.topBarHeight))
+        contentScroll:SetPoint(
+            "TOPLEFT",
+            hoverFrame,
+            "TOPLEFT",
+            0,
+            -(topInset + topBarHeight + pageHeaderGap)
+        )
         contentScroll:SetWidth(viewportWidth)
         contentFrame:SetWidth(width)
         horizontalScrollBar:SetMinMaxValues(0, horizontalOverflow)
@@ -3816,7 +3876,7 @@ local function CreateHoverFrame()
         contentFrame:SetHeight(contentHeight)
         contentScroll:SetHeight(contentHeight)
         hoverFrame:SetHeight(
-            ui.padding + ui.topBarHeight + contentHeight + ui.padding
+            topInset + topBarHeight + pageHeaderGap + contentHeight + ui.padding
                 + (horizontalOverflow > 0 and ui.horizontalScrollHeight or 0)
         )
     end
@@ -3830,27 +3890,20 @@ local function SetEmbeddedChrome(isEmbedded)
         return
     end
 
-    chrome.title:ClearAllPoints()
     chrome.refresh:ClearAllPoints()
     if isEmbedded then
         chrome.innerBorder:Hide()
-        chrome.logo:Hide()
-        chrome.brandTitle:Hide()
-        chrome.titleDivider:Hide()
+        chrome.topBar:Hide()
+        chrome.pageHeader:Show()
         chrome.close:Hide()
         chrome.settings:Hide()
-        chrome.detailsHint:Show()
-        chrome.title:SetPoint("LEFT", 10, 0)
-        chrome.refresh:SetPoint("TOPRIGHT", -SMALL_UI.padding - 6, -SMALL_UI.padding - 6)
+        chrome.refresh:SetPoint("RIGHT", chrome.pageHeader, "RIGHT", -16, 0)
     else
         chrome.innerBorder:Show()
-        chrome.logo:Show()
-        chrome.brandTitle:Show()
-        chrome.titleDivider:Show()
+        chrome.topBar:Show()
+        chrome.pageHeader:Hide()
         chrome.close:Show()
         chrome.settings:Show()
-        chrome.detailsHint:Hide()
-        chrome.title:SetPoint("LEFT", chrome.titleDivider, "RIGHT", 9, 0)
         chrome.refresh:SetPoint("RIGHT", chrome.settings, "LEFT", -5, 0)
     end
 end
@@ -4068,6 +4121,62 @@ function BG.GetRaidLockoutProfessionTracks(character, now)
         tracks[#tracks + 1] = track
     end
     return tracks
+end
+
+-- 角色详情“大界面”的“进度”页只消费这一份展示模型。页面严格聚焦
+-- Titan 团本与两项周常；专业日常和制造 CD 留在“专业与资源”页。
+function BG.GetRaidLockoutProgressModel(character, now)
+    now = tonumber(now) or GetServerTime()
+    character = type(character) == "table" and character or {}
+    local instances = type(character.instances) == "table" and character.instances or {}
+    local completions = type(character.questCompletions) == "table"
+        and character.questCompletions or {}
+    local model = {
+        raids = {},
+        weeklies = {},
+        resetAt = GetQuestResetAt("weekly", now),
+        updatedAt = tonumber(character.lastRecordedAt) or 0,
+        raidCount = 0,
+        weeklyCompleted = 0,
+        weeklyTotal = 0,
+    }
+
+    for _, raid in ipairs(RAIDS) do
+        local lockouts = type(instances[raid.id]) == "table" and instances[raid.id] or {}
+        model.raids[#model.raids + 1] = {
+            id = raid.id,
+            name = raid.name,
+            lockouts = lockouts,
+            bosses = GetRaidBossRoster(raid),
+        }
+        if #lockouts > 0 then
+            model.raidCount = model.raidCount + 1
+        end
+        for _, lockout in ipairs(lockouts) do
+            model.updatedAt = max(model.updatedAt, tonumber(lockout.updatedAt) or 0)
+        end
+    end
+
+    for _, column in ipairs(QUEST_COLUMNS) do
+        if column.groupID == "weekly" then
+            local snapshot = completions[column.id]
+            local entry = {
+                id = column.id,
+                name = column.name,
+                completed = snapshot and true or false,
+                updatedAt = snapshot and tonumber(snapshot.updatedAt) or nil,
+            }
+            if entry.updatedAt then
+                model.updatedAt = max(model.updatedAt, entry.updatedAt)
+            end
+            model.weeklies[#model.weeklies + 1] = entry
+            model.weeklyTotal = model.weeklyTotal + 1
+            if entry.completed then
+                model.weeklyCompleted = model.weeklyCompleted + 1
+            end
+        end
+    end
+    return model
 end
 
 function BG.SetRaidLockoutCharacterHidden(realmID, characterName, isHidden)

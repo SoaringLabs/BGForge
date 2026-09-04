@@ -46,6 +46,8 @@ local COLUMN_GAP = 10
 local BOSS_ROW_HEIGHT = 36
 local BOSS_DIRECTORY_GAP = 8
 local BOSS_WORKBENCH_MIN_HEIGHT = 520
+local PAGE_CONTENT_GUTTER = 18
+local OUTER_SCROLLBAR_GUTTER = 20
 
 local tokenMetadata = {}
 local pendingItemLoads = {}
@@ -1339,7 +1341,7 @@ function Wishlist.Refresh()
     local viewportWidth = scroll:GetWidth()
     local width = child:GetWidth()
     if viewportWidth and viewportWidth > 60 then
-        width = viewportWidth - 28
+        width = viewportWidth
         if math.abs(child:GetWidth() - width) > 1 then
             child:SetWidth(width)
         end
@@ -1385,39 +1387,32 @@ function Wishlist.CreateUI()
     BG.WishlistMainFrame = frame
     frame:Hide()
 
-    local headerSurface = frame:CreateTexture(nil, "BACKGROUND")
-    headerSurface:SetTexture("Interface/Buttons/WHITE8x8")
     local navigationHeight = BG.MainNavigationHeight or 0
     local headerTop = -56 - navigationHeight
+    local pageHeaderHeight = Design.Token("size", "pageHeader")
+    local pageHeaderEdgeInset = Design.Token("spacing", "hairline")
+    local headerSurface = Design.CreatePageHeader(frame, {
+        title = L["个人心愿单"],
+        subtitle = L["按职业套装与首领掉落建立心愿；实际掉落会提醒，拍卖时保持展开。"],
+        contentRightInset = 180,
+    })
     headerSurface:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 0, headerTop)
-    headerSurface:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", 0, headerTop)
-    headerSurface:SetHeight(66)
-    headerSurface:SetVertexColor(unpack(COLOR.header))
+    headerSurface:SetPoint(
+        "TOPRIGHT",
+        BG.MainFrame,
+        "TOPRIGHT",
+        -pageHeaderEdgeInset,
+        headerTop
+    )
     frame.headerSurface = headerSurface
-
-    local accent = frame:CreateTexture(nil, "ARTWORK")
-    accent:SetTexture("Interface/Buttons/WHITE8x8")
-    accent:SetPoint("TOPLEFT", headerSurface, "TOPLEFT", 0, 0)
-    accent:SetPoint("BOTTOMLEFT", headerSurface, "BOTTOMLEFT", 0, 0)
-    accent:SetWidth(2)
-    accent:SetVertexColor(unpack(COLOR.focus))
-    frame.headerAccent = accent
-
-    local title = frame:CreateFontString(nil, "OVERLAY")
-    title:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 18, headerTop - 13)
-    Design.Style(title, "text", { role = "title" })
-    title:SetText(L["个人心愿单"])
-    frame.pageTitle = title
-
-    local description = frame:CreateFontString(nil, "OVERLAY")
-    description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
-    Design.Style(description, "text", { role = "caption" })
-    description:SetText(L["按职业套装与首领掉落建立心愿；实际掉落会提醒，拍卖时保持展开。"])
+    frame.headerAccent = headerSurface.accent
+    frame.pageTitle = headerSurface.title
+    frame.pageDescription = headerSurface.subtitle
 
     if BG.SpecGearFilter and BG.SpecGearFilter.CreateControls then
         local filterControls = BG.SpecGearFilter.CreateControls(frame)
         if filterControls then
-            filterControls:SetPoint("TOPRIGHT", BG.MainFrame, "TOPRIGHT", -16, headerTop - 20)
+            filterControls:SetPoint("RIGHT", headerSurface, "RIGHT", -16, 0)
             local filterLabel = filterControls.label
             if filterLabel and type(filterLabel) ~= "function" then
                 Design.Style(filterLabel, "text", { role = "label" })
@@ -1458,14 +1453,29 @@ function Wishlist.CreateUI()
     end)
 
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 28, headerTop - 78)
-    scroll:SetPoint("BOTTOMRIGHT", BG.MainFrame, "BOTTOMRIGHT", -38, 54)
+    scroll:SetPoint(
+        "TOPLEFT",
+        BG.MainFrame,
+        "TOPLEFT",
+        PAGE_CONTENT_GUTTER,
+        headerTop - pageHeaderHeight - 12
+    )
+    scroll:SetPoint(
+        "BOTTOMRIGHT",
+        BG.MainFrame,
+        "BOTTOMRIGHT",
+        -(PAGE_CONTENT_GUTTER + OUTER_SCROLLBAR_GUTTER),
+        54
+    )
     scroll.ScrollBar.scrollStep = BG.scrollStep
     BG.CreateSrollBarBackdrop(scroll.ScrollBar)
     frame.scroll = scroll
 
     local child = CreateFrame("Frame", nil, scroll)
-    child:SetWidth(math.max(1, BG.MainFrame:GetWidth() - 86))
+    child:SetWidth(math.max(
+        1,
+        BG.MainFrame:GetWidth() - PAGE_CONTENT_GUTTER * 2 - OUTER_SCROLLBAR_GUTTER
+    ))
     child:SetHeight(1)
     scroll:SetScrollChild(child)
     frame.child = child
@@ -1560,7 +1570,7 @@ function Wishlist.CreateUI()
     end)
 
     scroll:SetScript("OnSizeChanged", function(self, width, height)
-        local newWidth = math.max(1, width - 28)
+        local newWidth = math.max(1, width)
         local widthChanged = math.abs(child:GetWidth() - newWidth) > 1
         local lastHeight = viewportHeight
         local heightChanged = not lastHeight or math.abs(lastHeight - height) > 1

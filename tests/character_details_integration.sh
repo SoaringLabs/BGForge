@@ -10,11 +10,11 @@ rg -Fq 'function M.Show(parent, realmID, characterName, onBack)' "$module"
 rg -Fq 'function M.Refresh()' "$module"
 rg -Fq 'function M.Hide(suppressBack)' "$module"
 rg -Fq 'BG.CharacterDetails.Show(parent, GetCurrentRealmID(), character.name' "$overview"
-rg -Fq 'detailsHint:SetText(L["提示：点击角色名称可查看装备、背包、专业与资源"])' "$overview"
-rg -Fq 'detailsHint:SetPoint("LEFT", title, "RIGHT", 18, 0)' "$overview"
-rg -Fq 'detailsHint:SetPoint("RIGHT", resetText, "LEFT", -12, 0)' "$overview"
-rg -Fq 'chrome.detailsHint:Show()' "$overview"
-rg -Fq 'chrome.detailsHint:Hide()' "$overview"
+rg -Fq 'local pageHeader = BG.UI.CreatePageHeader(hoverFrame, {' "$overview"
+rg -Fq 'subtitle = L["点击角色名称可查看装备、背包、专业、资源与进度"]' "$overview"
+rg -Fq 'chrome.topBar:Hide()' "$overview"
+rg -Fq 'chrome.pageHeader:Show()' "$overview"
+rg -Fq 'chrome.refresh:SetPoint("RIGHT", chrome.pageHeader, "RIGHT", -16, 0)' "$overview"
 rg -Fq 'ScheduleEquipmentRefresh(0.2)' "$overview"
 rg -Fq 'for slotID = 1, 19 do' "$overview"
 rg -Fq 'schemaVersion = CHARACTER_DETAILS_VERSION' "$overview"
@@ -41,11 +41,50 @@ rg -Fq 'local PAPER_DOLL_SLOT_TOP = 64' "$module"
 rg -Fq 'local function EnsureBackpackView()' "$module"
 rg -Fq 'local function RenderBackpack(character)' "$module"
 rg -Fq 'SetActiveView("backpack")' "$module"
-rg -Fq 'local enabled = index <= 3' "$module"
+rg -Fq 'local enabled = true' "$module"
 rg -Fq 'SetActiveView("professionResources")' "$module"
 rg -Fq 'local function EnsureProfessionResourcesView()' "$module"
 rg -Fq 'local function RenderProfessionResources(character)' "$module"
-rg -Fq 'BG.GetRaidLockoutProfessionTracks(character)' "$module"
+rg -Fq 'SetActiveView("progress")' "$module"
+rg -Fq 'local function EnsureProgressView()' "$module"
+rg -Fq 'local function RenderProgress(character)' "$module"
+rg -Fq 'BG.GetRaidLockoutProgressModel(character, now)' "$module"
+rg -Fq 'function BG.GetRaidLockoutProgressModel(character, now)' "$overview"
+rg -Fq 'L["本周进度"]' "$module"
+rg -Fq 'L["副本 %d/%d · 周常 %d/%d"]' "$module"
+rg -Fq 'L["统一重置 %s"]' "$module"
+rg -Fq 'L["首领进度"]' "$module"
+rg -Fq 'local function CreateProgressRaidRow(parent)' "$module"
+rg -Fq 'local function SetProgressBossPanel(panel, entry, lockout, bosses)' "$module"
+rg -Fq 'Interface\\Buttons\\UI-PlusButton-Up' "$module"
+rg -Fq 'Interface\\Buttons\\UI-MinusButton-Up' "$module"
+rg -Fq 'selectedProgressRaidID' "$module"
+rg -Fq 'row.status = CreateText(row, "label")' "$module"
+rg -Fq 'row.canExpand = true' "$module"
+rg -Fq 'local PROGRESS_STATUS_TEXTURE = "Interface\\COMMON\\Indicator-Yellow"' "$module"
+rg -Fq 'row.statusIcon:SetDesaturated(true)' "$module"
+rg -Fq 'row.statusIcon:SetAlpha(0.5)' "$module"
+rg -Fq 'row.status:SetText(L["未开始"])' "$module"
+rg -Fq 'if selectedProgressRaidID == self.raidID then' "$module"
+rg -Fq 'selectedProgressRaidID = self.raidID' "$module"
+if rg -Fq 'selectedProgressRaidID == self.raidID and nil or self.raidID' "$module"; then
+    echo "Progress accordion must use an explicit branch so a selected raid can collapse" >&2
+    exit 1
+fi
+rg -Fq 'bossPanel.empty = CreateText(bossPanel, "body", L["暂无首领数据"])' "$module"
+rg -Fq 'selectedProgressRaidID = nil' "$module"
+rg -Fq 'local wasProgress = activeView == "progress"' "$module"
+rg -Fq 'if activeView == "progress" and not wasProgress then' "$module"
+rg -Fq 'bosses = GetRaidBossRoster(raid)' "$overview"
+rg -Fq 'EJ_GetEncounterInfoByIndex' "$overview"
+if rg -q 'difficultyName|progressDaily|progressProfession|ShowProgressRaidTooltip' "$module"; then
+    echo "Progress view must not expose difficulty, daily, or profession cooldown UI" >&2
+    exit 1
+fi
+if [[ "$(rg -Fc 'L["统一重置 %s"]' "$module")" -ne 1 ]]; then
+    echo "Progress view must render the shared reset exactly once" >&2
+    exit 1
+fi
 rg -Fq 'function BG.GetRaidLockoutProfessionTracks(character, now)' "$overview"
 rg -Fq 'character.titanEmbersEarnedThisWeek' "$overview"
 rg -Fq 'character.titanEmbersWeeklyMax' "$overview"
@@ -115,6 +154,7 @@ rg -Fq 'SetTextColor(row.itemLevel, "forgeGold")' "$module"
 
 for locale in Locales/zhCN.lua Locales/zhTW.lua Locales/enUS.lua; do
     rg -Fq 'L["提示：点击角色名称可查看装备、背包、专业与资源"]' "$locale"
+    rg -Fq 'L["提示：点击角色名称可查看装备、背包、专业与资源、进度"]' "$locale"
     rg -Fq 'L["专业与资源"]' "$locale"
     rg -Fq 'L["资源总览"]' "$locale"
     rg -Fq 'L["打开%s窗口刷新"]' "$locale"
@@ -122,6 +162,12 @@ for locale in Locales/zhCN.lua Locales/zhTW.lua Locales/enUS.lua; do
     rg -Fq 'L["烹饪日常"]' "$locale"
     rg -Fq 'L["钓鱼日常"]' "$locale"
     rg -Fq 'L["传说级升级材料"]' "$locale"
+    rg -Fq 'L["本周进度"]' "$locale"
+    rg -Fq 'L["首领进度"]' "$locale"
+    rg -Fq 'L["暂无首领数据"]' "$locale"
+    rg -Fq 'L["未开始"]' "$locale"
+    rg -Fq 'L["副本 %d/%d · 周常 %d/%d"]' "$locale"
+    rg -Fq 'L["统一重置 %s"]' "$locale"
 done
 
 if rg -q 'frame\.classIcon|SetClassIcon\(' "$module"; then

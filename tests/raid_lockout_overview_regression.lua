@@ -60,6 +60,8 @@ local function ResetEnvironment()
     GetTradeSkillLine = nil
     GetTradeSkillRecipeLink = nil
     GetTradeSkillCooldown = nil
+    EJ_GetInstanceForMap = nil
+    EJ_GetEncounterInfoByIndex = nil
     InCombatLockdown = nil
     GetInventoryItemLink = function()
         return nil
@@ -954,6 +956,125 @@ local function TestAlchemyTransmutesCollapseIntoOneSharedCooldown()
         "shared transmute cooldown did not keep the longest active category cooldown")
 end
 
+local function TestCharacterProgressModelOnlyIncludesRaidsAndWeeklies()
+    local BG = ResetEnvironment()
+    BG.Boss = {
+        SWtitan = {},
+        TOCtitan = {},
+        NAXXtitan = {},
+        SSCtitan = {},
+        MCtitan = {},
+    }
+    local sourceCounts = {
+        SWtitan = 13,
+        TOCtitan = 15,
+        NAXXtitan = 17,
+        SSCtitan = 10,
+        MCtitan = 10,
+    }
+    for sourceName, count in pairs(sourceCounts) do
+        for index = 1, count do
+            BG.Boss[sourceName]["boss" .. index] = {
+                name2 = sourceName .. " source " .. index,
+            }
+        end
+    end
+    EJ_GetInstanceForMap = function(mapID)
+        return mapID == 624 and 999 or nil
+    end
+    EJ_GetEncounterInfoByIndex = function(index, journalInstanceID)
+        if journalInstanceID ~= 999 then
+            return nil
+        end
+        return ({ "Archavon", "Emalon" })[index]
+    end
+    local character = {
+        lastRecordedAt = 1699999900,
+        professions = {
+            { skillLineID = 755, rank = 450, maxRank = 450 },
+        },
+        instances = {
+            [580] = {
+                {
+                    difficultyName = "25 Player",
+                    killedCount = 4,
+                    numEncounters = 6,
+                    resetAt = 1700604800,
+                    updatedAt = 1699999980,
+                    bosses = {
+                        { name = "Kalecgos", killed = true },
+                        { name = "Brutallus", killed = false },
+                    },
+                },
+            },
+            [649] = {
+                {
+                    difficultyName = "10 Player",
+                    killedCount = 5,
+                    numEncounters = 5,
+                    resetAt = 1700604800,
+                    bosses = {},
+                },
+                {
+                    difficultyName = "25 Player",
+                    killedCount = 0,
+                    numEncounters = 5,
+                    resetAt = 1700604800,
+                    bosses = {},
+                },
+            },
+        },
+        questCompletions = {
+            raidWeekly = { questID = 93975, resetAt = 1700604800, updatedAt = 1699999990 },
+            cookingDaily = { questID = 13114, resetAt = 1700086400, updatedAt = 1699999995 },
+        },
+        professionCooldowns = {
+            jewelcraftingBrilliantGlass = {
+                spellID = 47280,
+                observedAt = 1699999997,
+            },
+            jewelcraftingIcyPrism = {
+                spellID = 62242,
+                endTime = 1700036000,
+                duration = 72000,
+                observedAt = 1699999997,
+            },
+        },
+        professionCooldownScans = { [755] = 1699999997 },
+        professionCooldownsUpdatedAt = 1699999997,
+    }
+
+    local model = BG.GetRaidLockoutProgressModel(character, 1700000000)
+    assert(#model.raids == 11 and model.raidCount == 2,
+        "progress model did not preserve all Titan raids in their configured order")
+    assert(model.raids[1].id == 580 and model.raids[2].id == 568
+        and model.raids[11].id == 624,
+        "progress model changed the authoritative Titan raid order")
+    assert(#model.raids[1].bosses == 6
+        and model.raids[1].bosses[1].name == "SWtitan source 8"
+        and model.raids[1].bosses[6].name == "SWtitan source 13",
+        "progress model did not expose the configured Titan boss range")
+    assert(#model.raids[11].bosses == 2
+        and model.raids[11].bosses[1].name == "Archavon"
+        and model.raids[11].bosses[2].name == "Emalon",
+        "progress model did not fall back to the client encounter journal")
+    for _, raid in ipairs(model.raids) do
+        assert(#raid.bosses > 0,
+            "every Titan raid must expose a boss roster for the expandable progress row")
+    end
+    assert(model.raids[1].lockouts[1].bosses[1].name == "Kalecgos"
+        and model.raids[1].lockouts[1].bosses[2].name == "Brutallus",
+        "progress model did not preserve encounter order")
+    assert(#model.weeklies == 2 and model.weeklyCompleted == 1 and model.weeklyTotal == 2,
+        "progress model did not summarize weekly quest cooldowns")
+    assert(model.dailies == nil and model.professionTracks == nil and model.dailyResetAt == nil,
+        "progress model leaked profession or daily cooldown data into the raid page")
+    assert(model.resetAt == 1700604800,
+        "progress model did not expose the shared weekly reset")
+    assert(model.updatedAt == 1699999990,
+        "progress model counted unrelated daily or profession cooldown snapshots")
+end
+
 local function TestOpenTradeSkillCooldownIsCapturedByRecipeIndex()
     local _, events = ResetEnvironment()
     GetNumTradeSkills = function()
@@ -1610,6 +1731,7 @@ local tests = {
     backpack_atomic = TestBackpackSnapshotCommitsAtomicallyAfterItemDataLoads,
     backpack_debounce = TestBackpackRefreshEventsAreDebounced,
     profession_cooldowns = TestTitanProfessionCooldownSnapshotsAndSummary,
+    progress_model = TestCharacterProgressModelOnlyIncludesRaidsAndWeeklies,
     transmute_group = TestAlchemyTransmutesCollapseIntoOneSharedCooldown,
     trade_skill_cooldown = TestOpenTradeSkillCooldownIsCapturedByRecipeIndex,
     trade_skill_isolation = TestTradeSkillScanPreservesOtherProfessionCooldowns,
@@ -1647,6 +1769,7 @@ else
         "backpack_atomic",
         "backpack_debounce",
         "profession_cooldowns",
+        "progress_model",
         "transmute_group",
         "trade_skill_cooldown",
         "trade_skill_isolation",
