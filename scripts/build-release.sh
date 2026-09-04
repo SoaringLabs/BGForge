@@ -27,7 +27,7 @@ if ! git rev-parse --verify --quiet "refs/tags/${release_tag}^{commit}" >/dev/nu
 fi
 
 version=${release_tag#v}
-toc_version=$(git show "${release_tag}:BGForge.toc" | awk '$1 == "##" && $2 == "Version:" { print $3; exit }')
+toc_version=$(git show "${release_tag}:BGForge.toc" | awk '$1 == "##" && $2 == "Version:" { sub(/\r$/, "", $3); print $3; exit }')
 
 if [[ $toc_version != "$version" ]]; then
     printf 'error: BGForge.toc says %s, but the tag is %s\n' "$toc_version" "$release_tag" >&2
