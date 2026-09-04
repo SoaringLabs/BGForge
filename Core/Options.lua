@@ -1710,47 +1710,6 @@ BG.Init(function()
             h = h + 45
         end
 
-        -- 进本自动清空表格
-        do
-            local name = "autoQingKong"
-            BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
-            local ontext = {
-                L["进本自动清空表格"],
-                L["当你进入一个新CD团本时，表格会自动清空。"],
-                -- " ",
-                -- L[""],
-            }
-            local f = O.CreateCheckButton(name, L["进本自动清空表格"], biaoge, 15, height - h, ontext)
-            BG.options["button" .. name] = f
-            f:HookScript("OnClick", function()
-                local historyOption = BG.options.buttonautoQingKongSaveHistory
-                if historyOption then
-                    historyOption:SetShown(f:GetChecked())
-                end
-            end)
-            -- 删除旧设置
-            if BiaoGe.options["showQingKong"] then
-                BiaoGe.options["showQingKong"] = nil
-            end
-        end
-        h = h + 30
-        -- 新 CD 自动清空前保存历史（默认开启）
-        if BG.IsTitan and BG.HistoryFeatureEnabled then
-            local name = "autoQingKongSaveHistory"
-            BG.options[name .. "reset"] = 1
-            if BiaoGe.options[name] == nil then
-                BiaoGe.options[name] = BG.options[name .. "reset"]
-            end
-            local ontext = {
-                L["自动清空表格时保存表格"],
-                L["新CD触发自动清空时，先把当前表格保存至本地历史表格；保存失败则不会清空。"],
-            }
-            local f = O.CreateCheckButton(name, L["自动清空表格时保存表格"], biaoge, 40, height - h, ontext)
-            BG.options["button" .. name] = f
-            f:SetShown(BiaoGe.options.autoQingKong == 1)
-            h = h + 30
-        end
         -- 清空表格时保留支出补贴名称
         do
             local name = "retainExpenses"

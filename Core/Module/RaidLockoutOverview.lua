@@ -186,6 +186,7 @@ end
 local RAID_OPTION_PREFIX = "raidLockoutShow_"
 local QUEST_GROUP_OPTION_PREFIX = "raidLockoutShowGroup_"
 local DATA_VERSION = 1
+local CHARACTER_DETAILS_VERSION = 1
 local DATA_KEY = "BGForgeRaidLockouts"
 local RAID_MIN_LEVEL = 80
 local TITAN_EMBER_CURRENCY_ID = 3403
@@ -866,6 +867,7 @@ local hoverFloatingFrameLevel
 local hoverHideSerial = 0
 local updateOverviewFrame
 local updateHoverFrame
+local ShowEmbeddedOverview
 
 local function GetCurrentRealmID()
     return GetRealmID()
@@ -873,6 +875,25 @@ end
 
 local function GetCurrentCharacterName()
     return UnitName("player") or BG.playerName or UNKNOWN
+end
+
+local function OpenEmbeddedCharacterDetails(character)
+    if not hoverEmbedded or not character
+        or not BG.CharacterDetails or not BG.CharacterDetails.Show
+    then
+        return
+    end
+    local parent = hoverFrame and hoverFrame:GetParent()
+    if not parent then
+        return
+    end
+
+    hoverFrame:Hide()
+    BG.CharacterDetails.Show(parent, GetCurrentRealmID(), character.name, function()
+        if parent:IsShown() then
+            ShowEmbeddedOverview(parent)
+        end
+    end)
 end
 
 local function GetCharacterKey(realmID, characterName)
@@ -975,6 +996,7 @@ local function ClearExpiredRaidData()
                     character.specIndex = tonumber(character.specIndex)
                     character.level = tonumber(character.level)
                     character.itemLevel = tonumber(character.itemLevel)
+                    character.raceID = tonumber(character.raceID)
                     character.order = tonumber(character.order)
                     character.lastRecordedAt = tonumber(character.lastRecordedAt)
                     character.isHidden = character.isHidden and true or nil
@@ -1030,6 +1052,81 @@ local function ClearExpiredRaidData()
                         end
                     end
                     character.professionCooldownScans = normalizedCooldownScans
+                    if type(character.details) == "table"
+                        and character.details.schemaVersion == CHARACTER_DETAILS_VERSION
+                    then
+                        local equipment = type(character.details.equipment) == "table"
+                            and character.details.equipment or {}
+                        local slots = type(equipment.slots) == "table" and equipment.slots or {}
+                        for slotID, item in pairs(
+                            slots
+                        ) do
+                            local numericSlotID = tonumber(slotID)
+                            if numericSlotID and numericSlotID >= 1 and numericSlotID <= 19
+                                and type(item) == "table" and type(item.link) == "string"
+                            then
+                                if numericSlotID ~= slotID then
+                                    slots[numericSlotID] = item
+                                    slots[slotID] = nil
+                                end
+                                item.itemLevel = tonumber(item.itemLevel)
+                                for key in pairs(item) do
+                                    if key ~= "link" and key ~= "itemLevel" then
+                                        item[key] = nil
+                                    end
+                                end
+                            else
+                                slots[slotID] = nil
+                            end
+                        end
+                        equipment.updatedAt = tonumber(equipment.updatedAt)
+                        equipment.slots = slots
+                        for key in pairs(equipment) do
+                            if key ~= "updatedAt" and key ~= "slots" then
+                                equipment[key] = nil
+                            end
+                        end
+                        character.details.equipment = equipment
+
+                        local backpack = type(character.details.backpack) == "table"
+                            and character.details.backpack or nil
+                        if backpack then
+                            local normalizedItems = {}
+                            for _, item in ipairs(type(backpack.items) == "table" and backpack.items or {}) do
+                                local count = type(item) == "table" and tonumber(item.count)
+                                if type(item) == "table" and type(item.link) == "string"
+                                    and count and count > 0
+                                then
+                                    normalizedItems[#normalizedItems + 1] = {
+                                        link = item.link,
+                                        count = count,
+                                        itemLevel = tonumber(item.itemLevel),
+                                    }
+                                end
+                            end
+                            backpack.updatedAt = tonumber(backpack.updatedAt)
+                            backpack.totalSlots = tonumber(backpack.totalSlots) or 0
+                            backpack.usedSlots = tonumber(backpack.usedSlots) or 0
+                            backpack.items = normalizedItems
+                            for key in pairs(backpack) do
+                                if key ~= "updatedAt" and key ~= "totalSlots"
+                                    and key ~= "usedSlots" and key ~= "items"
+                                then
+                                    backpack[key] = nil
+                                end
+                            end
+                            character.details.backpack = backpack
+                        else
+                            character.details.backpack = nil
+                        end
+                        for key in pairs(character.details) do
+                            if key ~= "schemaVersion" and key ~= "equipment" and key ~= "backpack" then
+                                character.details[key] = nil
+                            end
+                        end
+                    else
+                        character.details = nil
+                    end
                     for cooldownID, snapshot in pairs(character.professionCooldowns) do
                         local previousEndTime = type(snapshot) == "table" and tonumber(snapshot.endTime)
                         local normalized = NormalizeProfessionCooldownSnapshot(
@@ -1150,6 +1247,7 @@ end
 local function RefreshCurrentCharacterIdentity()
     currentCharacter.name = GetCurrentCharacterName()
     currentCharacter.classFile = select(2, UnitClass("player"))
+    currentCharacter.raceID = UnitRace and select(3, UnitRace("player")) or nil
     local level = UnitLevel("player")
     if level and level > 0 then
         currentCharacter.level = level
@@ -1183,6 +1281,7 @@ local function GetOrCreateCurrentCharacterStore()
 
     stored.name = characterName
     stored.classFile = currentCharacter.classFile
+    stored.raceID = currentCharacter.raceID or stored.raceID
     stored.specIndex = currentCharacter.specIndex
     stored.level = currentCharacter.level or stored.level
     stored.itemLevel = currentCharacter.itemLevel
@@ -1398,6 +1497,188 @@ local function CaptureCurrentResources()
     end
 end
 
+local pendingEquipmentItemIDs = {}
+
+local function GetOrCreateCharacterDetails(stored)
+    if type(stored.details) ~= "table"
+        or stored.details.schemaVersion ~= CHARACTER_DETAILS_VERSION
+    then
+        stored.details = {
+            schemaVersion = CHARACTER_DETAILS_VERSION,
+        }
+    end
+    return stored.details
+end
+
+local function CaptureCurrentEquipment()
+    local stored = GetOrCreateCurrentCharacterStore()
+    if not stored then
+        return false
+    end
+
+    local slots = {}
+    local capturedCount = 0
+    local waitingForItemData = false
+    pendingEquipmentItemIDs = {}
+    for slotID = 1, 19 do
+        local itemID = GetInventoryItemID and GetInventoryItemID("player", slotID)
+        if itemID then
+            local link = GetInventoryItemLink and GetInventoryItemLink("player", slotID)
+            local itemLevel = link and GetActualItemLevel(link)
+            if link and itemLevel then
+                slots[slotID] = {
+                    link = link,
+                    itemLevel = itemLevel,
+                }
+                capturedCount = capturedCount + 1
+            else
+                waitingForItemData = true
+                pendingEquipmentItemIDs[itemID] = true
+                RequestItemData(itemID)
+            end
+        end
+    end
+
+    -- 装备快照必须完整提交。登录早期物品资料未就绪时保留旧快照，
+    -- 避免界面在“半套装备”和完整数据之间来回闪烁。
+    if waitingForItemData then
+        return false
+    end
+
+    local previousSlots = stored.details and stored.details.equipment
+        and stored.details.equipment.slots
+    if capturedCount == 0 and type(previousSlots) == "table" and next(previousSlots) then
+        return false
+    end
+
+    local details = GetOrCreateCharacterDetails(stored)
+    details.equipment = {
+        updatedAt = GetServerTime(),
+        slots = slots,
+    }
+    stored.trinkets = CaptureEquippedTrinkets()
+    pendingEquipmentItemIDs = {}
+    if BG.CharacterDetails and BG.CharacterDetails.Refresh then
+        BG.CharacterDetails.Refresh()
+    end
+    if updateHoverFrame then
+        updateHoverFrame()
+    end
+    return true
+end
+
+local pendingBackpackItemIDs = {}
+
+local function CaptureCurrentBackpack()
+    if not C_Container or not C_Container.GetContainerNumSlots
+        or not C_Container.GetContainerItemInfo
+    then
+        return false
+    end
+
+    local stored = GetOrCreateCurrentCharacterStore()
+    if not stored then
+        return false
+    end
+
+    local items = {}
+    local itemByLink = {}
+    local totalSlots = 0
+    local usedSlots = 0
+    local waitingForItemData = false
+    pendingBackpackItemIDs = {}
+    for bagID = 0, (NUM_BAG_SLOTS or 4) do
+        local bagSlots = tonumber(C_Container.GetContainerNumSlots(bagID)) or 0
+        totalSlots = totalSlots + bagSlots
+        for slotID = 1, bagSlots do
+            local info = C_Container.GetContainerItemInfo(bagID, slotID)
+            if info and info.itemID then
+                usedSlots = usedSlots + 1
+                local link = info.hyperlink
+                if not link and C_Container.GetContainerItemLink then
+                    link = C_Container.GetContainerItemLink(bagID, slotID)
+                end
+                if link then
+                    local item = itemByLink[link]
+                    local itemLevel
+                    local resolvedItemID, _, _, equipLoc = GetItemInfoInstant(link)
+                    if equipLoc == nil then
+                        waitingForItemData = true
+                        pendingBackpackItemIDs[info.itemID] = true
+                        RequestItemData(resolvedItemID or info.itemID)
+                    elseif equipLoc ~= "" then
+                        itemLevel = GetActualItemLevel(link)
+                        if not itemLevel then
+                            waitingForItemData = true
+                            pendingBackpackItemIDs[info.itemID] = true
+                            RequestItemData(resolvedItemID or info.itemID)
+                        end
+                    end
+                    if not item then
+                        item = {
+                            link = link,
+                            count = 0,
+                            itemLevel = itemLevel,
+                        }
+                        itemByLink[link] = item
+                        items[#items + 1] = item
+                    end
+                    item.count = item.count + (tonumber(info.stackCount) or 1)
+                else
+                    waitingForItemData = true
+                    pendingBackpackItemIDs[info.itemID] = true
+                    RequestItemData(info.itemID)
+                end
+            end
+        end
+    end
+
+    -- 与装备快照相同，背包也只完整提交。登录初期链接或容器尚未就绪时，
+    -- 保留上一次快照，避免短暂显示为空包或缺少部分物品。
+    if waitingForItemData then
+        return false
+    end
+    local previousBackpack = stored.details and stored.details.backpack
+    if totalSlots == 0 and type(previousBackpack) == "table" then
+        return false
+    end
+
+    local details = GetOrCreateCharacterDetails(stored)
+    details.backpack = {
+        updatedAt = GetServerTime(),
+        totalSlots = totalSlots,
+        usedSlots = usedSlots,
+        items = items,
+    }
+    pendingBackpackItemIDs = {}
+    if BG.CharacterDetails and BG.CharacterDetails.Refresh then
+        BG.CharacterDetails.Refresh()
+    end
+    return true
+end
+
+local backpackRefreshSerial = 0
+local function ScheduleBackpackRefresh(delay)
+    backpackRefreshSerial = backpackRefreshSerial + 1
+    local serial = backpackRefreshSerial
+    BG.After(delay or 0.3, function()
+        if serial == backpackRefreshSerial then
+            CaptureCurrentBackpack()
+        end
+    end)
+end
+
+local equipmentRefreshSerial = 0
+local function ScheduleEquipmentRefresh(delay)
+    equipmentRefreshSerial = equipmentRefreshSerial + 1
+    local serial = equipmentRefreshSerial
+    BG.After(delay or 0.2, function()
+        if serial == equipmentRefreshSerial then
+            CaptureCurrentEquipment()
+        end
+    end)
+end
+
 local function CaptureCurrentBankLegendaries()
     if not BANK_CONTAINER then
         return
@@ -1484,6 +1765,7 @@ local function BuildCharacterRows(realmID)
                 local character = {
                     name = stored.name or name,
                     classFile = stored.classFile,
+                    raceID = tonumber(stored.raceID),
                     specIndex = stored.specIndex,
                     level = tonumber(stored.level),
                     itemLevel = stored.itemLevel,
@@ -1513,6 +1795,7 @@ local function BuildCharacterRows(realmID)
                     professionCooldownsUpdatedAt = tonumber(stored.professionCooldownsUpdatedAt),
                     professionCooldownScans = type(stored.professionCooldownScans) == "table"
                         and stored.professionCooldownScans or {},
+                    details = type(stored.details) == "table" and stored.details or nil,
                     ready = true,
                     isHidden = stored.isHidden and true or false,
                     isCurrent = realmID == currentRealmID and name == currentName,
@@ -2430,12 +2713,16 @@ local function CreateHoverFrame()
         overlay:SetColorTexture(unpack(COLOR.rowHoverWash))
         overlay:SetAlpha(0)
         overlays[#overlays + 1] = overlay
+        return overlay
     end
 
     local function SetRowHoverAlpha(controller, alpha)
         controller.hoverAlpha = alpha
         for _, overlay in ipairs(controller.hoverOverlays) do
-            overlay:SetAlpha(alpha)
+            overlay:SetAlpha(controller.identityOnly and 0 or alpha)
+        end
+        if controller.identityOnly and controller.identityOverlay then
+            controller.identityOverlay:SetAlpha(alpha)
         end
     end
 
@@ -2443,11 +2730,12 @@ local function CreateHoverFrame()
         SetRowHoverAlpha(controller, visible and not controller.isCurrent and 1 or 0)
     end
 
-    local function CreateRowHoverController(overlays)
+    local function CreateRowHoverController(overlays, identityOverlay)
         local controller = CreateFrame("Frame", nil, contentFrame)
         controller:SetFrameLevel(hoverFrame:GetFrameLevel() + 10)
         controller:EnableMouse(true)
         controller.hoverOverlays = overlays
+        controller.identityOverlay = identityOverlay
         controller.hoverAlpha = 0
         controller:SetScript("OnEnter", function(self)
             hoverHideSerial = hoverHideSerial + 1
@@ -2455,6 +2743,11 @@ local function CreateHoverFrame()
         end)
         controller:SetScript("OnLeave", function(self)
             SetRowHoverVisible(self, false)
+        end)
+        controller:SetScript("OnMouseUp", function(self, button)
+            if button == "LeftButton" and hoverEmbedded then
+                OpenEmbeddedCharacterDetails(self.character)
+            end
         end)
         return controller
     end
@@ -2660,6 +2953,16 @@ local function CreateHoverFrame()
     resetText:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
     resetText:SetTextColor(unpack(COLOR.textSecondary))
 
+    local detailsHint = topBar:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    detailsHint:SetPoint("LEFT", title, "RIGHT", 18, 0)
+    detailsHint:SetPoint("RIGHT", resetText, "LEFT", -12, 0)
+    detailsHint:SetJustifyH("LEFT")
+    detailsHint:SetWordWrap(false)
+    detailsHint:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
+    detailsHint:SetText(L["提示：点击角色名称可查看装备和背包"])
+    detailsHint:SetTextColor(unpack(COLOR.focusText))
+    detailsHint:Hide()
+
     hoverFrame.chrome = {
         innerBorder = innerBorder,
         logo = logo,
@@ -2669,6 +2972,7 @@ local function CreateHoverFrame()
         close = close,
         settings = settings,
         refresh = refresh,
+        detailsHint = detailsHint,
     }
 
     local raidTitleCell = CreateTableCell(contentFrame, COLOR.headerStrong, { left = true })
@@ -2791,14 +3095,19 @@ local function CreateHoverFrame()
         row.raidName = CreateCellText(row.raidNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
         row.raidName:ClearAllPoints()
         row.raidName:SetPoint("LEFT", 11, 0)
-        row.raidName:SetPoint("RIGHT", -7, 0)
+        row.raidName:SetPoint("RIGHT", -20, 0)
         row.raidCurrentAccent = row.raidNameCell:CreateTexture(nil, "ARTWORK")
         row.raidCurrentAccent:SetPoint("TOPLEFT", 1, -1)
         row.raidCurrentAccent:SetPoint("BOTTOMLEFT", 1, 1)
         row.raidCurrentAccent:SetWidth(2)
         row.raidCurrentAccent:SetColorTexture(unpack(COLOR.focus))
         row.raidCurrentAccent:Hide()
-        CreateRowHoverOverlay(row.raidNameCell, row.raidHoverOverlays)
+        row.raidNameHover = CreateRowHoverOverlay(row.raidNameCell, row.raidHoverOverlays)
+        row.raidChevron = row.raidNameCell:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        row.raidChevron:SetPoint("RIGHT", -7, 0)
+        row.raidChevron:SetText("›")
+        row.raidChevron:SetTextColor(unpack(COLOR.focusText))
+        row.raidChevron:Hide()
 
         for _, column in ipairs(LOCKOUT_COLUMNS) do
             local cell = CreateStatusDisplay(contentFrame, column.compactWidth, ui.rowHeight, 15, 11, true)
@@ -2829,14 +3138,19 @@ local function CreateHoverFrame()
         row.resourceName = CreateCellText(row.resourceNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
         row.resourceName:ClearAllPoints()
         row.resourceName:SetPoint("LEFT", 11, 0)
-        row.resourceName:SetPoint("RIGHT", -7, 0)
+        row.resourceName:SetPoint("RIGHT", -20, 0)
         row.resourceCurrentAccent = row.resourceNameCell:CreateTexture(nil, "ARTWORK")
         row.resourceCurrentAccent:SetPoint("TOPLEFT", 1, -1)
         row.resourceCurrentAccent:SetPoint("BOTTOMLEFT", 1, 1)
         row.resourceCurrentAccent:SetWidth(2)
         row.resourceCurrentAccent:SetColorTexture(unpack(COLOR.focus))
         row.resourceCurrentAccent:Hide()
-        CreateRowHoverOverlay(row.resourceNameCell, row.resourceHoverOverlays)
+        row.resourceNameHover = CreateRowHoverOverlay(row.resourceNameCell, row.resourceHoverOverlays)
+        row.resourceChevron = row.resourceNameCell:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        row.resourceChevron:SetPoint("RIGHT", -7, 0)
+        row.resourceChevron:SetText("›")
+        row.resourceChevron:SetTextColor(unpack(COLOR.focusText))
+        row.resourceChevron:Hide()
 
         row.professionCell = CreateTableCell(contentFrame)
         row.professionCell:SetSize(ui.professionWidth, ui.rowHeight)
@@ -2878,8 +3192,8 @@ local function CreateHoverFrame()
         row.shard = CreateResourceNumberText(row.shardCell)
         CreateRowHoverOverlay(row.shardCell, row.resourceHoverOverlays)
 
-        row.raidHover = CreateRowHoverController(row.raidHoverOverlays)
-        row.resourceHover = CreateRowHoverController(row.resourceHoverOverlays)
+        row.raidHover = CreateRowHoverController(row.raidHoverOverlays, row.raidNameHover)
+        row.resourceHover = CreateRowHoverController(row.resourceHoverOverlays, row.resourceNameHover)
 
         rows[rowIndex] = row
         return row
@@ -3191,8 +3505,14 @@ local function CreateHoverFrame()
             end
             row.raidHover:ClearAllPoints()
             row.raidHover:SetPoint("TOPLEFT", ui.padding, -rowY)
-            row.raidHover:SetSize(ui.nameWidth + lockoutsWidth, ui.rowHeight)
+            row.raidHover:SetSize(
+                hoverEmbedded and ui.nameWidth or (ui.nameWidth + lockoutsWidth),
+                ui.rowHeight
+            )
             row.raidHover.isCurrent = character.isCurrent
+            row.raidHover.identityOnly = hoverEmbedded
+            row.raidHover.character = character
+            row.raidChevron:SetShown(hoverEmbedded)
             row.raidHover:Show()
         end
 
@@ -3309,8 +3629,11 @@ local function CreateHoverFrame()
 
             row.resourceHover:ClearAllPoints()
             row.resourceHover:SetPoint("TOPLEFT", ui.padding, -resourceRowY)
-            row.resourceHover:SetSize(resourceWidth, ui.rowHeight)
+            row.resourceHover:SetSize(hoverEmbedded and ui.nameWidth or resourceWidth, ui.rowHeight)
             row.resourceHover.isCurrent = character.isCurrent
+            row.resourceHover.identityOnly = hoverEmbedded
+            row.resourceHover.character = character
+            row.resourceChevron:SetShown(hoverEmbedded)
             row.resourceHover:Show()
 
             goldTotal = goldTotal + (gold or 0)
@@ -3454,6 +3777,7 @@ local function SetEmbeddedChrome(isEmbedded)
         chrome.titleDivider:Hide()
         chrome.close:Hide()
         chrome.settings:Hide()
+        chrome.detailsHint:Show()
         chrome.title:SetPoint("LEFT", 10, 0)
         chrome.refresh:SetPoint("TOPRIGHT", -SMALL_UI.padding - 6, -SMALL_UI.padding - 6)
     else
@@ -3463,6 +3787,7 @@ local function SetEmbeddedChrome(isEmbedded)
         chrome.titleDivider:Show()
         chrome.close:Show()
         chrome.settings:Show()
+        chrome.detailsHint:Hide()
         chrome.title:SetPoint("LEFT", chrome.titleDivider, "RIGHT", 9, 0)
         chrome.refresh:SetPoint("RIGHT", chrome.settings, "LEFT", -5, 0)
     end
@@ -3487,7 +3812,10 @@ local function RestoreFloatingHoverFrame()
     SetEmbeddedChrome(false)
 end
 
-local function ShowEmbeddedOverview(parent)
+ShowEmbeddedOverview = function(parent)
+    if BG.CharacterDetails and BG.CharacterDetails.Hide then
+        BG.CharacterDetails.Hide(true)
+    end
     CreateHoverFrame()
     hoverHideSerial = hoverHideSerial + 1
     hoverAnchor = nil
@@ -3589,8 +3917,14 @@ function BG.ShowRaidLockoutHover(anchor)
     end
 end
 
-function BG.HideRaidLockoutHover()
+function BG.HideRaidLockoutHover(immediate)
     if hoverFrame and not hoverEmbedded then
+        if immediate then
+            hoverHideSerial = hoverHideSerial + 1
+            hoverAnchor = nil
+            hoverFrame:Hide()
+            return
+        end
         ScheduleHoverHide()
     end
 end
@@ -3683,6 +4017,9 @@ local function CreateRaidLockoutMainFrame()
         ShowEmbeddedOverview(self)
     end)
     mainFrame:SetScript("OnHide", function()
+        if BG.CharacterDetails and BG.CharacterDetails.Hide then
+            BG.CharacterDetails.Hide(true)
+        end
         if hoverEmbedded then
             RestoreFloatingHoverFrame()
         end
@@ -3743,12 +4080,15 @@ end)
 
 BG.RegisterEvent({
     "CURRENCY_DISPLAY_UPDATE",
-    "PLAYER_EQUIPMENT_CHANGED",
     "PLAYER_LEVEL_UP",
     "PLAYER_MONEY",
     "SKILL_LINES_CHANGED",
 }, function()
     ScheduleResourceRefresh(0.2)
+end)
+
+BG.RegisterEvent("PLAYER_EQUIPMENT_CHANGED", function()
+    ScheduleEquipmentRefresh(0.2)
 end)
 
 BG.RegisterEvent({ "TRADE_SKILL_SHOW", "TRADE_SKILL_UPDATE" }, function()
@@ -3769,18 +4109,33 @@ end)
 
 BG.RegisterEvent("BAG_UPDATE_DELAYED", function()
     ScheduleResourceRefresh(0.2)
+    ScheduleBackpackRefresh(0.3)
 end)
 
 BG.RegisterEvent({ "BANKFRAME_OPENED", "PLAYERBANKSLOTS_CHANGED", "PLAYERBANKBAGSLOTS_CHANGED" }, function()
     ScheduleResourceRefresh(0.2)
 end)
 
-BG.RegisterEvent("GET_ITEM_INFO_RECEIVED", function(_, _, _, success)
+BG.RegisterEvent("GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
     if not success then
         return
     end
     ScheduleResourceRefresh(0.1)
+    if itemID and pendingEquipmentItemIDs[tonumber(itemID)] then
+        ScheduleEquipmentRefresh(0.1)
+    end
+    if itemID and pendingBackpackItemIDs[tonumber(itemID)] then
+        ScheduleBackpackRefresh(0.1)
+    end
 end)
+
+function BG.RefreshCurrentCharacterEquipment()
+    ScheduleEquipmentRefresh(0)
+end
+
+function BG.RefreshCurrentCharacterBackpack()
+    ScheduleBackpackRefresh(0)
+end
 
 BG.Init2(function()
     SlashCmdList["BGFORGERAIDLOCKOUT"] = BG.ToggleRaidLockoutOverview
@@ -3789,6 +4144,8 @@ BG.Init2(function()
 
     ClearExpiredRaidData()
     ScheduleResourceRefresh(0.5)
+    ScheduleEquipmentRefresh(0.7)
+    ScheduleBackpackRefresh(1.0)
     BG.After(3, CaptureCurrentQuestProgress)
     RequestCurrentRaidInfo()
 

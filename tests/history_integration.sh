@@ -7,10 +7,10 @@ module="Core/Module/History.lua"
 clear_module="Core/Module/ClearBiaoGe.lua"
 db="Core/DB/DB.lua"
 
-store_line="$(rg -n '^Core\\Module\\HistoryStore\.lua$' BGForge.toc | cut -d: -f1)"
-module_line="$(rg -n '^Core\\Module\\History\.lua$' BGForge.toc | cut -d: -f1)"
-main_line="$(rg -n '^Core\\BiaoGe\.lua$' BGForge.toc | cut -d: -f1)"
-db_line="$(rg -n '^Core\\DB\\DB\.xml$' BGForge.toc | cut -d: -f1)"
+store_line="$(rg -n $'^Core\\\\Module\\\\HistoryStore\\.lua\\r?$' BGForge.toc | cut -d: -f1)"
+module_line="$(rg -n $'^Core\\\\Module\\\\History\\.lua\\r?$' BGForge.toc | cut -d: -f1)"
+main_line="$(rg -n $'^Core\\\\BiaoGe\\.lua\\r?$' BGForge.toc | cut -d: -f1)"
+db_line="$(rg -n $'^Core\\\\DB\\\\DB\\.xml\\r?$' BGForge.toc | cut -d: -f1)"
 if [[ -z "$db_line" || -z "$store_line" || -z "$module_line" || -z "$main_line" ]] \
     || (( db_line >= store_line || store_line >= module_line || module_line >= main_line )); then
     echo "History store and UI must load in order before BiaoGe creates the main frames" >&2
@@ -22,11 +22,10 @@ rg -q 'if not BG\.HistoryFeatureEnabled then return end' "$store"
 rg -q 'if not BG\.HistoryFeatureEnabled then return end' "$module"
 rg -q 'if not BG\.HistoryFeatureEnabled then return end' Core/FBUI/HistoryUIfunction.lua
 rg -q 'if BG\.IsTitan and BG\.HistoryFeatureEnabled then' Core/BiaoGe.lua
-if [[ "$(rg -c 'if BG\.IsTitan and BG\.HistoryFeatureEnabled then' Core/Options.lua)" -ne 2 ]]; then
+if [[ "$(rg -c 'if BG\.IsTitan and BG\.HistoryFeatureEnabled then' Core/Options.lua)" -ne 1 ]]; then
     echo "History settings are not guarded by the soft-disable flag" >&2
     exit 1
 fi
-rg -q 'if BG\.HistoryFeatureEnabled and BiaoGe\.options\.autoQingKongSaveHistory == 1 then' "$clear_module"
 
 # The dormant implementation stays available for a future policy change.
 rg -q '<Script file="HistoryUIfunction.lua"/>' Core/FBUI/FBUI.xml
@@ -42,29 +41,19 @@ rg -q 'fingerprint = fingerprint' "$store"
 rg -q 'source = sourceName' "$store"
 rg -q 'FindLatestDuplicate' "$store"
 rg -q 'SnapshotsEqual' "$store"
-rg -q 'BiaoGe\.options\.autoQingKongSaveHistory = 1' "$store"
-rg -q 'local name = "autoQingKongSaveHistory"' Core/Options.lua
-rg -q -F 'saved, historyStatus = BG.SaveBiaoGe(FB, {' "$clear_module"
-rg -q 'source = "auto-clear"' "$clear_module"
-rg -q 'dedupe = true' "$clear_module"
-rg -q 'silent = true' "$clear_module"
-rg -q '历史表格保存失败，已取消自动清空，当前表格仍然保留' "$clear_module"
-rg -q 'type\(BG\.raidRosterInfo\) == "table"' "$clear_module"
-rg -q 'if currentCount == 0 then' "$clear_module"
-rg -q "本次不会自动清空" "$clear_module"
-rg -q 'type\(savedRosterInfo\.roster\) == "table"' "$clear_module"
+if rg -n 'autoQingKongSaveHistory' "$store" Core/Options.lua "$clear_module"; then
+    echo "Automatic clear is still coupled to the dormant history feature" >&2
+    exit 1
+fi
+if rg -n 'BG\.SaveBiaoGe|IsNotSameTeam|raidRosterInfo' "$clear_module"; then
+    echo "Automatic clear still saves history or inspects raid rosters" >&2
+    exit 1
+fi
 rg -q 'type\(current\.auctionLog\) == "table"' "$module"
 rg -q 'type\(current\.tradeTbl\) == "table"' "$module"
 rg -q '确定应用历史表格' "$module"
 rg -q 'entry\[4\] == "manual"' "$module"
 rg -q 'entry\[4\] == "auto-clear"' "$module"
-
-auto_save_line="$(rg -n -F 'saved, historyStatus = BG.SaveBiaoGe(FB, {' "$clear_module" | cut -d: -f1)"
-auto_clear_line="$(rg -n -F 'local num = BG.ClearBiaoGe("biaoge", FB)' "$clear_module" | cut -d: -f1)"
-if [[ -z "$auto_save_line" || -z "$auto_clear_line" ]] || (( auto_save_line >= auto_clear_line )); then
-    echo "New-lockout clearing must save history successfully before clearing the current ledger" >&2
-    exit 1
-fi
 
 if rg -n 'SendAddonMessage|SendCommMessage|SendChatMessage|RegisterAddonMessagePrefix|BG\.InsertLink|HistorySummary|GetHistoryMoney|SetHistoryMoney|BG\.ClearBiaoGe' \
     "$store" "$module" Core/FBUI/HistoryUIfunction.lua; then

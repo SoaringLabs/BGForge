@@ -27,7 +27,11 @@ files=(
     Core/UI/DesignSystem.lua
     Core/Module/HistoryStore.lua
     Core/Module/History.lua
+    Core/Module/ClearBiaoGe.lua
+    Core/Module/AuctionMSG.lua
+    Core/Module/AuctionLog.lua
     Core/Module/RaidLockoutOverview.lua
+    Core/Module/CharacterDetails.lua
     Core/Module/Wishlist.lua
     Core/Module/WishlistUI.lua
     Core/BiaoGe.lua
@@ -36,6 +40,7 @@ files=(
     Core/Module/AuctionWAEvent.lua
     Core/Module/Loot.lua
     Core/Module/Trade.lua
+    Core/Options.lua
 )
 
 for file in "${files[@]}"; do

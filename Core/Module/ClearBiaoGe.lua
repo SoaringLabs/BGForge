@@ -15,6 +15,30 @@ local player = BG.playerName
 local IsAddOnLoaded = IsAddOnLoaded or C_AddOns.IsAddOnLoaded
 local GetLootMethod = GetLootMethod or C_PartyInfo.GetLootMethod
 
+-- A "new CD" is evaluated at the shared ledger level. Titan phases can map
+-- several instance IDs to one FB, so any locked sibling must preserve the table.
+local function ShouldAutoClearStage(instanceID, savedInstanceCount, getSavedInstanceInfo)
+    local FB = BG.FBIDtable[instanceID]
+    if not FB then return false end
+
+    savedInstanceCount = savedInstanceCount or GetNumSavedInstances()
+    getSavedInstanceInfo = getSavedInstanceInfo or GetSavedInstanceInfo
+    for i = 1, savedInstanceCount do
+        local _, _, _, _, locked, _, _, _, _, _, _, _, _, savedInstanceID = getSavedInstanceInfo(i)
+        if locked and BG.FBIDtable[savedInstanceID] == FB then
+            return false, FB
+        end
+    end
+    return true, FB
+end
+
+local function ClearCurrentStage(FB)
+    BG.ClickFBbutton(FB)
+    local num = BG.ClearBiaoGe("biaoge", FB)
+    BG.SendSystemMessage(format(L["已自动清空表格< %s >，分钱人数已改为%s人。"], BG.GetFBinfo(FB, "shortName"), num))
+    BG.PlaySound("qingkong")
+end
+
 function BG.ClearBiaoGeUI()
     function BG.ClearBiaoGeByIndex(FB, b)
         if b == Maxb[FB] + 1 then
@@ -192,167 +216,27 @@ function BG.ClearBiaoGeUI()
 
     -- 自动清空表格
     do
-        local teamText = ''
-        local function IsNotSameTeam(FB)
-            FB = FB or BG.FB1
-            if not IsInRaid(1) then
-                teamText = L['不在团队里。']
-                return true
-            end
-            local currentRoster = type(BG.raidRosterInfo) == "table" and BG.raidRosterInfo or {}
-            local currentNames = {}
-            for _, member in ipairs(currentRoster) do
-                local name = type(member) == "table" and member.name or member
-                if type(name) == "string" and name ~= "" then
-                    currentNames[name] = true
-                end
-            end
-            local currentCount = 0
-            for _ in pairs(currentNames) do
-                currentCount = currentCount + 1
-            end
-            if currentCount == 0 then
-                teamText = L['当前团队名单暂不可用，无法判断是否换团，本次不会自动清空。']
-                return false
-            end
-            -- 没有历史成员名单
-            local savedRosterInfo = type(BiaoGe[FB]) == "table" and BiaoGe[FB].raidRoster or nil
-            if type(savedRosterInfo) ~= "table" then
-                teamText = L['表格没有历史成员名单。']
-                return true
-            end
-            local savedAt = tonumber(savedRosterInfo.time)
-            local savedRoster = type(savedRosterInfo.roster) == "table" and savedRosterInfo.roster or nil
-            if not savedAt or not savedRoster then
-                teamText = L['表格的历史成员名单无效，判断为现在是新团队。']
-                return true
-            end
-            -- 超过x天了
-            if GetServerTime() - savedAt >= 86400 * 1 then
-                teamText = L['表格的历史成员名单的创建时间已超过1天，判断为现在是新团队。']
-                return true
-            end
-            -- 服务器不同
-            if BG.realmName ~= savedRosterInfo.realm then
-                teamText = L['表格的历史成员名单服务器是[%s]，与当前服务器[%s]不同，判断为现在是新团队。']:format(savedRosterInfo.realm or '', BG.realmName or '')
-                return true
-            end
-            local savedNames = {}
-            for _, name in ipairs(savedRoster) do
-                if type(name) == "string" and name ~= "" then
-                    savedNames[name] = true
-                end
-            end
-            local savedCount = 0
-            for _ in pairs(savedNames) do
-                savedCount = savedCount + 1
-            end
-            if savedCount == 0 then
-                teamText = L['表格的历史成员名单无效，判断为现在是新团队。']
-                return true
-            end
-            local maxCount = max(currentCount, savedCount)
-            local sameCount = 0
-            for name in pairs(currentNames) do
-                if savedNames[name] then
-                    sameCount = sameCount + 1
-                end
-            end
-            if sameCount / maxCount < 0.6 then
-                teamText = L['表格的历史成员人数为%s，当前团队人数为%s，相同成员的占比低于60%%，判断为现在是新团队。']:format(savedCount, currentCount)
-                return true
-            end
-            return false
-        end
-        BG.IsNotSameTeam = IsNotSameTeam
         local function SendTips(FB)
             if (FB == "ZUG" or FB == "ZUGsod") and BG.IsVanilla and IsInRaid(1) and UnitIsGroupLeader("player") then
                 BG.SendSystemMessage(L["提醒团长：如果你没有物品分配权，将会导致交易的相关功能失效。"])
             end
         end
 
-        local notCheckMaxPlayer = BG.verOver4
-        local notCheckDiff = not BG.IsRetail
         local needCheck
         local function CheckCD()
             BG.After(3, function()
-                local _, _, diffID, _, maxPlayers, _, _, instanceID = GetInstanceInfo()
+                local _, _, _, _, _, _, _, instanceID = GetInstanceInfo()
                 local FB = BG.FBIDtable[instanceID]
                 SendTips(FB)
                 if BG.IsTBCFB(FB) and not ns.canShowTBC then return end
                 if not (FB and IsInInstance()) then return end
-                local newCD = true
-                for i = 1, GetNumSavedInstances() do
-                    local _, _, _, _diffID, locked, _, _, _, _maxPlayers, _, _, _, _, _instanceID = GetSavedInstanceInfo(i)
-                    if locked and (instanceID == _instanceID)
-                        and (notCheckMaxPlayer or maxPlayers == _maxPlayers)
-                        and (notCheckDiff or diffID == _diffID)
-                    then
-                        newCD = false
-                        break
-                    end
-                end
-                -- 如果是新CD
-                if newCD then
-                    BG.ClickFBbutton(FB)
-                    -- 有这些场景：1 打完NAXX，然后进黑龙（不要清空表格）。2 上CD打过黑龙 这CD进NAXX
-
-                    -- 如果当前副本对应的BOSS格子有东西（除了杂项） 就清空整个表格
-                    -- 如果当前副本对应的BOSS格子没东西但其他格子有东西，且当前团队成员跟当前副本的历史成员名单不同 就清空整个表格
-                    local clearType
-                    local startB = BG.bossPositionStartEnd[instanceID][1]
-                    local endB = BG.bossPositionStartEnd[instanceID][2]
-                    if BG.BiaoGeHavedItem(FB, "autoQingKong", instanceID) then
-                        clearType = 1
-                    end
-                    if not clearType and BG.BiaoGeHavedItem(FB, "onlyboss") and IsNotSameTeam(FB) then
-                        clearType = 2
-                    end
-
-                    if clearType then
-                        local savedToHistory = false
-                        local historyStatus
-                        if BG.HistoryFeatureEnabled and BiaoGe.options.autoQingKongSaveHistory == 1 then
-                            local saved
-                            if BG.SaveBiaoGe then
-                                saved, historyStatus = BG.SaveBiaoGe(FB, {
-                                    source = "auto-clear",
-                                    dedupe = true,
-                                    silent = true,
-                                })
-                            end
-                            if not saved then
-                                BG.SendSystemMessage(BG.STC_r1(L["历史表格保存失败，已取消自动清空，当前表格仍然保留。"]))
-                                return
-                            end
-                            savedToHistory = true
-                        end
-                        local num = BG.ClearBiaoGe("biaoge", FB)
-                        if savedToHistory then
-                            if historyStatus == "duplicate" then
-                                BG.SendSystemMessage(format(L["已自动清空表格< %s >，分钱人数已改为%s人；当前表格与最近历史记录相同，未重复保存。"],
-                                    BG.GetFBinfo(FB, "shortName"), num))
-                            else
-                                BG.SendSystemMessage(format(L["已自动清空表格< %s >，分钱人数已改为%s人，原表格已保存至历史表格。"],
-                                    BG.GetFBinfo(FB, "shortName"), num))
-                            end
-                        else
-                            BG.SendSystemMessage(format(L["已自动清空表格< %s >，分钱人数已改为%s人。"], BG.GetFBinfo(FB, "shortName"), num))
-                        end
-                        if clearType == 1 then
-                            BG.SendSystemMessage(L['自动清空表格的原因：1.当前副本你是新CD；2.%s']:format(
-                                L['当前副本所在的表格BOSS编号（%s-%s）格子中存在旧记录。']:format(startB, endB)))
-                        elseif clearType == 2 then
-                            BG.SendSystemMessage(L['自动清空表格的原因：1.当前副本你是新CD；2.%s']:format(
-                                teamText))
-                        end
-                        BG.PlaySound("qingkong")
-                    end
+                local shouldClear = ShouldAutoClearStage(instanceID)
+                if shouldClear then
+                    ClearCurrentStage(FB)
                 end
             end)
         end
         BG.RegisterEvent("RAID_INSTANCE_WELCOME", function(self, event, ...)
-            if BiaoGe.options["autoQingKong"] ~= 1 then return end
             needCheck = true
             RequestRaidInfo()
         end)

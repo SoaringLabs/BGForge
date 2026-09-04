@@ -320,9 +320,6 @@ BG.Init(function()
     local maxRecords = tonumber(BiaoGe.options.historyMaxRecords)
     BiaoGe.options.historyMaxRecords = maxRecords and maxRecords >= 1
         and math.floor(maxRecords) or DEFAULT_MAX_RECORDS
-    if BiaoGe.options.autoQingKongSaveHistory == nil then
-        BiaoGe.options.autoQingKongSaveHistory = 1
-    end
     for _, FB in ipairs(BG.FBtable) do
         Ensure(FB)
         Store.Prune(FB)

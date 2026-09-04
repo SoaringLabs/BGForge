@@ -9,6 +9,10 @@ if not ldb then return end
 local plugin = ldb:NewDataObject(AddonName, { text = "BGForge", type = "data source", icon = "Interface\\AddOns\\BGForge\\Media\\icon\\icon-128.tga" })
 
 function plugin:OnClick(button) --function plugin.OnClick(self, button)
+    if BG.HideRaidLockoutHover then
+        BG.HideRaidLockoutHover(true)
+    end
+
     if button == "LeftButton" then
         if IsControlKeyDown() then
             BG.SetFBCD(nil, nil, true)

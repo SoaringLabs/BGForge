@@ -1,6 +1,8 @@
-# Character Overview
+# Character Overview — Small Interface
 
-This file overrides `design-system/MASTER.md` only for the minimap-hover character overview.
+This file overrides `design-system/MASTER.md` only for the character-overview **small interface**: the floating panel shown by hovering the BGForge minimap icon.
+
+The character-overview **large interface** is the full page shown by selecting the “角色总览” tab inside the BGForge main frame. It reuses the same renderer, but its main-frame placement and navigation rules are defined in `pages/auction-workspace.md`.
 
 ## Outcome
 
@@ -14,7 +16,7 @@ The content, local-account scope, and privacy boundary stay unchanged.
 
 ## Implemented pilot
 
-The hover overview now acts as the first production reference for Arcane Archive:
+The small interface now acts as the first production reference for Arcane Archive:
 
 - Forge Gold is limited to the BGForge wordmark, resource values, and totals.
 - Rune Blue marks section accents, button hover/press borders, the scrollbar thumb,
@@ -32,7 +34,7 @@ The hover overview now acts as the first production reference for Arcane Archive
 ## Layout
 
 - Keep the compact matrix: characters are rows; raid/weekly states are columns.
-- Do not alternate standard row fills in this overview. The dense grid already provides enough
+- Do not alternate standard row fills in the small interface. The dense grid already provides enough
   tracking support, and a single base surface protects the meaning of selected and status fills.
 - Keep resources as a second section rather than mixing them into lockout cells.
 - Use a shared 36px product header with logo, title, reset time, refresh, settings, and close/pin controls.
@@ -50,7 +52,7 @@ The hover overview now acts as the first production reference for Arcane Archive
 
 ## Interaction
 
-- Hover may show the panel immediately, preserving the current entry point.
+- Hover may show the small interface immediately, preserving the current entry point.
 - Moving between minimap icon and panel must not accidentally close it.
 - Pin/open remains available for deliberate inspection and keyboard/mouse stability.
 - Refresh shows immediate pressed feedback and updates the recency caption when complete.
