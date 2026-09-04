@@ -6,14 +6,14 @@ module="Core/UI/DesignSystem.lua"
 overview="Core/Module/RaidLockoutOverview.lua"
 wishlist="Core/Module/WishlistUI.lua"
 
-if ! rg -q '^Core\\UI\\DesignSystem\.lua$' BGForge.toc; then
+if ! rg -q $'^Core\\\\UI\\\\DesignSystem\\.lua\\r?$' BGForge.toc; then
     echo "Design-system module is not loaded by BGForge.toc" >&2
     exit 1
 fi
 
-db_line="$(rg -n '^Core\\DB\\DB\.xml$' BGForge.toc | cut -d: -f1)"
-ui_line="$(rg -n '^Core\\UI\\DesignSystem\.lua$' BGForge.toc | cut -d: -f1)"
-functions_line="$(rg -n '^Core\\function1\.lua$' BGForge.toc | cut -d: -f1)"
+db_line="$(rg -n $'^Core\\\\DB\\\\DB\\.xml\\r?$' BGForge.toc | cut -d: -f1)"
+ui_line="$(rg -n $'^Core\\\\UI\\\\DesignSystem\\.lua\\r?$' BGForge.toc | cut -d: -f1)"
+functions_line="$(rg -n $'^Core\\\\function1\\.lua\\r?$' BGForge.toc | cut -d: -f1)"
 if [[ -z "$db_line" || -z "$ui_line" || -z "$functions_line" ]] \
     || (( db_line >= ui_line || ui_line >= functions_line )); then
     echo "Design system must load after BG initialization and before feature UI helpers" >&2

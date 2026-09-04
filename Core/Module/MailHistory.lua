@@ -1481,6 +1481,6 @@ BG.Init(function()
     EnsureCurrentCharacter()
 
     if BiaoGe.disabledModules["MailHistory"] then return end
-    
+
     RoadMail()
 end)

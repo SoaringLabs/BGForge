@@ -117,23 +117,23 @@ BG.Init(function()
   }
  end
  do
-  local v = "Gold18" 
+  local v = "Gold18"
   BGA.FontGold18 = CreateFont("BGA.Font" .. v)
   BGA.FontGold18:SetTextColor(1, 0.82, 0)
   BGA.FontGold18:SetFont(font, 18, "OUTLINE")
-  local v = "Dis18" 
+  local v = "Dis18"
   BGA.FontDis18 = CreateFont("BGA.Font" .. v)
   BGA.FontDis18:SetTextColor(.5, .5, .5)
   BGA.FontDis18:SetFont(font, 18, "OUTLINE")
-  local v = "Dis15" 
+  local v = "Dis15"
   BGA.FontDis15 = CreateFont("BGA.Font" .. v)
   BGA.FontDis15:SetTextColor(.5, .5, .5)
   BGA.FontDis15:SetFont(font, 15, "OUTLINE")
-  local v = "Green15" 
+  local v = "Green15"
   BGA.FontGreen15 = CreateFont("BGA.Font" .. v)
   BGA.FontGreen15:SetTextColor(0, 1, 0)
   BGA.FontGreen15:SetFont(font, 15, "OUTLINE")
-  local v = "white15" 
+  local v = "white15"
   BGA.FontWhite15 = CreateFont("BGA.Font" .. v)
   BGA.FontWhite15:SetTextColor(1, 1, 1)
   BGA.FontWhite15:SetFont(font, 15, "OUTLINE")

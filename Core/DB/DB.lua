@@ -1180,6 +1180,9 @@ BG.Init(function()
     if not BiaoGe.options then
         BiaoGe.options = {}
     end
+    -- BGLite 2.4.1 makes new-lockout clearing mandatory. Keep the legacy
+    -- numeric value for compatibility and override users who previously disabled it.
+    BiaoGe.options.autoQingKong = 1
     if not BiaoGe.options.SearchHistory then
         BiaoGe.options.SearchHistory = {}
     end

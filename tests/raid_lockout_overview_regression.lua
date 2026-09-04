@@ -25,6 +25,9 @@ local function ResetEnvironment()
     UnitClass = function()
         return "Warrior", "WARRIOR"
     end
+    UnitRace = function()
+        return "Human", "Human", 1
+    end
     GetClassColor = function()
         return 0.78, 0.61, 0.43, "ffc79c6e"
     end
@@ -69,6 +72,10 @@ local function ResetEnvironment()
     end
     GetInventoryItemQuality = function()
         return nil
+    end
+    GetItemInfoInstant = function(itemInfo)
+        local itemID = tonumber(tostring(itemInfo):match("item:(%d+)") or itemInfo)
+        return itemID, nil, nil, ""
     end
 
     C_Item = {
@@ -496,6 +503,253 @@ local function TestResourceRefreshEventsAreDebounced()
     end
 
     assert(captures == 1, "bursty resource events should produce one resource capture")
+end
+
+local function TestEquipmentSnapshotStoresOnlyDisplayFields()
+    local _, events = ResetEnvironment()
+    local links = {
+        [1] = "|cffa335ee|Hitem:1001:2001:3001:0:0:0:0:0|h[Test Helm]|h|r",
+        [16] = "|cffa335ee|Hitem:1016:0:0:0:0:0:0:0|h[Test Weapon]|h|r",
+    }
+    GetInventoryItemID = function(_, slotID)
+        return links[slotID] and (1000 + slotID) or nil
+    end
+    GetInventoryItemLink = function(_, slotID)
+        return links[slotID]
+    end
+    C_Item.GetDetailedItemLevelInfo = function(link)
+        return link == links[1] and 245 or 251
+    end
+
+    events.PLAYER_EQUIPMENT_CHANGED()
+    local stored = GetStoredCharacter()
+    local details = stored.details
+    assert(details and details.schemaVersion == 1, "character detail schema was not created")
+    assert(details.equipment.updatedAt == 1700000000,
+        "equipment snapshot did not use server time")
+    assert(details.equipment.slots[1].link == links[1]
+        and details.equipment.slots[1].itemLevel == 245,
+        "equipped head item was not captured")
+    assert(details.equipment.slots[16].link == links[16]
+        and details.equipment.slots[16].itemLevel == 251,
+        "equipped weapon was not captured")
+    assert(details.equipment.slots[1].itemID == nil
+        and details.equipment.slots[1].quality == nil
+        and details.equipment.slots[1].durability == nil
+        and details.equipment.slots[1].enchantID == nil
+        and details.equipment.slots[1].gems == nil,
+        "equipment snapshot persisted fields outside the approved minimal model")
+    assert(stored.raceID == 1, "current character race identity was not captured")
+end
+
+local function TestEquipmentSnapshotCommitsAtomicallyAfterItemDataLoads()
+    local _, events = ResetEnvironment()
+    local ready = false
+    local requests = 0
+    GetInventoryItemID = function(_, slotID)
+        return slotID == 1 and 1001 or nil
+    end
+    GetInventoryItemLink = function(_, slotID)
+        return slotID == 1 and ready and "item:1001:0:0:0:0:0" or nil
+    end
+    C_Item.GetDetailedItemLevelInfo = function()
+        return 245
+    end
+    C_Item.RequestLoadItemDataByID = function(itemID)
+        assert(itemID == 1001, "unexpected item-data request")
+        requests = requests + 1
+    end
+    BiaoGe = {
+        BGForgeRaidLockouts = {
+            schemaVersion = 1,
+            realms = {
+                [100] = {
+                    nextOrder = 2,
+                    characters = {
+                        Tester = {
+                            name = "Tester",
+                            order = 1,
+                            instances = {},
+                            details = {
+                                schemaVersion = 1,
+                                equipment = {
+                                    updatedAt = 1699999000,
+                                    slots = { [1] = { link = "item:999", itemLevel = 238 } },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    events.PLAYER_EQUIPMENT_CHANGED()
+    local equipment = GetStoredCharacter().details.equipment
+    assert(equipment.updatedAt == 1699999000 and equipment.slots[1].link == "item:999",
+        "an incomplete equipment scan overwrote the last complete snapshot")
+    assert(requests == 1, "missing equipment data was not requested once")
+
+    ready = true
+    events.GET_ITEM_INFO_RECEIVED(nil, nil, 1001, true)
+    equipment = GetStoredCharacter().details.equipment
+    assert(equipment.updatedAt == 1700000000
+        and equipment.slots[1].link == "item:1001:0:0:0:0:0",
+        "loaded item data did not commit a complete equipment snapshot")
+end
+
+local function TestEquipmentRefreshEventsAreDebounced()
+    local BG, events = ResetEnvironment()
+    local callbacks = {}
+    BG.After = function(_, callback)
+        callbacks[#callbacks + 1] = callback
+    end
+    local slotReads = 0
+    GetInventoryItemID = function()
+        slotReads = slotReads + 1
+        return nil
+    end
+
+    events.PLAYER_EQUIPMENT_CHANGED()
+    events.PLAYER_EQUIPMENT_CHANGED()
+    events.PLAYER_EQUIPMENT_CHANGED()
+    while #callbacks > 0 do
+        table.remove(callbacks, 1)()
+    end
+    assert(slotReads == 19,
+        "bursty equipment events should collapse into one fixed 19-slot scan")
+end
+
+local function TestBackpackSnapshotStoresOnlyMinimalDisplayFields()
+    local _, events = ResetEnvironment()
+    local firstLink = "|cff0070dd|Hitem:2001:0:0:0:0:0|h[Test Stack]|h|r"
+    local secondLink = "|cffa335ee|Hitem:2002:0:0:0:0:0|h[Test Item]|h|r"
+    C_Container.GetContainerNumSlots = function(bagID)
+        return bagID == 0 and 4 or 0
+    end
+    C_Container.GetContainerItemInfo = function(bagID, slotID)
+        if bagID ~= 0 then
+            return nil
+        elseif slotID == 1 then
+            return { itemID = 2001, stackCount = 3, hyperlink = firstLink, quality = 3 }
+        elseif slotID == 2 then
+            return { itemID = 2001, stackCount = 2, hyperlink = firstLink, quality = 3 }
+        elseif slotID == 3 then
+            return { itemID = 2002, stackCount = 1, hyperlink = secondLink, quality = 4 }
+        end
+    end
+    GetItemInfoInstant = function(link)
+        if link == secondLink then
+            return 2002, nil, nil, "INVTYPE_CHEST"
+        end
+        return 2001, nil, nil, ""
+    end
+    C_Item.GetDetailedItemLevelInfo = function(link)
+        return link == secondLink and 238 or nil
+    end
+
+    events.BAG_UPDATE_DELAYED()
+
+    local backpack = GetStoredCharacter().details.backpack
+    assert(backpack.updatedAt == 1700000000, "backpack snapshot did not use server time")
+    assert(backpack.totalSlots == 4 and backpack.usedSlots == 3,
+        "backpack slot summary was not captured")
+    assert(#backpack.items == 2, "identical backpack item links were not compacted")
+    assert(backpack.items[1].link == firstLink and backpack.items[1].count == 5,
+        "stacked backpack item counts were not merged")
+    assert(backpack.items[2].link == secondLink and backpack.items[2].count == 1
+        and backpack.items[2].itemLevel == 238,
+        "equippable backpack item did not retain its display item level")
+    assert(backpack.items[1].itemLevel == nil,
+        "ordinary backpack item unexpectedly received an item level")
+    assert(backpack.items[1].itemID == nil
+        and backpack.items[1].quality == nil
+        and backpack.items[1].bagID == nil
+        and backpack.items[1].slotID == nil,
+        "backpack snapshot persisted fields outside the approved minimal model")
+end
+
+local function TestBackpackSnapshotCommitsAtomicallyAfterItemDataLoads()
+    local _, events = ResetEnvironment()
+    local ready = false
+    local requests = 0
+    C_Container.GetContainerNumSlots = function(bagID)
+        return bagID == 0 and 1 or 0
+    end
+    C_Container.GetContainerItemInfo = function(bagID, slotID)
+        if bagID == 0 and slotID == 1 then
+            return {
+                itemID = 2001,
+                stackCount = 1,
+                hyperlink = ready and "item:2001:0:0:0:0:0" or nil,
+            }
+        end
+    end
+    C_Item.RequestLoadItemDataByID = function(itemID)
+        assert(itemID == 2001, "unexpected backpack item-data request")
+        requests = requests + 1
+    end
+    BiaoGe = {
+        BGForgeRaidLockouts = {
+            schemaVersion = 1,
+            realms = {
+                [100] = {
+                    nextOrder = 2,
+                    characters = {
+                        Tester = {
+                            name = "Tester",
+                            order = 1,
+                            instances = {},
+                            details = {
+                                schemaVersion = 1,
+                                backpack = {
+                                    updatedAt = 1699999000,
+                                    totalSlots = 20,
+                                    usedSlots = 1,
+                                    items = { { link = "item:1999", count = 1 } },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    events.BAG_UPDATE_DELAYED()
+    local backpack = GetStoredCharacter().details.backpack
+    assert(backpack.updatedAt == 1699999000 and backpack.items[1].link == "item:1999",
+        "an incomplete backpack scan overwrote the last complete snapshot")
+    assert(requests == 1, "missing backpack item data was not requested once")
+
+    ready = true
+    events.GET_ITEM_INFO_RECEIVED(nil, nil, 2001, true)
+    backpack = GetStoredCharacter().details.backpack
+    assert(backpack.updatedAt == 1700000000
+        and backpack.items[1].link == "item:2001:0:0:0:0:0",
+        "loaded item data did not commit a complete backpack snapshot")
+end
+
+local function TestBackpackRefreshEventsAreDebounced()
+    local BG = ResetEnvironment()
+    local callbacks = {}
+    BG.After = function(_, callback)
+        callbacks[#callbacks + 1] = callback
+    end
+    local bagReads = 0
+    C_Container.GetContainerNumSlots = function()
+        bagReads = bagReads + 1
+        return 0
+    end
+
+    BG.RefreshCurrentCharacterBackpack()
+    BG.RefreshCurrentCharacterBackpack()
+    BG.RefreshCurrentCharacterBackpack()
+    while #callbacks > 0 do
+        table.remove(callbacks, 1)()
+    end
+    assert(bagReads == NUM_BAG_SLOTS + 1,
+        "bursty backpack refreshes should collapse into one fixed bag scan")
 end
 
 local function TestTitanProfessionCooldownSnapshotsAndSummary()
@@ -1163,6 +1417,12 @@ local tests = {
     profession_tiles = TestProfessionsUseMatchingIconTilesWithFixedColor,
     collapsed_headers = TestCollapsedSkillHeadersExpandOnceWithoutEventLoop,
     debounce = TestResourceRefreshEventsAreDebounced,
+    equipment_snapshot = TestEquipmentSnapshotStoresOnlyDisplayFields,
+    equipment_atomic = TestEquipmentSnapshotCommitsAtomicallyAfterItemDataLoads,
+    equipment_debounce = TestEquipmentRefreshEventsAreDebounced,
+    backpack_snapshot = TestBackpackSnapshotStoresOnlyMinimalDisplayFields,
+    backpack_atomic = TestBackpackSnapshotCommitsAtomicallyAfterItemDataLoads,
+    backpack_debounce = TestBackpackRefreshEventsAreDebounced,
     profession_cooldowns = TestTitanProfessionCooldownSnapshotsAndSummary,
     transmute_group = TestAlchemyTransmutesCollapseIntoOneSharedCooldown,
     trade_skill_cooldown = TestOpenTradeSkillCooldownIsCapturedByRecipeIndex,
@@ -1190,6 +1450,12 @@ else
         "profession_tiles",
         "collapsed_headers",
         "debounce",
+        "equipment_snapshot",
+        "equipment_atomic",
+        "equipment_debounce",
+        "backpack_snapshot",
+        "backpack_atomic",
+        "backpack_debounce",
         "profession_cooldowns",
         "transmute_group",
         "trade_skill_cooldown",

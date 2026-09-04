@@ -13,6 +13,7 @@ do --英语说明书
         "BGForge is a raid-auction enhancement addon built on BGLite.",
         "The BGLite base was security-cleaned and streamlined by the World of Warcraft China operations team; BGForge continues development on that foundation.",
         "This release keeps the core auction and accounting features and will be expanded gradually with safety and stability in mind.",
+        "Supports the standard BiaoGe auction protocol and its collaboration method.",
         "BGForge developer: Soaring Labs",
         " ",
         "|cff00BFFFCommands:|r",
@@ -568,9 +569,6 @@ do
     L["记录"] = "Records"
     L["拍卖成功的聊天消息后面增加[出价记录]"] = "Added [Bid Record] to the chat messages after successful auctions."
     L["鼠标悬停在[出价记录]时会显示该装备的出价记录。"] = "When hovering over [Bid Record], it will show the bid record of the Gear."
-    L["自动清空表格时保存表格"] = "Save Forms when Auto Clearing Forms"
-    L["进本自动清空表格时，把表格保存至历史表格1。"] = "When you enter this Auto Clear Form, the form will be saved to History Form 1."
-    L["取消勾选则不会保存表格。"] = "Unchecking this box will not save the form."
     L["不显示低于该装等的角色："] = "Do not show Characters below this level:"
     L["|cffFFFFFF安装WA：|r此WA是团员端，用于接收团长发出的拍卖消息，没安装的团员显示不了拍卖UI。请团长安装该WA字符串后发给团员安装。如果团员已经安装了BGForge插件，可以不用安装该WA。"] = "|cffFFFFFFInstall WA:|rThis WA is the member's side, used to receive the auction message from the leader, without installing it, the member can not display the auction UI. please ask the leader to install this WA string and send it to the members to install. If you have already installed BGForge plugin, you don't need to install this WA."
     L["v2.5：拍卖金额超过1万时会进行缩写。ALT+点击折叠时，会对全部拍卖窗口折叠"] = "v2.5: Auctions are abbreviated when they exceed 10k. ALT+click to collapse will collapse the entire auction window."
@@ -1145,8 +1143,6 @@ do
     L["拍卖聊天记录框"] = "Auction Chat"
     L["自动记录全团跟拍卖有关的聊天。"] = "Automatically logs auction-related chat for the entire group."
     L["当你点击买家或金额时会显示拍卖聊天记录。"] = "When you click on a buyer or an amount, the auction chat log is displayed."
-    L["进本自动清空表格"] = "Auto Empty Form"
-    L["当你进入一个新CD团本时，表格会自动清空。"] = "When you enter a new CD group, the form is automatically cleared."
     L["清空表格时保留支出补贴名称"] = "Keeping Expense Allowance Names When Emptying Forms"
     L["只保留补贴名称（例如XX补贴），支出玩家和支出金额正常清空。"] = "Only the name of the subsidy is retained (e.g. XX Subsidy), the spending player and spending amount are cleared normally."
     L["这样就不用每次都重复填写补贴名称。"] = "This eliminates the need to repeat the subsidy name each time."
@@ -1347,7 +1343,6 @@ do
     L["队长模式一键自动分配"] = "One-click auto-assign in Captain Mode"
     L["队长分配模式时，在战利品界面增加一键分配按钮。"] = "Added a one-click assign button to the loot screen when in captain assign mode."
     L["点击按钮后会把全部掉落分配给自己，只对史诗装备或套装兑换物生效，其他分类的物品不会生效（例如橙片、任务物品等不会自动分配）。"] = "Clicking the button will assign all drops to yourself, and will only work on Epic Gear or Set Exchange items, but not other categories (e.g. Orange Slices, Quests items, etc. will not be automatically assigned)."
-    L["|cffffffff< 进本自动清空表格 >|r\n\n当你进入一个新CD团本时，表格会自动清空，原表格数据会保存至历史表格1"] = "|cffffffff< Auto Clear Form >|r\n\nWhen you enter a new CD group, the form will be automatically cleared and the original form data will be saved to the history form1"
     L["<BGForge> 已自动清空表格< %s >，分钱人数已改为%s人。原表格数据已保存至历史表格1。"] = "<BGForge> has automatically cleared the form < %s >, the number of split has been changed to %s people. The original form data has been saved to History Form 1."
     L["撤回清空"] = "Withdraw clearing"
     L["<BGForge> 已撤回清空，还原了表格数据，并删除了历史表格1。"] = "<BGForge> has withdrawn the clearing, restored the form data and deleted the history form 1."
@@ -1733,11 +1728,6 @@ do
     L["当前表格与最近一条历史记录相同，未重复保存。"] = "The current ledger matches the latest history record, so no duplicate was saved."
     L["确定应用历史表格？\n当前表格及相关拍卖、交易和团队快照数据将被替换或清空。"] = "Apply this history record?\nThe current ledger and related auction, trade, and raid snapshot data will be replaced or cleared."
     L["保存当前表格的本地副本，不会清空当前表格，也不会分享给其他玩家。"] = "Save a local copy without clearing the current ledger or sharing it with other players."
-    L["当你进入一个新CD团本时，表格会自动清空，原表格数据默认保存至历史表格。"] = "When you enter a new raid lockout, the current ledger is saved to history by default before it is cleared."
-    L["新CD触发自动清空时，先把当前表格保存至本地历史表格；保存失败则不会清空。"] = "When a new lockout triggers automatic clearing, save the current ledger to local history first. If saving fails, the ledger is not cleared."
-    L["历史表格保存失败，已取消自动清空，当前表格仍然保留。"] = "Saving history failed, so automatic clearing was cancelled and the current ledger was preserved."
-    L["已自动清空表格< %s >，分钱人数已改为%s人，原表格已保存至历史表格。"] = "Automatically cleared ledger < %s > and set the split count to %s. The original ledger was saved to history."
-    L["已自动清空表格< %s >，分钱人数已改为%s人；当前表格与最近历史记录相同，未重复保存。"] = "Automatically cleared ledger < %s > and set the split count to %s. It matched the latest history record, so no duplicate was saved."
     L["设置"] = "Settings"
     L["切换副本难度"] = "Toggle copy difficulty"
     L["10人|cff00BFFF普通|r"] = "10-Players|cff00BFFF Normal|r"
@@ -1784,6 +1774,7 @@ do
     L["表格里没找到此次交易的装备"] = "The Gear of this transaction is not found in the table"
     L["该BOSS格子已满"] = "This BOSS Grid is full"
     L["欠款："] = "Amount owed:"
+    L["总欠款："] = "Total amount owed:"
     L["记账效果预览"] = "Accounting Preview"
     L["次"] = "times"
     L["打断"] = "Flame Protection"
@@ -1985,15 +1976,6 @@ do
     L["在角色名字前面增加显示专精图标。"] = "Display specialization icon before character name."
     L["显示角色阵营"] = "Show Character Faction"
     L["角色装等和等级会根据阵营染色为浅蓝色（联盟）或浅红色（部落），用来区分该角色是哪个阵营。"] = "Character item level and level will be colored light blue for Alliance and light red for Horde to tell factions apart."
-    L['不在团队里。'] = "You are not in a group."
-    L['表格没有历史成员名单。'] = "No historical member records found."
-    L['当前团队名单暂不可用，无法判断是否换团，本次不会自动清空。'] = "The current raid roster is unavailable, so a group change cannot be determined and the ledger will not be cleared this time."
-    L['表格的历史成员名单无效，判断为现在是新团队。'] = "The saved raid roster is invalid, so the current raid is treated as a new group."
-    L['表格的历史成员名单的创建时间已超过1天，判断为现在是新团队。'] = "Historical member list is older than 1 day, recognized as a new group."
-    L['表格的历史成员名单服务器是[%s]，与当前服务器[%s]不同，判断为现在是新团队。'] = "History server [%s] does not match current server [%s], recognized as a new group."
-    L['表格的历史成员人数为%s，当前团队人数为%s，相同成员的占比低于60%%，判断为现在是新团队。'] = "Historical members: %s, Current members: %s. Matching rate below 60%, recognized as a new group."
-    L['当前副本所在的表格BOSS编号（%s-%s）格子中存在旧记录。'] = "Old records exist in boss slots (%s-%s) for current instance."
-    L['自动清空表格的原因：1.当前副本你是新CD；2.%s'] = "Table auto-cleared reasons: 1. New instance lockout; 2. %s"
     L["已撤回清空，还原了表格数据，并删除了历史表格1。"] = "Clear reverted. Data restored and history table 1 removed."
     L['|cffFFD100物品等级'] = "|cffFFD100Item Level"
     L['已自动把分配品质切换至|c%s%s|r。'] = "Loot quality auto-switched to |c%s%s|r."
@@ -2957,6 +2939,7 @@ do -- Mail history
     L["%d个角色"] = "%d characters"
     L["查看团本CD"] = "View Raid Lockouts"
     L["全角色总览"] = "Character Overview"
+    L["提示：点击角色名称可查看装备和背包"] = "Tip: Click a character name to view gear and bags"
     L["CD展示设置"] = "CD Display Settings"
     L["勾选要展示的副本模块"] = "Choose which lockout modules to display."
     L["勾选要展示的副本与任务栏目"] = "Choose which raid and quest columns to display."

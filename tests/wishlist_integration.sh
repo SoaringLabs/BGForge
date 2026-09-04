@@ -5,18 +5,18 @@ set -euo pipefail
 module="Core/Module/Wishlist.lua"
 ui_module="Core/Module/WishlistUI.lua"
 
-if ! rg -q '^Core\\Module\\Wishlist\.lua$' BGForge.toc; then
+if ! rg -q $'^Core\\\\Module\\\\Wishlist\\.lua\\r?$' BGForge.toc; then
     echo "Wishlist module is not loaded by BGForge.toc" >&2
     exit 1
 fi
-if ! rg -q '^Core\\Module\\WishlistUI\.lua$' BGForge.toc; then
+if ! rg -q $'^Core\\\\Module\\\\WishlistUI\\.lua\\r?$' BGForge.toc; then
     echo "Wishlist UI module is not loaded by BGForge.toc" >&2
     exit 1
 fi
 
-wishlist_line="$(rg -n '^Core\\Module\\Wishlist\.lua$' BGForge.toc | cut -d: -f1)"
-wishlist_ui_line="$(rg -n '^Core\\Module\\WishlistUI\.lua$' BGForge.toc | cut -d: -f1)"
-main_line="$(rg -n '^Core\\BiaoGe\.lua$' BGForge.toc | cut -d: -f1)"
+wishlist_line="$(rg -n $'^Core\\\\Module\\\\Wishlist\\.lua\\r?$' BGForge.toc | cut -d: -f1)"
+wishlist_ui_line="$(rg -n $'^Core\\\\Module\\\\WishlistUI\\.lua\\r?$' BGForge.toc | cut -d: -f1)"
+main_line="$(rg -n $'^Core\\\\BiaoGe\\.lua\\r?$' BGForge.toc | cut -d: -f1)"
 if (( wishlist_line >= wishlist_ui_line || wishlist_ui_line >= main_line )); then
     echo "Wishlist data and UI must load in order before BiaoGe creates the main tabs" >&2
     exit 1
