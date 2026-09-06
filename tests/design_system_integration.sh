@@ -40,7 +40,9 @@ rg -Fq 'resourceCurrentAccent:SetColorTexture(unpack(COLOR.focus))' "$overview"
 rg -Fq 'SetIconButtonVisual(button, COLOR.headerStrong, COLOR.gridStrong, COLOR.textPrimary)' "$overview"
 rg -Fq 'SetIconButtonBorder(self, COLOR.focus)' "$overview"
 rg -Fq 'BG.UI.CreatePageHeader(hoverFrame, {' "$overview"
-rg -Fq 'viewportWidth + ui.padding * 2 - BG.UI.Token("spacing", "hairline")' "$overview"
+rg -Fq 'local pageHeaderEdgeInset = BG.UI.Token("spacing", "hairline")' "$overview"
+rg -Fq '"TOPLEFT", hoverFrame, "TOPLEFT", -ui.padding + pageHeaderEdgeInset, 0' "$overview"
+rg -Fq 'viewportWidth + ui.padding * 2 - pageHeaderEdgeInset * 2' "$overview"
 rg -Fq 'local pageHeaderGap = hoverEmbedded and BG.UI.Token("spacing", "md") or 0' "$overview"
 if rg -q 'SetTextColor\(0, 0\.75, 1\)|SetBackdropBorderColor\(0, 0\.75, 1' "$overview"; then
     echo "Character overview reintroduced the legacy bright-cyan palette" >&2
@@ -71,6 +73,7 @@ rg -Fq 'button.selectedBackground:SetVertexColor(unpack(COLOR.selected))' "$wish
 rg -Fq 'button.selectedAccent:SetVertexColor(unpack(COLOR.focus))' "$wishlist"
 rg -Fq 'Design.CreatePageHeader(frame, {' "$wishlist"
 rg -Fq 'local pageHeaderEdgeInset = Design.Token("spacing", "hairline")' "$wishlist"
+rg -Fq 'headerSurface:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", pageHeaderEdgeInset, headerTop)' "$wishlist"
 if rg -q 'SetHighlightTexture\((row\.hoverBackground|hover)\)' "$wishlist"; then
     echo "Wishlist hover washes must preserve token alpha through manual visibility" >&2
     exit 1

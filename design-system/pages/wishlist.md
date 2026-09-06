@@ -12,8 +12,8 @@ The browse model, saved data, item filtering, loot reminders, and add/remove/cle
 
 - Preserve the existing three-part workbench: class-set categories, boss directory/detail, and current wishlist summary.
 - Keep the instance selector as contextual navigation above the page.
-- Keep the page title, short instruction, gear filter, and destructive clear action in one compact header.
-- Let the embedded page header span the main content width. The raid-navigation rule is its top separator; use a vertical Rune Blue marker rather than drawing a second horizontal rule.
+- Keep the page title, readable instruction, gear filter, and destructive clear action in one shared header.
+- Let the embedded page header span the main content width. Keep its title and instruction close to the short Rune Blue marker; the raid-navigation rule is its top separator, and the marker must not become a second full-height border.
 - Keep independent scrolling for the boss directory, boss item grid, and wishlist summary.
 - Recalculate the workbench after the host frame finishes resizing, and reset stale scroll offsets when the selected raid changes.
 

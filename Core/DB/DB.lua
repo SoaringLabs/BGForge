@@ -95,30 +95,46 @@ do
 
     -- 与 BGLite / 原版 BiaoGe 的共存冲突检测。
     -- 这些插件共用同一个全局表 BG（都会 BG = {} 硬重置）与同一个存档表 BiaoGe，
-    -- 同时启用会导致后加载者覆盖前者，表现为功能大面积失灵、账本数据交叉污染。
-    -- 插件按目录名字母序加载（BGForge < BiaoGe），所以此处只做提示，不自动禁用对方
-    -- （不得由插件单方面致哑其它插件）。
+    -- 并且会创建多个同名界面对象。同时启用可能导致界面错乱、功能失效或账本数据混乱。
+    -- 不会自动禁用其它插件；只在用户点击确认后禁用检测到的冲突插件并重载界面。
     -- 检测必须放在 BG.Init2（PLAYER_ENTERING_WORLD）里，以便等其他插件完成加载。
     BG.Init2(function()
-        local conflictingAddon
-        if IsAddOnLoaded("BGLite") then
-            conflictingAddon = "BGLite"
-        elseif IsAddOnLoaded("BiaoGe") then
-            conflictingAddon = "BiaoGe"
+        local conflictingAddons = {}
+        for _, addonName in ipairs({ "BGLite", "BiaoGe" }) do
+            if IsAddOnLoaded(addonName) then
+                tinsert(conflictingAddons, addonName)
+            end
         end
-        if not conflictingAddon then return end
-        local frameName = 'BiaoGeConflictError'
+        if #conflictingAddons == 0 then return end
+
+        local conflictingAddonText = table.concat(conflictingAddons, "、")
+        local disableButtonText
+        if #conflictingAddons == 1 then
+            disableButtonText = L["暂时禁用 %s 并重载"]:format(conflictingAddonText)
+        else
+            disableButtonText = L["暂时禁用冲突插件并重载"]
+        end
+
+        local frameName = 'BGForgeConflictError'
         if not StaticPopupDialogs[frameName] then
             StaticPopupDialogs[frameName] = {
-                text = ("检测到 %s 插件同时启用。它与 BGForge 共用同一存档与全局变量，同时启用会导致功能失灵与账本数据混乱，请只保留一个后重新登录。"):format(conflictingAddon),
-                button1 = L["好的"],
-                OnAccept = function()
+                text = L["检测到 %s 与 BGForge 同时启用。它们会争用相同的全局变量、界面对象和存档变量，可能导致界面错乱、功能失效或账本数据混乱。建议禁用冲突插件并立即重载界面。"]:format(conflictingAddonText),
+                button1 = disableButtonText,
+                button2 = L["暂不处理"],
+                OnAccept = function(_, addonNames)
+                    for _, addonName in ipairs(addonNames or {}) do
+                        C_AddOns.DisableAddOn(addonName)
+                    end
+                    ReloadUI()
+                end,
+                OnCancel = function()
                 end,
                 whileDead = true,
                 showAlert = true,
+                hideOnEscape = true,
             }
         end
-        StaticPopup_Show(frameName)
+        StaticPopup_Show(frameName, nil, nil, conflictingAddons)
     end)
 end
 

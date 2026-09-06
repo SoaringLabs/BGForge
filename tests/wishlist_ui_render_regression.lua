@@ -462,7 +462,7 @@ assert(BG.WishlistMainFrame.clearButton._bgforgeVariant == "danger"
 assert(BG.WishlistMainFrame.pageTitle.textColor[1] == BG.UI.Token("color", "textPrimary")[1],
     "the wishlist page title should use primary text rather than Forge Gold")
 assert(BG.WishlistMainFrame.headerSurface._bgforgeKind == "pageHeader"
-    and BG.WishlistMainFrame.headerSurface:GetHeight() == 58,
+    and BG.WishlistMainFrame.headerSurface:GetHeight() == 72,
     "the wishlist should use the standard shared page header")
 assert(BG.WishlistMainFrame.pageDescription:GetText()
     == "按职业套装与首领掉落建立心愿；实际掉落会提醒，拍卖时保持展开。",
@@ -472,19 +472,25 @@ assert(BG.WishlistMainFrame.headerAccent.vertexColor[1] == focus[1],
 local headerPoints = BG.WishlistMainFrame.headerSurface.pointCalls
 assert(headerPoints and headerPoints[1][1] == "TOPLEFT"
     and headerPoints[1][2] == BG.MainFrame and headerPoints[1][3] == "TOPLEFT"
-    and headerPoints[1][4] == 0 and headerPoints[1][5] == -56
+    and headerPoints[1][4] == 1 and headerPoints[1][5] == -56
     and headerPoints[2][1] == "TOPRIGHT" and headerPoints[2][4] == -1,
-    "the wishlist page header should preserve the main frame's right border")
+    "the wishlist page header should preserve both main-frame side borders")
+local titlePoints = BG.WishlistMainFrame.pageTitle.pointCalls
+local descriptionPoints = BG.WishlistMainFrame.pageDescription.pointCalls
+assert(titlePoints and titlePoints[1][1] == "BOTTOMLEFT" and titlePoints[1][4] == 18
+    and descriptionPoints and descriptionPoints[1][1] == "TOPLEFT"
+    and descriptionPoints[1][4] == 18,
+    "wishlist header copy should keep a compact gap after the leading accent")
 local accentPoints = BG.WishlistMainFrame.headerAccent.pointCalls
-assert(BG.WishlistMainFrame.headerAccent:GetWidth() == 2
-    and accentPoints and accentPoints[1][1] == "TOPLEFT"
-    and accentPoints[2][1] == "BOTTOMLEFT",
-    "the wishlist header should use a vertical accent instead of duplicating the raid-navigation rule")
+assert(BG.WishlistMainFrame.headerAccent:GetWidth() == 3
+    and BG.WishlistMainFrame.headerAccent:GetHeight() == 40
+    and accentPoints and accentPoints[1][1] == "LEFT",
+    "the wishlist header should use a short vertical accent instead of duplicating the raid-navigation rule")
 
 local outerScrollPoints = BG.WishlistMainFrame.scroll.pointCalls
 assert(outerScrollPoints and outerScrollPoints[1][1] == "TOPLEFT"
-    and outerScrollPoints[1][4] == 18 and outerScrollPoints[1][5] == -126,
-    "wishlist content should keep its 12-pixel gap below the compact shared header")
+    and outerScrollPoints[1][4] == 18 and outerScrollPoints[1][5] == -140,
+    "wishlist content should keep its 12-pixel gap below the readable shared header")
 assert(BG.WishlistMainFrame.child:GetWidth() == BG.WishlistMainFrame.scroll:GetWidth(),
     "wishlist columns should fill the usable page width without a second scrollbar reserve")
 

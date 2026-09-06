@@ -32,7 +32,9 @@ Use the selected Arcane Archive structure:
 - Place the full-page module tabs directly below the global header and above the instance selector.
 - Keep the module order: table, character overview, wishlist, reconciliation, then mail history.
 - The character-overview **large interface** is a full-page workspace module. Selecting its “角色总览” tab replaces the current module inside the BGForge main frame, like wishlist and reconciliation; it must not open another overlay.
+- The large interface uses the shared 72px page header. Its 18px title and 14px instruction sit 18px from the leading edge, while a short Rune Blue marker identifies the page without drawing another full-height edge.
 - Hide the contextual instance selector while the large interface is selected. The character-overview **small interface** remains an independent quick-access surface opened by hovering the minimap icon; both interfaces reuse the same renderer.
+- In both overview tables, hovering a large-interface row applies the neutral row wash across every column. Hovering the character-name region replaces that wash with the existing name-only highlight and navigation cue; clicking it opens character details.
 - Treat the instance selector as contextual secondary navigation beneath the module tabs.
 - The migration changes position only; existing class-color default, hover, and selected treatments remain until the tab styling migration is approved separately.
 - Remove the former bottom attachment point so the primary navigation remains visible before users scan the workspace.

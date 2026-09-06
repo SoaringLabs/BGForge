@@ -54,6 +54,7 @@ All runtime color values live in `Core/UI/DesignSystem.lua`. Callers use semanti
 | `rowHoverWash` | `#A7B3BD` at 5.5% | Neutral table-row hover wash |
 | `pressed` | `#1D3142` | Pointer press |
 | `focusSurface` | `#243045` | Selected tab, row, or active cell |
+| `focusSurfaceSubtle` | `#182634` | Quiet selection in dense data rows |
 | `borderSubtle` | `#243644` | Grid and quiet boundary |
 | `borderStrong` | `#3A5266` | Raised boundary |
 | `focus` | `#5D8FB2` | Focus border and active line |
@@ -63,8 +64,8 @@ All runtime color values live in `Core/UI/DesignSystem.lua`. Callers use semanti
 | `textSecondary` | `#ABB6BF` | Secondary text |
 | `textMuted` | `#73818C` | Metadata; avoid on lighter surfaces |
 | `textDisabled` | `#56636D` | Disabled content |
-| `success` | `#6BC56D` | Completed, paid, valid foreground |
-| `successSurface` | `#173824` | Completed-cell background |
+| `success` | `#62C978` | Completed, paid, valid foreground |
+| `successSurface` | `#173824` | Sustained success background outside dense status matrices |
 | `warning` | `#D7A549` | Waiting, partial, attention foreground |
 | `warningSurface` | `#3A2E18` | Partial-state background |
 | `danger` | `#DF6A70` | Error, failed auction, destructive foreground |
@@ -89,6 +90,8 @@ BGForge keeps the user's configured WoW font for Chinese and general UI text. Ta
 | Role | Size | Use |
 | --- | ---: | --- |
 | `display` | 18 | Rare, top-level empty/error state |
+| `pageTitle` | 18 | Full-page workspace title |
+| `pageSubtitle` | 14 | Required full-page instruction |
 | `title` | 16 | Window title, primary section title |
 | `heading` | 14 | Section and table group heading |
 | `body` | 14 | Main labels and values |
@@ -101,6 +104,7 @@ BGForge keeps the user's configured WoW font for Chinese and general UI text. Ta
 - Right-align numeric columns and keep units adjacent.
 - Avoid center-aligned body data except binary status cells.
 - Never shrink required text below 12 to make a layout fit; collapse or scroll the lower-priority region instead.
+- Full-page headers use a 72px surface, a vertically centered two-line text group, and a short 3×40px Rune Blue marker. Keep the text 18px from the header edge so the marker and copy read as one compact group.
 
 ## 5. Spacing and geometry
 

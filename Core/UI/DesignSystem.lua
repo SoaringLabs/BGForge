@@ -43,6 +43,7 @@ local TOKENS = {
         rowHoverWash = HexColor("A7B3BD", 0.055),
         pressed = HexColor("1D3142", 0.98),
         focusSurface = HexColor("243045", 0.96),
+        focusSurfaceSubtle = HexColor("182634", 0.96),
         overlay = HexColor("070B10", 0.98),
 
         borderSubtle = HexColor("243644", 0.86),
@@ -56,7 +57,7 @@ local TOKENS = {
         textMuted = HexColor("73818C", 1),
         textDisabled = HexColor("56636D", 1),
 
-        success = HexColor("6BC56D", 1),
+        success = HexColor("62C978", 1),
         successSurface = HexColor("173824", 0.96),
         warning = HexColor("D7A549", 1),
         warningSurface = HexColor("3A2E18", 0.96),
@@ -77,7 +78,9 @@ local TOKENS = {
         controlCompact = 24,
         control = 28,
         controlComfortable = 32,
-        pageHeader = 58,
+        pageHeader = 72,
+        pageHeaderAccentWidth = 3,
+        pageHeaderAccentHeight = 40,
         iconSmall = 12,
         icon = 16,
         iconLarge = 20,
@@ -88,6 +91,8 @@ local TOKENS = {
 
 local TEXT_STYLES = {
     display = { size = 18, color = "textPrimary" },
+    pageTitle = { size = 18, color = "textPrimary" },
+    pageSubtitle = { size = 14, color = "textSecondary" },
     title = { size = 16, color = "textPrimary" },
     heading = { size = 14, color = "textPrimary" },
     body = { size = 14, color = "textPrimary" },
@@ -426,9 +431,8 @@ function UI.CreatePageHeader(parent, options)
     header.bottomBorder = bottomBorder
 
     local accent = header:CreateTexture(nil, "ARTWORK")
-    accent:SetPoint("TOPLEFT", 0, 0)
-    accent:SetPoint("BOTTOMLEFT", 0, 0)
-    accent:SetWidth(TOKENS.size.focusLine)
+    accent:SetPoint("LEFT", header, "LEFT", 0, 0)
+    accent:SetSize(TOKENS.size.pageHeaderAccentWidth, TOKENS.size.pageHeaderAccentHeight)
     accent:SetTexture(WHITE_TEXTURE)
     SetRegionColor(accent, "SetVertexColor", "focus")
     header.accent = accent
@@ -436,23 +440,23 @@ function UI.CreatePageHeader(parent, options)
     local leftInset = options.leftInset or 18
     local contentRightInset = options.contentRightInset or 16
     local title = UI.Create("text", header, {
-        role = "title",
+        role = "pageTitle",
         text = options.title or "",
         layer = "OVERLAY",
     })
-    title:SetPoint("TOPLEFT", header, "TOPLEFT", leftInset, -9)
-    title:SetPoint("TOPRIGHT", header, "TOPRIGHT", -contentRightInset, -9)
+    title:SetPoint("BOTTOMLEFT", header, "LEFT", leftInset, 2)
+    title:SetPoint("BOTTOMRIGHT", header, "RIGHT", -contentRightInset, 2)
     title:SetJustifyH("LEFT")
     title:SetWordWrap(false)
     header.title = title
 
     local subtitle = UI.Create("text", header, {
-        role = "caption",
+        role = "pageSubtitle",
         text = options.subtitle or "",
         layer = "OVERLAY",
     })
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
-    subtitle:SetPoint("TOPRIGHT", title, "BOTTOMRIGHT", 0, -3)
+    subtitle:SetPoint("TOPLEFT", header, "LEFT", leftInset, -3)
+    subtitle:SetPoint("TOPRIGHT", header, "RIGHT", -contentRightInset, -3)
     subtitle:SetJustifyH("LEFT")
     subtitle:SetWordWrap(false)
     header.subtitle = subtitle

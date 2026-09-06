@@ -16,7 +16,10 @@ function Region:SetVertexColor(...) self.vertexColor = { ... } end
 function Region:SetGradient(...) self.gradient = { ... } end
 function Region:SetBlendMode(mode) self.blendMode = mode end
 function Region:SetAlpha(alpha) self.alpha = alpha end
-function Region:SetPoint(...) end
+function Region:SetPoint(...)
+    self.pointCalls = self.pointCalls or {}
+    table.insert(self.pointCalls, { ... })
+end
 function Region:SetAllPoints() self.allPoints = true end
 function Region:SetSize(width, height) self.width, self.height = width, height end
 function Region:SetWidth(width) self.width = width end
@@ -83,8 +86,10 @@ end
 AssertColor("canvas", 0x0B, 0x11, 0x18)
 AssertColor("panel", 0x10, 0x18, 0x20)
 AssertColor("focusSurface", 0x24, 0x30, 0x45)
+AssertColor("focusSurfaceSubtle", 0x18, 0x26, 0x34)
 AssertColor("focus", 0x5D, 0x8F, 0xB2)
 AssertColor("forgeGold", 0xD3, 0xA2, 0x3A)
+AssertColor("success", 0x62, 0xC9, 0x78)
 AssertColor("successSurface", 0x17, 0x38, 0x24)
 AssertColor("rowHoverWash", 0xA7, 0xB3, 0xBD)
 assert(NearlyEqual(BG.UI.Token("color", "rowHoverWash")[4], 0.055),
@@ -107,14 +112,23 @@ local pageHeader = BG.UI.CreatePageHeader(parent, {
     subtitle = "点击角色名称可查看装备、背包、专业、资源与进度",
     contentRightInset = 260,
 })
-assert(pageHeader._bgforgeKind == "pageHeader" and pageHeader.height == 58,
+assert(pageHeader._bgforgeKind == "pageHeader" and pageHeader.height == 72,
     "Shared page header should use the standard page-header height")
-assert(pageHeader.title.text == "全角色总览" and pageHeader.title.fontSize == 16,
+assert(pageHeader.title.text == "全角色总览" and pageHeader.title.fontSize == 18,
     "Shared page header should apply title content and typography")
-assert(pageHeader.subtitle.wordWrap == false and pageHeader.subtitle.fontSize == 11,
-    "Shared page-header subtitles should stay compact and single-line")
-assert(pageHeader.accent.width == 2,
-    "Shared page header should use the standard focus-line width")
+assert(pageHeader.subtitle.wordWrap == false and pageHeader.subtitle.fontSize == 14,
+    "Shared page-header subtitles should stay readable and single-line")
+assert(pageHeader.accent.width == 3 and pageHeader.accent.height == 40,
+    "Shared page header should use the short page-header accent")
+assert(pageHeader.title.pointCalls[1][1] == "BOTTOMLEFT"
+    and pageHeader.title.pointCalls[1][3] == "LEFT"
+    and pageHeader.title.pointCalls[1][4] == 18
+    and pageHeader.title.pointCalls[2][3] == "RIGHT"
+    and pageHeader.subtitle.pointCalls[1][1] == "TOPLEFT"
+    and pageHeader.subtitle.pointCalls[1][3] == "LEFT"
+    and pageHeader.subtitle.pointCalls[2][3] == "RIGHT"
+    and pageHeader.subtitle.pointCalls[1][4] == 18,
+    "Shared page-header copy should span the header edges with a positive width")
 assert(NearlyEqual(pageHeader.accent.vertexColor[1], expectedFocus[1]),
     "Shared page-header accent should use the focus color")
 

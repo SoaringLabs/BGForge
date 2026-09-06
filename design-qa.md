@@ -228,3 +228,60 @@ The focused comparison confirms that the reference uses a narrow profession iden
 - Post-fix visual evidence: blocked pending the next in-client capture.
 
 final result: blocked
+
+## Page Header QA — 2026-09-06
+
+**Comparison Target**
+
+- Source visual truth: `/Users/liushuxiang/.codex/generated_images/01a07691-b072-7c93-be08-524cc89a70f2/exec-7d82907b-b41e-42e5-9a67-5b50e5adf0d0.png`
+- Source pixels: 1448 × 1086
+- Implementation screenshot: unavailable; the WoW/Titan client runtime is not available in this workspace session
+- Implementation pixels: unavailable
+- CSS size and density normalization: not applicable to the WoW UI runtime; source density is an image-generation preview
+- Intended state: embedded “角色总览” and “心愿清单” large interfaces at the viewport shown in the supplied full-page references
+
+**Findings**
+
+- [P2] Runtime visual comparison is pending
+  Location: shared page header in both embedded large interfaces.
+  Evidence: the source mock is open and readable, but there is no post-change WoW client screenshot to place beside it. Static layout assertions confirm the intended 72px height, 18px title, 14px instruction, 3×40px accent, and per-page content baseline; they cannot prove final font metrics after WoW UI scaling.
+  Impact: wrapping, optical vertical centering, and the exact relationship to the live table/workbench cannot be signed off from source code alone.
+  Fix: reload the addon in Titan Reforged Classic, capture both large interfaces at the same UI scale as the references, and compare those captures with the selected mock.
+
+**Required Fidelity Surfaces**
+
+- Fonts and typography: statically matched to the selected design tokens (18px title, 14px instruction, existing WoW font and outline); live font metrics remain unverified.
+- Spacing and layout rhythm: statically matched to a 72px header, centered two-line group, 3×40px accent, and content-aligned insets; live scaling remains unverified.
+- Colors and visual tokens: existing Arcane Archive `header`, `focus`, `textPrimary`, and `textSecondary` tokens are preserved.
+- Image quality and asset fidelity: no new image assets were introduced; existing item icons and product chrome are unchanged.
+- Copy and content: existing localized page titles and instructions are preserved.
+
+**Full-view Comparison Evidence**
+
+- Blocked because no rendered implementation capture is available.
+
+**Focused Region Comparison Evidence**
+
+- Blocked for the same reason; the page-header region needs a post-reload in-game crop.
+
+**Comparison History**
+
+- Initial implementation: changed the shared page-header geometry and typography, then added page-specific baseline insets.
+- In-client feedback exposed an invisible text region: both horizontal anchors targeted the header center, producing a negative-width FontString.
+- Fix: retain the vertically centered composition while anchoring the left edge to the header's `LEFT` and the right edge to its `RIGHT`; a regression assertion now rejects center-to-center or otherwise inverted spans.
+- In-client spacing feedback: reduced both page headers to the shared 18px leading inset so the title group sits closer to the Rune Blue marker.
+- Automated verification: design-system, wishlist render, raid-lockout overview, character-details, wishlist integration, and privacy checks pass.
+- Post-fix visual evidence: unavailable pending an in-game capture.
+
+**Implementation Checklist**
+
+- Reload BGForge in Titan Reforged Classic.
+- Capture the large “角色总览” page.
+- Capture the large “心愿清单” page.
+- Compare both headers with the selected source mock at the same UI scale.
+
+**Follow-up Polish**
+
+- Adjust only the vertical offsets or per-page inset if the WoW font's live optical bounds differ from the test harness.
+
+final result: blocked
