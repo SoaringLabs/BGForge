@@ -90,6 +90,8 @@ local activeView = "equipment"
 local SetActiveView
 local selectedProgressRaidID
 local progressSelectionCharacterName
+local renderedCharacters
+local RenderCharacterList
 
 local function Token(name)
     return UI.Token("color", name)
@@ -438,6 +440,15 @@ local function CreateEnhancementButton(parent)
     button.icon = button:CreateTexture(nil, "ARTWORK")
     button.icon:SetAllPoints()
     button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    button:SetScript("OnEnter", function(self)
+        if self.itemID then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetHyperlink("item:" .. self.itemID)
+            GameTooltip:Show()
+        elseif self.link then
+            ShowItemTooltip(self, self.link)
+        end
+    end)
     button:SetScript("OnLeave", function()
         GameTooltip:Hide()
     end)
@@ -507,9 +518,6 @@ local function SetEquipmentRow(row, definition, item)
         local button = row.enhancements[enhancementIndex]
         button.link = item.link
         button.icon:SetTexture(ENCHANT_TEXTURE)
-        button:SetScript("OnEnter", function(self)
-            ShowItemTooltip(self, self.link)
-        end)
         button:Show()
         enhancementIndex = enhancementIndex + 1
     end
@@ -520,14 +528,6 @@ local function SetEquipmentRow(row, definition, item)
         end
         button.itemID = gemID
         button.icon:SetTexture(GetItemIcon(gemID))
-        button:SetScript("OnEnter", function(self)
-            if not self.itemID then
-                return
-            end
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetHyperlink("item:" .. self.itemID)
-            GameTooltip:Show()
-        end)
         button:Show()
         enhancementIndex = enhancementIndex + 1
     end
@@ -1581,9 +1581,9 @@ local function CreateFrameContents(parent)
     end
     left:EnableMouseWheel(true)
     left:SetScript("OnMouseWheel", function(_, delta)
-        local characters = GetCharacters()
+        local characters = renderedCharacters or GetCharacters()
         characterOffset = max(0, min(characterOffset - delta, max(0, #characters - MAX_CHARACTER_ROWS)))
-        M.Refresh()
+        RenderCharacterList(characters)
     end)
 
     local right = CreateSurface(frame, "panel")
@@ -1719,7 +1719,7 @@ local function CreateFrameContents(parent)
     end
 end
 
-local function RenderCharacterList(characters)
+RenderCharacterList = function(characters)
     frame.listCount:SetFormattedText("%d " .. L["个角色"], #characters)
     characterOffset = min(characterOffset, max(0, #characters - MAX_CHARACTER_ROWS))
     for poolIndex, row in ipairs(frame.characterRows) do
@@ -1951,6 +1951,7 @@ function M.Refresh()
         return
     end
     selectedCharacterName = character.name
+    renderedCharacters = characters
     RenderCharacterList(characters)
 
     frame.characterTitle:SetText(
@@ -1987,6 +1988,7 @@ function M.Show(parent, realmID, characterName, onBack)
     end
     selectedRealmID = realmID
     selectedCharacterName = characterName
+    renderedCharacters = nil
     backCallback = onBack
     suppressBackCallback = false
     if frame.SetPropagateKeyboardInput then

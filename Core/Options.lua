@@ -205,10 +205,11 @@ BG.Init(function()
 
     -- 角色总览
     do
-        raidLockout:SetSize(1, 320)
+        local contentOffset = 110
+        raidLockout:SetSize(1, 320 + contentOffset)
 
         local title = raidLockout:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        title:SetPoint("TOPLEFT", 15, -15)
+        title:SetPoint("TOPLEFT", 15, -(15 + contentOffset))
         title:SetText(L["CD展示设置"])
         title:SetTextColor(0, 0.75, 1)
 
@@ -221,7 +222,7 @@ BG.Init(function()
         local choices = BG.GetRaidLockoutDisplayChoices and BG.GetRaidLockoutDisplayChoices() or {}
         local columnWidth = 175
         local choiceRowCount = max(1, ceil(#choices / 4))
-        local lineY = 72 + (choiceRowCount - 1) * 34 + 44
+        local lineY = 72 + contentOffset + (choiceRowCount - 1) * 34 + 44
         for index, choice in ipairs(choices) do
             local optionKey = choice.optionKey
             local moduleName = choice.name
@@ -232,7 +233,7 @@ BG.Init(function()
             local checkbox = CreateFrame("CheckButton", nil, raidLockout, "ChatConfigCheckButtonTemplate")
             local column = (index - 1) % 4
             local row = floor((index - 1) / 4)
-            checkbox:SetPoint("TOPLEFT", 15 + column * columnWidth, -72 - row * 34)
+            checkbox:SetPoint("TOPLEFT", 15 + column * columnWidth, -72 - contentOffset - row * 34)
             checkbox:SetSize(28, 28)
             checkbox.Text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
             checkbox.Text:SetText(moduleName)
@@ -630,6 +631,82 @@ BG.Init(function()
         end
     end
 
+    -- 「表格」和「角色总览」共享同一个背景透明度设置。
+    local backgroundAlphaSliders = {}
+    local syncingBackgroundAlpha
+    BG.options.alphareset = 0.8
+    if type(BiaoGe.options.alpha) ~= "number" then
+        local legacyAlpha = BiaoGe.Alpha
+        BiaoGe.options.alpha = type(legacyAlpha) == "number" and legacyAlpha or BG.options.alphareset
+    end
+
+    local function UpdateBackgroundAlpha(alpha)
+        alpha = tonumber(alpha) or BG.options.alphareset
+        alpha = tonumber(string.format("%.2f", max(0, min(1, alpha))))
+        if syncingBackgroundAlpha then
+            return
+        end
+
+        syncingBackgroundAlpha = true
+        BiaoGe.options.alpha = alpha
+        for _, slider in ipairs(backgroundAlphaSliders) do
+            if slider:GetValue() ~= alpha then
+                slider:SetValue(alpha)
+            end
+            slider.edit:SetText(alpha)
+        end
+
+        BG.MainFrame.Bg:SetAlpha(alpha)
+        BG.auctionLogFrame:SetBackdropColor(0, 0, 0, alpha)
+        if BG.itemGuoQiFrame then
+            BG.itemGuoQiFrame:SetBackdropColor(0, 0, 0, alpha)
+        end
+        for _, v in ipairs(BG.tabButtons) do
+            v.button.bg:SetAlpha(alpha)
+        end
+        if BG.RefreshRaidLockoutBackgroundAlpha then
+            BG.RefreshRaidLockoutBackgroundAlpha()
+        end
+        syncingBackgroundAlpha = nil
+    end
+
+    local function CreateBackgroundAlphaSlider(parent, x, y, registryKey)
+        local ontext = {
+            L["背景材质透明度"] .. L["|cff808080（右键还原设置）|r"],
+            L["调整背景材质透明度。"],
+        }
+        local slider = O.CreateSlider(
+            "alpha",
+            "|cffFFFFFF" .. L["背景材质透明度"] .. "|r",
+            parent,
+            0,
+            1,
+            0.05,
+            x,
+            y,
+            ontext
+        )
+        BG.options[registryKey] = slider
+        backgroundAlphaSliders[#backgroundAlphaSliders + 1] = slider
+
+        slider:SetScript("OnValueChanged", function(self, value)
+            self.edit:ClearFocus()
+            if not syncingBackgroundAlpha then
+                UpdateBackgroundAlpha(value)
+            end
+        end)
+        slider.button:SetScript("OnClick", function(_, mouseButton)
+            if mouseButton == "RightButton" then
+                UpdateBackgroundAlpha(BG.options.alphareset)
+                BG.PlaySound(1)
+            end
+        end)
+        return slider
+    end
+
+    CreateBackgroundAlphaSlider(raidLockout, 15, -35, "buttonRaidLockoutAlpha")
+    O.CreateLine(raidLockout, -100)
+
     local function SetParent(self, key)
         if BiaoGe.options[key] ~= 1 then
             self:Hide()
@@ -702,58 +779,8 @@ BG.Init(function()
         end
         -- 背景材质透明度
         do
-            local name = "alpha"
-            BG.options[name .. "reset"] = 0.8
-            if not BiaoGe.options[name] then
-                if BiaoGe.Alpha then
-                    BiaoGe.options[name] = BiaoGe.Alpha
-                else
-                    BiaoGe.options[name] = BG.options[name .. "reset"]
-                end
-            end
-            if type(BiaoGe.options[name]) ~= "number" then
-                BiaoGe.options[name] = BG.options[name .. "reset"]
-            end
-
-            local ontext = {
-                L["背景材质透明度"] .. L["|cff808080（右键还原设置）|r"],
-                L["调整背景材质透明度。"],
-                -- " ",
-                -- L[""],
-            }
-            local f = O.CreateSlider(name, "|cffFFFFFF" .. L["背景材质透明度"] .. "|r", biaoge, 0, 1, 0.05, 220, height - h, ontext)
-            BG.options["button" .. name] = f
-
-            local function UpdateAlpha(alpha)
-                BG.MainFrame.Bg:SetAlpha(alpha)
-                BG.auctionLogFrame:SetBackdropColor(0, 0, 0, alpha)
-                if BG.itemGuoQiFrame then
-                    BG.itemGuoQiFrame:SetBackdropColor(0, 0, 0, alpha)
-                end
-                for _, v in ipairs(BG.tabButtons) do
-                    v.button.bg:SetAlpha(alpha)
-                end
-            end
-
-            f:SetScript("OnValueChanged", function(self, value)
-                f.edit:ClearFocus()
-                value = tonumber(string.format("%.2f", value))
-                BiaoGe.options[name] = value
-                f.edit:SetText(value)
-                UpdateAlpha(value)
-            end)
-            f.button:SetScript("OnClick", function(self, enter)
-                if enter == "RightButton" then
-                    if BG.options[name .. "reset"] then
-                        local value = BG.options[name .. "reset"]
-                        BiaoGe.options[name] = value
-                        f:SetValue(value)
-                        f.edit:SetText(value)
-                        UpdateAlpha(value)
-                        BG.PlaySound(1)
-                    end
-                end
-            end)
+            CreateBackgroundAlphaSlider(biaoge, 220, height - h, "buttonalpha")
+            UpdateBackgroundAlpha(BiaoGe.options.alpha)
         end
         -- 背景材质
         do
@@ -766,7 +793,7 @@ BG.Init(function()
             BG.Once("options", 250610, function()
                 if BiaoGe.options[name] == "Interface/FrameGeneral/UI-Background-Rock" then
                     BiaoGe.options[name] = "0.01,0.01,0.01,0.8"
-                    BiaoGe.options["alpha"] = .8
+                    UpdateBackgroundAlpha(.8)
                 end
             end)
 
@@ -790,10 +817,7 @@ BG.Init(function()
                                 a = value.alpha or 1
                             end
                         end
-                        BiaoGe.options["alpha"] = a
-                        BG.options["buttonalpha"]:SetValue(BiaoGe.options["alpha"])
-                        BG.options["buttonalpha"].edit:SetText(BiaoGe.options["alpha"])
-                        BG.MainFrame.Bg:SetAlpha(BiaoGe.options["alpha"])
+                        UpdateBackgroundAlpha(a)
                     end
                 else
                     local r, g, b, a = strsplit(",", v)
@@ -802,10 +826,7 @@ BG.Init(function()
                     BG.MainFrame.Bg:SetColorTexture(r, g, b)
 
                     if setAlpha then
-                        BiaoGe.options["alpha"] = a
-                        BG.options["buttonalpha"]:SetValue(BiaoGe.options["alpha"])
-                        BG.options["buttonalpha"].edit:SetText(BiaoGe.options["alpha"])
-                        BG.MainFrame.Bg:SetAlpha(tonumber(BiaoGe.options["alpha"]))
+                        UpdateBackgroundAlpha(a)
                     end
                 end
             end

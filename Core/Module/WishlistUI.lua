@@ -1396,7 +1396,7 @@ function Wishlist.CreateUI()
         subtitle = L["按职业套装与首领掉落建立心愿；实际掉落会提醒，拍卖时保持展开。"],
         contentRightInset = 180,
     })
-    headerSurface:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 0, headerTop)
+    headerSurface:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", pageHeaderEdgeInset, headerTop)
     headerSurface:SetPoint(
         "TOPRIGHT",
         BG.MainFrame,

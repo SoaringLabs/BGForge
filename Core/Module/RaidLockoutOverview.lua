@@ -286,8 +286,10 @@ end
 local ITEM_TILE_SIZE = 22
 local ITEM_TILE_GAP = 2
 local ITEM_TILE_PADDING = 4
+local CHARACTER_DETAILS_CHEVRON_TEXTURE = "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up"
+local CHARACTER_DETAILS_CHEVRON_SIZE = 16
+local CHARACTER_DETAILS_CHEVRON_ALPHA = 0.55
 local PROFESSION_TILE_COLOR = { 0.84, 0.55, 0.18, 1 }
-local RESOURCE_NUMBER_FONT = "Interface\\AddOns\\BGForge\\Media\\Fonts\\RobotoCondensed-Medium.ttf"
 local RESOURCE_NUMBER_FONT_SIZE = 12
 local HEADER_HORIZONTAL_PADDING = 14
 local HEADER_WIDTH_SAFETY = 4
@@ -315,13 +317,138 @@ local SMALL_UI = {
     horizontalScrollHeight = 16,
 }
 
-local function CalculateItemStripLayout(cellWidth, itemCount)
+local function CalculateItemStripRequiredWidth(itemCount, itemSize)
+    itemCount = max(0, tonumber(itemCount) or 0)
+    itemSize = max(1, tonumber(itemSize) or ITEM_TILE_SIZE)
+    local gaps = max(0, itemCount - 1)
+    return max(54, ITEM_TILE_PADDING * 2 + itemCount * itemSize + gaps * ITEM_TILE_GAP)
+end
+
+local function CalculateItemStripLayout(cellWidth, itemCount, itemSize)
+    itemSize = max(1, tonumber(itemSize) or ITEM_TILE_SIZE)
     local usableWidth = max(0, cellWidth - ITEM_TILE_PADDING * 2)
-    local capacity = max(0, floor((usableWidth + ITEM_TILE_GAP) / (ITEM_TILE_SIZE + ITEM_TILE_GAP)))
+    local capacity = max(0, floor((usableWidth + ITEM_TILE_GAP) / (itemSize + ITEM_TILE_GAP)))
     local visibleCount = min(itemCount or 0, capacity)
     local stripWidth = visibleCount > 0
-        and visibleCount * ITEM_TILE_SIZE + (visibleCount - 1) * ITEM_TILE_GAP or 0
-    return visibleCount, (cellWidth - stripWidth) / 2, ITEM_TILE_SIZE, ITEM_TILE_GAP
+        and visibleCount * itemSize + (visibleCount - 1) * ITEM_TILE_GAP or 0
+    return visibleCount, (cellWidth - stripWidth) / 2, itemSize, ITEM_TILE_GAP
+end
+
+local function CalculateConstrainedColumnWidths(definitions, availableWidth)
+    definitions = definitions or {}
+    local widths = {}
+    local totalWidth = 0
+    local targetWidth = max(0, tonumber(availableWidth) or 0)
+
+    for _, definition in ipairs(definitions) do
+        local minimumWidth = max(0, tonumber(definition.minimumWidth) or 0)
+        local preferredWidth = max(minimumWidth, tonumber(definition.preferredWidth) or minimumWidth)
+        widths[definition.id] = preferredWidth
+        totalWidth = totalWidth + preferredWidth
+    end
+
+    if totalWidth < targetWidth and #definitions > 0 then
+        local totalGrowWeight = 0
+        for _, definition in ipairs(definitions) do
+            totalGrowWeight = totalGrowWeight + max(0, tonumber(definition.growWeight) or 1)
+        end
+        if totalGrowWeight == 0 then
+            return widths, totalWidth, 0
+        end
+        local remainingExtra = targetWidth - totalWidth
+        totalWidth = 0
+        for index, definition in ipairs(definitions) do
+            local growWeight = max(0, tonumber(definition.growWeight) or 1)
+            local columnWidth = widths[definition.id]
+                + remainingExtra * growWeight / totalGrowWeight
+            if index == #definitions and growWeight > 0 then
+                columnWidth = targetWidth - totalWidth
+            end
+            widths[definition.id] = columnWidth
+            totalWidth = totalWidth + columnWidth
+        end
+        return widths, totalWidth, 0
+    end
+
+    local shortage = max(0, totalWidth - targetWidth)
+    for priority = 1, 3 do
+        while shortage > 0 do
+            local active = {}
+            for _, definition in ipairs(definitions) do
+                if (definition.shrinkPriority or 2) == priority then
+                    local minimumWidth = max(0, tonumber(definition.minimumWidth) or 0)
+                    if widths[definition.id] > minimumWidth then
+                        active[#active + 1] = definition
+                    end
+                end
+            end
+            if #active == 0 then
+                break
+            end
+
+            local share = shortage / #active
+            local removed = 0
+            for _, definition in ipairs(active) do
+                local minimumWidth = max(0, tonumber(definition.minimumWidth) or 0)
+                local reduction = min(share, widths[definition.id] - minimumWidth)
+                widths[definition.id] = widths[definition.id] - reduction
+                removed = removed + reduction
+            end
+            if removed <= 0 then
+                break
+            end
+            totalWidth = totalWidth - removed
+            shortage = max(0, shortage - removed)
+        end
+    end
+
+    return widths, totalWidth, max(0, totalWidth - targetWidth)
+end
+
+local function CalculateTypographyMetrics(fontHeight, isEmbedded)
+    local measuredHeight = max(0, tonumber(fontHeight) or 0)
+    local textHeight = ceil(measuredHeight + 6)
+    local itemTileSize = isEmbedded and 30 or ITEM_TILE_SIZE
+    local raidRowHeight = max(isEmbedded and 30 or SMALL_UI.rowHeight, textHeight)
+    local resourceRowHeight = max(
+        isEmbedded and 36 or SMALL_UI.rowHeight,
+        itemTileSize + (isEmbedded and 6 or 2),
+        textHeight
+    )
+    return {
+        rowHeight = raidRowHeight,
+        raidRowHeight = raidRowHeight,
+        resourceRowHeight = resourceRowHeight,
+        itemTileSize = itemTileSize,
+        headerTierHeight = max(
+            isEmbedded and 26 or SMALL_UI.raidHeaderGroupHeight,
+            textHeight
+        ),
+    }
+end
+
+local function CalculateVerticalViewport(
+    contentHeight,
+    availableHeight,
+    horizontalOverflow,
+    horizontalScrollHeight,
+    isEmbedded
+)
+    contentHeight = max(0, tonumber(contentHeight) or 0)
+    if not isEmbedded then
+        return contentHeight, 0
+    end
+    local viewportLimit = max(
+        120,
+        (tonumber(availableHeight) or contentHeight)
+            - ((tonumber(horizontalOverflow) or 0) > 0 and (horizontalScrollHeight or 0) or 0)
+    )
+    local viewportHeight = min(contentHeight, viewportLimit)
+    return viewportHeight, max(0, contentHeight - viewportHeight)
+end
+
+local function IsTextActuallyTruncated(fontString)
+    return fontString and fontString.IsTruncated and fontString:IsTruncated() == true or false
 end
 
 local function GetItemTileDisplay(item, valueKey, forcedQuality, valuePrefix)
@@ -701,7 +828,7 @@ local function CollectLegendaryFromContainer(containerID, target)
     end
 end
 
-local function CaptureEquippedAndBagLegendaries()
+local function CaptureEquippedLegendaries()
     local items = {}
     for slotID = 1, 19 do
         local link = GetInventoryItemLink("player", slotID)
@@ -713,9 +840,6 @@ local function CaptureEquippedAndBagLegendaries()
                 items[#items + 1] = item
             end
         end
-    end
-    for bagID = 0, NUM_BAG_SLOTS do
-        CollectLegendaryFromContainer(bagID, items)
     end
     return MergeItemSnapshots(items)
 end
@@ -782,7 +906,7 @@ local COLOR = {
     headerStrong = DesignColor("raised"),
     row = DesignColor("row"),
     rowHoverWash = DesignColor("rowHoverWash"),
-    current = DesignColor("focusSurface"),
+    current = DesignColor("focusSurfaceSubtle"),
     gold = DesignColor("forgeGold"),
     grid = DesignColor("borderSubtle"),
     gridStrong = DesignColor("borderStrong"),
@@ -791,10 +915,21 @@ local COLOR = {
     textPrimary = DesignColor("textPrimary"),
     textSecondary = DesignColor("textSecondary"),
     textMuted = DesignColor("textMuted"),
-    complete = DesignColor("successSurface"),
+    success = DesignColor("success"),
     partial = DesignColor("warningSurface"),
     warning = DesignColor("warning"),
 }
+
+-- 角色总览与表格共用「背景材质透明度」；只替换背景色的
+-- alpha，不降低文字、图标和边框的透明度。
+local function GetBackgroundAlpha()
+    local alpha = BiaoGe and BiaoGe.options and tonumber(BiaoGe.options.alpha)
+    return max(0, min(1, alpha or 0.8))
+end
+
+local function ResolveHoverSurfaceColor(color)
+    return { color[1], color[2], color[3], GetBackgroundAlpha() }
+end
 
 local function GetLockoutOptionKey(columnID)
     return RAID_OPTION_PREFIX .. columnID
@@ -866,59 +1001,54 @@ local function CalculateHorizontalViewport(contentWidth, screenWidth)
     return viewportWidth, max(0, contentWidth - viewportWidth)
 end
 
-local function CalculateRaidColumnWidths(raids, availableWidth, minimumWidths)
-    local widths = {}
-    if #raids == 0 then
-        return widths, 0
+local function CalculateOverviewViewportWidth(
+    preferredWidth,
+    screenWidth,
+    mainFrameWidth,
+    isEmbedded,
+    padding
+)
+    if isEmbedded and mainFrameWidth then
+        return max(320, mainFrameWidth - (padding or 0) * 2)
     end
-
-    local compactWidth = 0
-    for _, raid in ipairs(raids) do
-        compactWidth = compactWidth + (minimumWidths and minimumWidths[raid.id] or raid.compactWidth)
-    end
-
-    local extraPerRaid = max(0, availableWidth - compactWidth) / #raids
-    local assignedWidth = 0
-    for index, raid in ipairs(raids) do
-        local minimumWidth = minimumWidths and minimumWidths[raid.id] or raid.compactWidth
-        local columnWidth = minimumWidth + extraPerRaid
-        if index == #raids and availableWidth >= compactWidth then
-            columnWidth = availableWidth - assignedWidth
-        end
-        widths[raid.id] = columnWidth
-        assignedWidth = assignedWidth + columnWidth
-    end
-    return widths, assignedWidth
+    return CalculateHorizontalViewport(preferredWidth, screenWidth)
 end
 
-local function CalculateResourceColumnWidths(ui, availableWidth)
-    local definitions = {
-        { id = "profession", width = ui.professionWidth },
-        { id = "legendary", width = ui.legendaryWidth },
-        { id = "fragment", width = ui.fragmentWidth },
-        { id = "upgrade", width = ui.upgradeWidth },
-        { id = "trinket", width = ui.trinketWidth },
-        { id = "gold", width = ui.goldWidth },
-        { id = "ember", width = ui.emberWidth },
-        { id = "shard", width = ui.shardWidth },
-    }
-    local compactWidth = 0
-    for _, definition in ipairs(definitions) do
-        compactWidth = compactWidth + definition.width
+local function CalculateRaidColumnWidths(raids, availableWidth, minimumWidths)
+    local definitions = {}
+    for _, raid in ipairs(raids) do
+        definitions[#definitions + 1] = {
+            id = raid.id,
+            preferredWidth = minimumWidths and minimumWidths[raid.id] or raid.compactWidth,
+            minimumWidth = raid.compactWidth,
+            shrinkPriority = 2,
+        }
     end
+    return CalculateConstrainedColumnWidths(definitions, availableWidth)
+end
 
-    local extraPerColumn = max(0, availableWidth - compactWidth) / #definitions
-    local widths = {}
-    local assignedWidth = 0
-    for index, definition in ipairs(definitions) do
-        local columnWidth = definition.width + extraPerColumn
-        if index == #definitions and availableWidth >= compactWidth then
-            columnWidth = availableWidth - assignedWidth
-        end
-        widths[definition.id] = columnWidth
-        assignedWidth = assignedWidth + columnWidth
+local function CalculateResourceColumnWidths(ui, availableWidth, constraints)
+    local definitions = {
+        { id = "profession", width = ui.professionWidth, priority = 1 },
+        { id = "legendary", width = ui.legendaryWidth, priority = 1 },
+        { id = "fragment", width = ui.fragmentWidth, priority = 1 },
+        { id = "upgrade", width = ui.upgradeWidth, priority = 1 },
+        { id = "trinket", width = ui.trinketWidth, priority = 1 },
+        { id = "gold", width = ui.goldWidth, priority = 3 },
+        { id = "ember", width = ui.emberWidth, priority = 3 },
+        { id = "shard", width = ui.shardWidth, priority = 3 },
+    }
+    for _, definition in ipairs(definitions) do
+        local constraint = constraints and constraints[definition.id]
+        definition.preferredWidth = max(
+            definition.width,
+            constraint and constraint.preferredWidth or 0
+        )
+        definition.minimumWidth = constraint and constraint.minimumWidth
+            or (definition.priority == 3 and 64 or 54)
+        definition.shrinkPriority = definition.priority
     end
-    return widths, assignedWidth
+    return CalculateConstrainedColumnWidths(definitions, availableWidth)
 end
 
 local currentCharacter = {
@@ -938,7 +1068,10 @@ local hoverFloatingFrameLevel
 local hoverHideSerial = 0
 local updateOverviewFrame
 local updateHoverFrame
+local RequestHoverRender
 local ShowEmbeddedOverview
+local normalizedDataStore
+local normalizedDataAt
 
 local function GetCurrentRealmID()
     return GetRealmID()
@@ -949,13 +1082,36 @@ local function GetCurrentCharacterName()
 end
 
 local function OpenEmbeddedCharacterDetails(character)
-    if not hoverEmbedded or not character
-        or not BG.CharacterDetails or not BG.CharacterDetails.Show
-    then
+    if not character or not BG.CharacterDetails or not BG.CharacterDetails.Show then
         return
     end
+
+    if not hoverEmbedded then
+        -- The floating overview has no detail host of its own. Move into the
+        -- large overview first, then open the selected character in-place.
+        hoverHideSerial = hoverHideSerial + 1
+        hoverAnchor = nil
+        if hoverFrame then
+            hoverFrame:Hide()
+        end
+
+        if not BG.RaidLockoutMainFrame and BG.RoleOverviewUI then
+            BG.RoleOverviewUI()
+        end
+        local mainFrame = BG.RaidLockoutMainFrame
+        if BG.MainFrame and BG.ClickTabButton and BG.RaidLockoutMainFrameTabNum then
+            BG.MainFrame:Show()
+            BG.ClickTabButton(BG.RaidLockoutMainFrameTabNum)
+        elseif mainFrame then
+            mainFrame:Show()
+            if not hoverEmbedded and ShowEmbeddedOverview then
+                ShowEmbeddedOverview(mainFrame)
+            end
+        end
+    end
+
     local parent = hoverFrame and hoverFrame:GetParent()
-    if not parent then
+    if not hoverEmbedded or not parent then
         return
     end
 
@@ -1308,7 +1464,21 @@ local function ClearExpiredRaidData()
     if resetAll then
         data.nextResetAt = nil
     end
+    normalizedDataStore = data
+    normalizedDataAt = now
     return changed
+end
+
+local function EnsureRaidDataNormalized()
+    local data = GetDataStore()
+    local now = GetServerTime()
+    if normalizedDataStore ~= data
+        or not normalizedDataAt
+        or now < normalizedDataAt
+        or now - normalizedDataAt >= 1
+    then
+        ClearExpiredRaidData()
+    end
 end
 
 local function GetCurrentTalentIndex()
@@ -1482,10 +1652,11 @@ local function GetQuestResetAt(resetType, now)
 end
 
 local function RefreshLockoutDisplays()
-    if updateOverviewFrame then
+    if updateOverviewFrame and overviewFrame and overviewFrame:IsShown() then
         updateOverviewFrame()
-    elseif updateHoverFrame then
-        updateHoverFrame()
+    end
+    if RequestHoverRender then
+        RequestHoverRender()
     end
 end
 
@@ -1534,12 +1705,18 @@ local function CaptureCurrentQuestProgress(turnedInQuestID)
         if completedQuestID then
             local resetAt = GetQuestResetAt(column.resetType, now)
             if resetAt then
-                stored.questCompletions[column.id] = {
-                    questID = completedQuestID,
-                    resetAt = resetAt,
-                    updatedAt = now,
-                }
-                changed = true
+                local previous = stored.questCompletions[column.id]
+                if not previous
+                    or previous.questID ~= completedQuestID
+                    or previous.resetAt ~= resetAt
+                then
+                    stored.questCompletions[column.id] = {
+                        questID = completedQuestID,
+                        resetAt = resetAt,
+                        updatedAt = now,
+                    }
+                    changed = true
+                end
             end
         end
     end
@@ -1550,26 +1727,33 @@ local function CaptureCurrentQuestProgress(turnedInQuestID)
     return true
 end
 
-local function CaptureCurrentResources()
+local function CaptureCurrentResources(scopes)
     local stored = GetOrCreateCurrentCharacterStore()
     if not stored then
         return
     end
 
-    stored.money = GetMoney and GetMoney() or stored.money
-    local professions = CaptureCurrentProfessions()
-    if professions then
-        stored.professions = professions
+    local captureAll = not scopes or scopes.all
+    if captureAll or scopes.money then
+        stored.money = GetMoney and GetMoney() or stored.money
     end
-    CaptureCurrentProfessionCooldowns(stored)
-    stored.trinkets = CaptureEquippedTrinkets()
-    stored.legendaryFragmentItems = CaptureLegendaryFragmentItems()
-    stored.legendaryUpgradeItems = CaptureLegendaryUpgradeItems()
-    stored.legendaryItems = MergeItemSnapshots(
-        CaptureEquippedAndBagLegendaries(),
-        stored.bankLegendaryItems
-    )
-    if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+    if captureAll or scopes.professions then
+        local professions = CaptureCurrentProfessions()
+        if professions then
+            stored.professions = professions
+        end
+        CaptureCurrentProfessionCooldowns(stored)
+    end
+    if captureAll or scopes.equipment then
+        stored.trinkets = CaptureEquippedTrinkets()
+    end
+    if captureAll or scopes.itemCounts then
+        stored.legendaryFragmentItems = CaptureLegendaryFragmentItems()
+        stored.legendaryUpgradeItems = CaptureLegendaryUpgradeItems()
+    end
+    if (captureAll or scopes.currencies)
+        and C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo
+    then
         local info = C_CurrencyInfo.GetCurrencyInfo(TITAN_EMBER_CURRENCY_ID)
         -- 登录早期可能暂时拿不到货币资料；此时保留旧快照，不能用 0 覆盖。
         if info then
@@ -1588,13 +1772,25 @@ local function CaptureCurrentResources()
         end
     end
     stored.resourcesUpdatedAt = GetServerTime()
-
-    if updateHoverFrame then
-        updateHoverFrame()
-    end
+    RefreshLockoutDisplays()
 end
 
 local pendingEquipmentItemIDs = {}
+local currentBagLegendaryItems
+
+local function RefreshCurrentLegendaryItems(stored, bagItems)
+    if bagItems then
+        currentBagLegendaryItems = MergeItemSnapshots(bagItems)
+    end
+    if not currentBagLegendaryItems then
+        return
+    end
+    stored.legendaryItems = MergeItemSnapshots(
+        CaptureEquippedLegendaries(),
+        currentBagLegendaryItems,
+        stored.bankLegendaryItems
+    )
+end
 
 local function GetOrCreateCharacterDetails(stored)
     if type(stored.details) ~= "table"
@@ -1654,13 +1850,12 @@ local function CaptureCurrentEquipment()
         slots = slots,
     }
     stored.trinkets = CaptureEquippedTrinkets()
+    RefreshCurrentLegendaryItems(stored)
     pendingEquipmentItemIDs = {}
     if BG.CharacterDetails and BG.CharacterDetails.Refresh then
         BG.CharacterDetails.Refresh()
     end
-    if updateHoverFrame then
-        updateHoverFrame()
-    end
+    RefreshLockoutDisplays()
     return true
 end
 
@@ -1680,6 +1875,7 @@ local function CaptureCurrentBackpack()
 
     local items = {}
     local itemByLink = {}
+    local legendaryItems = {}
     local totalSlots = 0
     local usedSlots = 0
     local waitingForItemData = false
@@ -1724,6 +1920,17 @@ local function CaptureCurrentBackpack()
                         items[#items + 1] = item
                     end
                     item.count = item.count + (tonumber(info.stackCount) or 1)
+                    if IsLegendaryEquipment(link, resolvedItemID or info.itemID, info.quality) then
+                        local legendary = CreateItemSnapshot(
+                            link,
+                            resolvedItemID or info.itemID,
+                            info.iconFileID,
+                            info.quality
+                        )
+                        if legendary then
+                            legendaryItems[#legendaryItems + 1] = legendary
+                        end
+                    end
                 else
                     waitingForItemData = true
                     pendingBackpackItemIDs[info.itemID] = true
@@ -1750,10 +1957,15 @@ local function CaptureCurrentBackpack()
         usedSlots = usedSlots,
         items = items,
     }
+    RefreshCurrentLegendaryItems(stored, legendaryItems)
+    stored.legendaryFragmentItems = CaptureLegendaryFragmentItems()
+    stored.legendaryUpgradeItems = CaptureLegendaryUpgradeItems()
+    stored.resourcesUpdatedAt = GetServerTime()
     pendingBackpackItemIDs = {}
     if BG.CharacterDetails and BG.CharacterDetails.Refresh then
         BG.CharacterDetails.Refresh()
     end
+    RefreshLockoutDisplays()
     return true
 end
 
@@ -1796,27 +2008,32 @@ local function CaptureCurrentBankLegendaries()
     end
     stored.bankLegendaryItems = MergeItemSnapshots(items)
     stored.bankResourcesUpdatedAt = GetServerTime()
-    CaptureCurrentResources()
+    RefreshCurrentLegendaryItems(stored)
 end
 
 local resourceRefreshSerial = 0
+local pendingResourceScopes = {}
 
-local function CaptureAvailableResources()
-    if BankFrame and BankFrame:IsShown() then
+local function CaptureAvailableResources(scopes)
+    if scopes.bank and BankFrame and BankFrame:IsShown() then
         CaptureCurrentBankLegendaries()
-    else
-        CaptureCurrentResources()
+        scopes.bank = nil
+        scopes.itemCounts = true
     end
+    CaptureCurrentResources(scopes)
 end
 
-local function ScheduleResourceRefresh(delay)
+local function ScheduleResourceRefresh(delay, scope)
+    pendingResourceScopes[scope or "all"] = true
     resourceRefreshSerial = resourceRefreshSerial + 1
     local serial = resourceRefreshSerial
     BG.After(delay or 0.2, function()
         if serial ~= resourceRefreshSerial then
             return
         end
-        CaptureAvailableResources()
+        local scopes = pendingResourceScopes
+        pendingResourceScopes = {}
+        CaptureAvailableResources(scopes)
     end)
 end
 
@@ -1853,7 +2070,7 @@ local function GetCharacterDisplayName(character, valueType)
 end
 
 local function BuildCharacterRows(realmID)
-    ClearExpiredRaidData()
+    EnsureRaidDataNormalized()
     local realm = GetRealmStore(realmID, false)
     local characters = {}
     local currentRealmID = GetCurrentRealmID()
@@ -2036,9 +2253,6 @@ local function UpdateProfessionCooldownStatusDisplay(status, character)
         return
     elseif summary.ready == summary.total then
         status.check:Show()
-        if status.background then
-            status.background:SetColorTexture(unpack(COLOR.complete))
-        end
     else
         if summary.ready > 0 then
             status.text:SetFormattedText("%d/%d", summary.ready, summary.total)
@@ -2047,7 +2261,7 @@ local function UpdateProfessionCooldownStatusDisplay(status, character)
         end
         status.text:SetTextColor(unpack(COLOR.warning))
         if status.background then
-            status.background:SetColorTexture(unpack(COLOR.partial))
+            status.background:SetColorTexture(unpack(status.partialColor or COLOR.partial))
         end
     end
 end
@@ -2112,7 +2326,7 @@ local function ShowProfessionCooldownTooltip(cell)
 end
 
 local function GetRaidResetTime()
-    ClearExpiredRaidData()
+    EnsureRaidDataNormalized()
     local nextResetAt = GetDataStore().nextResetAt
     if nextResetAt and nextResetAt > GetServerTime() then
         return nextResetAt - GetServerTime()
@@ -2161,21 +2375,15 @@ local function UpdateStatusDisplay(status, character, lockout, compact, blankWhe
         status.text:SetText("")
         if (lockout.killedCount or 0) > 0 then
             status.check:Show()
-            if status.background then
-                status.background:SetColorTexture(unpack(COLOR.complete))
-            end
         end
     elseif lockout.numEncounters == 0 or lockout.killedCount >= lockout.numEncounters then
         status.text:SetText("")
         status.check:Show()
-        if status.background then
-            status.background:SetColorTexture(unpack(COLOR.complete))
-        end
     else
         status.text:SetFormattedText("%d/%d", lockout.killedCount, lockout.numEncounters)
         if status.background then
             status.text:SetTextColor(unpack(COLOR.warning))
-            status.background:SetColorTexture(unpack(COLOR.partial))
+            status.background:SetColorTexture(unpack(status.partialColor or COLOR.partial))
         else
             status.text:SetTextColor(unpack(COLOR.warning))
         end
@@ -2199,9 +2407,6 @@ local function UpdateQuestStatusDisplay(status, character, column)
         and character.questCompletions[column.id]
     then
         status.check:Show()
-        if status.background then
-            status.background:SetColorTexture(unpack(COLOR.complete))
-        end
     end
 end
 
@@ -2240,6 +2445,7 @@ local function CreateStatusDisplay(parent, width, height, checkSize, fontSize, s
     check:SetSize(checkSize or 18, checkSize or 18)
     check:SetPoint("CENTER")
     check:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+    check:SetVertexColor(unpack(COLOR.success))
     check:Hide()
     status.check = check
 
@@ -2304,11 +2510,7 @@ local function CaptureRaidInfo()
         GetDataStore().nextResetAt = nextResetAt
     end
 
-    if updateOverviewFrame then
-        updateOverviewFrame()
-    elseif updateHoverFrame then
-        updateHoverFrame()
-    end
+    RefreshLockoutDisplays()
     if BG.RefreshRaidLockoutCharacterOptions then
         BG.RefreshRaidLockoutCharacterOptions()
     end
@@ -2325,11 +2527,7 @@ local function RequestCurrentRaidInfo()
     currentCharacter.lastRequestAt = GetTime()
     local requestSerial = currentCharacter.requestSerial
 
-    if updateOverviewFrame then
-        updateOverviewFrame()
-    elseif updateHoverFrame then
-        updateHoverFrame()
-    end
+    RefreshLockoutDisplays()
 
     RequestRaidInfo()
 
@@ -2422,7 +2620,7 @@ local function CreateOverviewFrame()
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
     })
-    overviewFrame:SetBackdropColor(unpack(COLOR.panel))
+    overviewFrame:SetBackdropColor(unpack(ResolveHoverSurfaceColor(COLOR.panel)))
     overviewFrame:SetBackdropBorderColor(unpack(COLOR.gridStrong))
     overviewFrame:Hide()
     tinsert(UISpecialFrames, overviewFrame:GetName())
@@ -2611,8 +2809,8 @@ local function CreateOverviewFrame()
             statusText:SetText(L["尚未收到当前角色的团本锁定数据。"])
         end
 
-        if updateHoverFrame then
-            updateHoverFrame()
+        if RequestHoverRender then
+            RequestHoverRender()
         end
     end
 
@@ -2635,14 +2833,43 @@ local function CreateHoverFrame()
     local width = 720
     local resourceTop = 0
     local resourceRowsTop = 0
+    local itemTileSize = ITEM_TILE_SIZE
     local contentFrame
+    local ScrollOverview
+    local SetRowHoverVisible
+    local ShowTruncatedTextTooltip
+    local surfaceCells = {}
+
+    local function ApplyStatusSurfaceColors(cell)
+        cell.partialColor = ResolveHoverSurfaceColor(COLOR.partial)
+    end
+
+    local function ApplySurfaceColor(region, color)
+        local resolved = ResolveHoverSurfaceColor(color)
+        region._bgforgeSurfaceColor = color
+        region:SetBackdropColor(unpack(resolved))
+    end
+
+    local function RefreshSurfaceColors()
+        local panelColor = ResolveHoverSurfaceColor(COLOR.panel)
+        hoverFrame:SetBackdropColor(unpack(panelColor))
+        for _, cell in ipairs(surfaceCells) do
+            ApplySurfaceColor(cell, cell._bgforgeSurfaceColor)
+        end
+        for _, row in ipairs(rows) do
+            for _, cell in pairs(row.raidCells) do
+                ApplyStatusSurfaceColors(cell)
+            end
+        end
+    end
 
     local function CreateTableCell(parent, backgroundColor, borders)
         local cell = CreateFrame("Frame", nil, parent, "BackdropTemplate")
         cell:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8X8",
         })
-        cell:SetBackdropColor(unpack(backgroundColor or COLOR.row))
+        surfaceCells[#surfaceCells + 1] = cell
+        ApplySurfaceColor(cell, backgroundColor or COLOR.row)
 
         borders = borders or {}
         local function AddVerticalBorder(point)
@@ -2692,7 +2919,7 @@ local function CreateHoverFrame()
 
     local function CreateResourceNumberText(cell)
         local text = CreateCellText(cell, nil, nil, COLOR.gold, "CENTER")
-        text:SetFont(RESOURCE_NUMBER_FONT, RESOURCE_NUMBER_FONT_SIZE, "OUTLINE")
+        text:SetFont(BIAOGE_TEXT_FONT, RESOURCE_NUMBER_FONT_SIZE, "OUTLINE")
         return text
     end
 
@@ -2708,12 +2935,14 @@ local function CreateHoverFrame()
         tile:SetSize(ITEM_TILE_SIZE, ITEM_TILE_SIZE)
         tile:SetFrameLevel(hoverFrame:GetFrameLevel() + 20)
         tile:EnableMouse(true)
+        tile:EnableMouseWheel(true)
         tile:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8X8",
             edgeFile = "Interface\\Buttons\\WHITE8X8",
             edgeSize = 1,
         })
-        tile:SetBackdropColor(unpack(COLOR.panel))
+        surfaceCells[#surfaceCells + 1] = tile
+        ApplySurfaceColor(tile, COLOR.panel)
 
         local icon = tile:CreateTexture(nil, "ARTWORK")
         icon:SetPoint("TOPLEFT", 1, -1)
@@ -2727,17 +2956,32 @@ local function CreateHoverFrame()
         valueText:SetFont(BIAOGE_TEXT_FONT, 10, "OUTLINE")
         tile.valueText = valueText
         tile:SetScript("OnEnter", function(self)
+            if self.rowHoverController then
+                SetRowHoverVisible(self.rowHoverController, true)
+            end
             ShowItemTooltip(self, self.item)
         end)
-        tile:SetScript("OnLeave", function()
+        tile:SetScript("OnLeave", function(self)
+            if self.rowHoverController then
+                SetRowHoverVisible(self.rowHoverController, false)
+            end
             GameTooltip:Hide()
+        end)
+        tile:SetScript("OnMouseWheel", function(self, delta)
+            if ScrollOverview then
+                ScrollOverview(self, delta)
+            end
         end)
         return tile
     end
 
     local function RenderItemStrip(cell, tiles, items, valueKey, forcedQuality, valuePrefix)
         items = items or {}
-        local visibleCount, startX, iconSize, gap = CalculateItemStripLayout(cell:GetWidth(), #items)
+        local visibleCount, startX, iconSize, gap = CalculateItemStripLayout(
+            cell:GetWidth(),
+            #items,
+            itemTileSize
+        )
         for index = 1, visibleCount do
             local tile = tiles[index]
             if not tile then
@@ -2747,6 +2991,9 @@ local function CreateHoverFrame()
 
             local item = items[index]
             tile.item = item
+            tile.rowHoverController = cell.rowHoverController
+            tile:SetSize(iconSize, iconSize)
+            tile.valueText:SetFont(BIAOGE_TEXT_FONT, hoverEmbedded and 11 or 10, "OUTLINE")
             tile:ClearAllPoints()
             tile:SetPoint("LEFT", cell, "LEFT", startX + (index - 1) * (iconSize + gap), 0)
             tile.icon:SetTexture(item.iconFileID)
@@ -2778,7 +3025,8 @@ local function CreateHoverFrame()
 
         local visibleCount, startX, iconSize, gap = CalculateItemStripLayout(
             cell:GetWidth(),
-            #visibleProfessions
+            #visibleProfessions,
+            itemTileSize
         )
         for index = 1, visibleCount do
             local tile = tiles[index]
@@ -2789,6 +3037,9 @@ local function CreateHoverFrame()
 
             local iconFileID, rankText = GetProfessionTileDisplay(visibleProfessions[index])
             tile.item = nil
+            tile.rowHoverController = cell.rowHoverController
+            tile:SetSize(iconSize, iconSize)
+            tile.valueText:SetFont(BIAOGE_TEXT_FONT, hoverEmbedded and 11 or 10, "OUTLINE")
             tile:ClearAllPoints()
             tile:SetPoint("LEFT", cell, "LEFT", startX + (index - 1) * (iconSize + gap), 0)
             tile.icon:SetTexture(iconFileID)
@@ -2803,7 +3054,7 @@ local function CreateHoverFrame()
     end
 
     local function SetCellColor(cell, color)
-        cell:SetBackdropColor(unpack(color))
+        ApplySurfaceColor(cell, color)
     end
 
     local function CreateRowHoverOverlay(cell, overlays)
@@ -2819,23 +3070,20 @@ local function CreateHoverFrame()
     local function SetRowHoverAlpha(controller, alpha)
         controller.hoverAlpha = alpha
         for _, overlay in ipairs(controller.hoverOverlays) do
-            overlay:SetAlpha(controller.identityOnly and 0 or alpha)
-        end
-        if controller.identityOnly and controller.identityOverlay then
-            controller.identityOverlay:SetAlpha(alpha)
+            overlay:SetAlpha(alpha)
         end
     end
 
-    local function SetRowHoverVisible(controller, visible)
+    SetRowHoverVisible = function(controller, visible)
         SetRowHoverAlpha(controller, visible and not controller.isCurrent and 1 or 0)
     end
 
-    local function CreateRowHoverController(overlays, identityOverlay)
+    local function CreateRowHoverController(overlays)
         local controller = CreateFrame("Frame", nil, contentFrame)
         controller:SetFrameLevel(hoverFrame:GetFrameLevel() + 10)
         controller:EnableMouse(true)
+        controller:EnableMouseWheel(true)
         controller.hoverOverlays = overlays
-        controller.identityOverlay = identityOverlay
         controller.hoverAlpha = 0
         controller:SetScript("OnEnter", function(self)
             hoverHideSerial = hoverHideSerial + 1
@@ -2844,12 +3092,60 @@ local function CreateHoverFrame()
         controller:SetScript("OnLeave", function(self)
             SetRowHoverVisible(self, false)
         end)
-        controller:SetScript("OnMouseUp", function(self, button)
-            if button == "LeftButton" and hoverEmbedded then
-                OpenEmbeddedCharacterDetails(self.character)
+        controller:SetScript("OnMouseWheel", function(self, delta)
+            if ScrollOverview then
+                ScrollOverview(self, delta)
             end
         end)
         return controller
+    end
+
+    local function CreateCharacterNameButton(rowController, identityOverlay, navigationIndicator)
+        local button = CreateFrame("Button", nil, contentFrame)
+        button:SetFrameLevel(hoverFrame:GetFrameLevel() + 11)
+        button:EnableMouse(true)
+        button:EnableMouseWheel(true)
+        button.rowController = rowController
+        button.identityOverlay = identityOverlay
+        button.navigationIndicator = navigationIndicator
+        button:SetScript("OnEnter", function(self)
+            hoverHideSerial = hoverHideSerial + 1
+            if hoverEmbedded then
+                -- In the large overview the name action wins over the row
+                -- affordance, so only its own cell keeps the hover wash.
+                SetRowHoverVisible(self.rowController, false)
+                self.identityOverlay:SetAlpha(self.rowController.isCurrent and 0 or 1)
+                self.navigationIndicator:SetAlpha(1)
+            else
+                -- The small overview keeps its established whole-row hover.
+                SetRowHoverVisible(self.rowController, true)
+            end
+            ShowTruncatedTextTooltip(self)
+        end)
+        button:SetScript("OnLeave", function(self)
+            if hoverEmbedded then
+                self.identityOverlay:SetAlpha(0)
+                self.navigationIndicator:SetAlpha(CHARACTER_DETAILS_CHEVRON_ALPHA)
+            else
+                SetRowHoverVisible(self.rowController, false)
+            end
+            if self._bgforgeTextIsTruncated then
+                GameTooltip:Hide()
+            end
+        end)
+        button:SetScript("OnMouseUp", function(self, mouseButton)
+            if mouseButton == "LeftButton" then
+                SetRowHoverVisible(self.rowController, false)
+                self.identityOverlay:SetAlpha(0)
+                OpenEmbeddedCharacterDetails(self.character)
+            end
+        end)
+        button:SetScript("OnMouseWheel", function(self, delta)
+            if ScrollOverview then
+                ScrollOverview(self, delta)
+            end
+        end)
+        return button
     end
 
     local function ShowButtonTooltip(button)
@@ -2917,13 +3213,12 @@ local function CreateHoverFrame()
     hoverFrame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
     })
-    hoverFrame:SetBackdropColor(unpack(COLOR.panel))
+    hoverFrame:SetBackdropColor(unpack(ResolveHoverSurfaceColor(COLOR.panel)))
     hoverFrame:Hide()
     hoverFloatingFrameLevel = hoverFrame:GetFrameLevel()
 
     local innerBorder = CreateFrame("Frame", nil, hoverFrame, "BackdropTemplate")
-    innerBorder:SetPoint("TOPLEFT", 6, -6)
-    innerBorder:SetPoint("BOTTOMRIGHT", -6, 6)
+    innerBorder:SetAllPoints(hoverFrame)
     innerBorder:SetBackdrop({
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
@@ -2971,31 +3266,163 @@ local function CreateHoverFrame()
         horizontalScrollBar:SetValue(max(minimum, min(maximum, value)))
     end
     horizontalScrollBar:SetScript("OnMouseWheel", ScrollHorizontally)
-    contentScroll:SetScript("OnMouseWheel", ScrollHorizontally)
     horizontalScrollBar:Hide()
 
-    local headerMeasureText = hoverFrame:CreateFontString(nil, "ARTWORK")
-    headerMeasureText:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
-    headerMeasureText:SetWordWrap(false)
-    headerMeasureText:SetAlpha(0)
-    local function MeasureHeaderText(text)
-        headerMeasureText:SetText(text or "")
-        if headerMeasureText.GetUnboundedStringWidth then
-            return headerMeasureText:GetUnboundedStringWidth()
+    local verticalScrollBar = CreateFrame("Slider", nil, hoverFrame)
+    verticalScrollBar:SetOrientation("VERTICAL")
+    verticalScrollBar:SetWidth(8)
+    verticalScrollBar:SetMinMaxValues(0, 0)
+    verticalScrollBar:SetValue(0)
+    verticalScrollBar:SetValueStep(1)
+    verticalScrollBar:EnableMouseWheel(true)
+
+    local verticalScrollTrack = verticalScrollBar:CreateTexture(nil, "BACKGROUND")
+    verticalScrollTrack:SetPoint("TOP", 0, 0)
+    verticalScrollTrack:SetPoint("BOTTOM", 0, 0)
+    verticalScrollTrack:SetWidth(3)
+    verticalScrollTrack:SetColorTexture(unpack(COLOR.gridStrong))
+
+    verticalScrollBar:SetThumbTexture("Interface\\Buttons\\WHITE8X8")
+    local verticalScrollThumb = verticalScrollBar:GetThumbTexture()
+    verticalScrollThumb:SetSize(8, 32)
+    verticalScrollThumb:SetColorTexture(unpack(COLOR.focus))
+    verticalScrollBar.scrollRange = 0
+    verticalScrollBar:SetScript("OnValueChanged", function(self, value)
+        contentScroll:SetVerticalScroll(max(0, (self.scrollRange or 0) - value))
+    end)
+    local function ScrollVertically(_, delta)
+        if not verticalScrollBar:IsShown() then
+            return
         end
-        return headerMeasureText:GetStringWidth()
+        local currentOffset = contentScroll.GetVerticalScroll
+            and contentScroll:GetVerticalScroll() or 0
+        local nextOffset = max(
+            0,
+            min(verticalScrollBar.scrollRange or 0, currentOffset - delta * 40)
+        )
+        verticalScrollBar:SetValue((verticalScrollBar.scrollRange or 0) - nextOffset)
+    end
+    ScrollOverview = function(owner, delta)
+        if verticalScrollBar:IsShown() and not (IsShiftKeyDown and IsShiftKeyDown()) then
+            ScrollVertically(owner, delta)
+        else
+            ScrollHorizontally(owner, delta)
+        end
+    end
+    verticalScrollBar:SetScript("OnMouseWheel", ScrollVertically)
+    contentScroll:SetScript("OnMouseWheel", ScrollOverview)
+    verticalScrollBar:Hide()
+
+    local truncationEntries = {}
+    local truncationSerial = 0
+    ShowTruncatedTextTooltip = function(owner)
+        if not owner._bgforgeTextIsTruncated then
+            return
+        end
+        local fontString = owner._bgforgeTruncationText
+        local value = fontString and fontString:GetText()
+        if not value or value == "" then
+            return
+        end
+        GameTooltip:SetOwner(owner, BG.ButtonIsInRight(owner) and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
+        GameTooltip:SetText(value, COLOR.textPrimary[1], COLOR.textPrimary[2], COLOR.textPrimary[3])
+        GameTooltip:Show()
+    end
+    local function RegisterTruncationOwner(owner, fontString, preserveMouse)
+        owner._bgforgeTruncationText = fontString
+        owner._bgforgePreserveMouse = preserveMouse
+        truncationEntries[#truncationEntries + 1] = owner
+    end
+    local function ConfigureSimpleTruncationOwner(owner, fontString)
+        RegisterTruncationOwner(owner, fontString, false)
+        owner:EnableMouse(false)
+        if owner.EnableMouseWheel then
+            owner:EnableMouseWheel(true)
+        end
+        owner:SetScript("OnEnter", ShowTruncatedTextTooltip)
+        owner:SetScript("OnLeave", function(self)
+            if self._bgforgeTextIsTruncated then
+                GameTooltip:Hide()
+            end
+        end)
+        owner:SetScript("OnMouseWheel", ScrollOverview)
+    end
+    local function CreateTextTruncationOverlay(parent, fontString)
+        local owner = CreateFrame("Frame", nil, parent)
+        owner:SetAllPoints(fontString)
+        owner:SetFrameLevel(parent:GetFrameLevel() + 2)
+        ConfigureSimpleTruncationOwner(owner, fontString)
+        return owner
+    end
+    local function RefreshTruncationOwners()
+        truncationSerial = truncationSerial + 1
+        local serial = truncationSerial
+        BG.After(0, function()
+            if serial ~= truncationSerial then
+                return
+            end
+            for _, owner in ipairs(truncationEntries) do
+                local isTruncated = IsTextActuallyTruncated(owner._bgforgeTruncationText)
+                owner._bgforgeTextIsTruncated = isTruncated
+                if not owner._bgforgePreserveMouse then
+                    owner:EnableMouse(isTruncated)
+                end
+            end
+        end)
+    end
+
+    local hiddenTextMeasure = hoverFrame:CreateFontString(nil, "ARTWORK")
+    hiddenTextMeasure:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
+    hiddenTextMeasure:SetWidth(10000)
+    hiddenTextMeasure:SetWordWrap(false)
+    hiddenTextMeasure:SetAlpha(0)
+    local measurementCache = {}
+    local function MeasureTextLike(fontString, text)
+        local fontFile, fontSize, fontFlags = BIAOGE_TEXT_FONT, 12, "OUTLINE"
+        if fontString and fontString.GetFont then
+            local actualFile, actualSize, actualFlags = fontString:GetFont()
+            fontFile = actualFile or fontFile
+            fontSize = actualSize or fontSize
+            fontFlags = actualFlags or fontFlags
+        end
+        local value = tostring(text or "")
+        local cacheKey = table.concat({ fontFile, fontSize, fontFlags, value }, "\031")
+        local cached = measurementCache[cacheKey]
+        if cached then
+            return cached.width, cached.height
+        end
+        hiddenTextMeasure:SetFont(fontFile, fontSize, fontFlags)
+        hiddenTextMeasure:SetText(value)
+        local measuredWidth
+        if hiddenTextMeasure.GetUnboundedStringWidth then
+            measuredWidth = hiddenTextMeasure:GetUnboundedStringWidth()
+        else
+            measuredWidth = hiddenTextMeasure:GetStringWidth()
+        end
+        local measuredHeight = hiddenTextMeasure.GetStringHeight
+            and hiddenTextMeasure:GetStringHeight() or fontSize
+        cached = {
+            width = tonumber(measuredWidth) or 0,
+            height = max(tonumber(measuredHeight) or 0, tonumber(fontSize) or 0),
+        }
+        measurementCache[cacheKey] = cached
+        return cached.width, cached.height
+    end
+    local function MeasureHeaderText(text)
+        return MeasureTextLike(nil, text)
     end
 
     local topBar = CreateTableCell(hoverFrame, COLOR.panelTop, { left = true, top = true })
     topBar:SetPoint("TOPLEFT", ui.padding, -ui.padding)
     topBar:SetSize(width - ui.padding * 2, ui.topBarHeight)
 
+    local pageHeaderEdgeInset = BG.UI.Token("spacing", "hairline")
     local pageHeader = BG.UI.CreatePageHeader(hoverFrame, {
         title = L["全角色总览"],
         subtitle = L["点击角色名称可查看装备、背包、专业、资源与进度"],
-        contentRightInset = 310,
+        contentRightInset = 16,
     })
-    pageHeader:SetPoint("TOPLEFT", hoverFrame, "TOPLEFT", -ui.padding, 0)
+    pageHeader:SetPoint("TOPLEFT", hoverFrame, "TOPLEFT", -ui.padding + pageHeaderEdgeInset, 0)
     pageHeader:Hide()
 
     local logo = topBar:CreateTexture(nil, "ARTWORK")
@@ -3006,17 +3433,27 @@ local function CreateHoverFrame()
     local brandTitle = topBar:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     brandTitle:SetPoint("LEFT", logo, "RIGHT", 7, 0)
     brandTitle:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+    brandTitle:SetWordWrap(false)
     brandTitle:SetText("BGForge")
     brandTitle:SetTextColor(unpack(COLOR.gold))
 
+    local versionText = topBar:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    versionText:SetPoint("LEFT", brandTitle, "RIGHT", 5, -1)
+    versionText:SetFont(BIAOGE_TEXT_FONT, 10, "OUTLINE")
+    versionText:SetWordWrap(false)
+    versionText:SetText(BG.addonVer or "")
+    versionText:SetTextColor(unpack(COLOR.textMuted))
+
     local titleDivider = topBar:CreateTexture(nil, "ARTWORK")
-    titleDivider:SetPoint("LEFT", brandTitle, "RIGHT", 9, 0)
+    titleDivider:SetPoint("LEFT", versionText, "RIGHT", 9, 0)
     titleDivider:SetSize(1, 15)
     titleDivider:SetColorTexture(unpack(COLOR.gridStrong))
 
     local title = topBar:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("LEFT", titleDivider, "RIGHT", 9, 0)
     title:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+    title:SetJustifyH("LEFT")
+    title:SetWordWrap(false)
     title:SetText(L["全角色总览"])
     title:SetTextColor(unpack(COLOR.textPrimary))
 
@@ -3043,23 +3480,20 @@ local function CreateHoverFrame()
         end
     end)
 
-    local refresh = CreateIconButton("Interface\\Buttons\\UI-RotationRight-Button-Up", REFRESH)
-    refresh:SetPoint("RIGHT", settings, "LEFT", -5, 0)
-    refresh.icon:SetTexCoord(0, 1, 0, 1)
-    refresh:SetScript("OnClick", function()
-        CaptureCurrentResources()
-        CaptureCurrentQuestProgress()
-        RequestCurrentRaidInfo()
-        BG.PlaySound(1)
-    end)
-
-    local resetText = hoverFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    resetText:SetPoint("RIGHT", refresh, "LEFT", -10, 0)
+    local resetText = topBar:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    resetText:SetPoint("RIGHT", settings, "LEFT", -10, 0)
     resetText:SetWidth(245)
     resetText:SetJustifyH("RIGHT")
     resetText:SetWordWrap(false)
     resetText:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
     resetText:SetTextColor(unpack(COLOR.textSecondary))
+    title:SetPoint("RIGHT", resetText, "LEFT", -10, 0)
+    CreateTextTruncationOverlay(topBar, brandTitle)
+    CreateTextTruncationOverlay(topBar, versionText)
+    CreateTextTruncationOverlay(topBar, title)
+    CreateTextTruncationOverlay(topBar, resetText)
+    CreateTextTruncationOverlay(pageHeader, pageHeader.title)
+    CreateTextTruncationOverlay(pageHeader, pageHeader.subtitle)
 
     hoverFrame.chrome = {
         innerBorder = innerBorder,
@@ -3067,11 +3501,16 @@ local function CreateHoverFrame()
         pageHeader = pageHeader,
         logo = logo,
         brandTitle = brandTitle,
+        versionText = versionText,
         titleDivider = titleDivider,
         title = title,
         close = close,
         settings = settings,
-        refresh = refresh,
+        resetVerticalScroll = function()
+            contentScroll:SetVerticalScroll(0)
+            verticalScrollBar:SetValue(verticalScrollBar.scrollRange or 0)
+        end,
+        refreshSurfaces = RefreshSurfaceColors,
     }
 
     local raidTitleCell = CreateTableCell(contentFrame, COLOR.headerStrong, { left = true })
@@ -3096,6 +3535,8 @@ local function CreateHoverFrame()
         )
         local text = CreateCellText(header, "GameFontNormal", 12, COLOR.textSecondary, "CENTER")
         text:SetText(column.name)
+        header.text = text
+        ConfigureSimpleTruncationOwner(header, text)
         headers[column.id] = header
     end
     for _, group in ipairs(QUEST_HEADER_GROUPS) do
@@ -3103,6 +3544,8 @@ local function CreateHoverFrame()
         header:SetSize(1, ui.raidHeaderGroupHeight)
         local text = CreateCellText(header, "GameFontNormal", 12, COLOR.focusText, "CENTER")
         text:SetText(group.name)
+        header.text = text
+        ConfigureSimpleTruncationOwner(header, text)
         header:Hide()
         groupHeaders[group.id] = header
     end
@@ -3177,6 +3620,20 @@ local function CreateHoverFrame()
     footerText:SetWordWrap(false)
     footerText:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
     footerText:SetTextColor(unpack(COLOR.textMuted))
+    local footerTruncationOwner = CreateTextTruncationOverlay(contentFrame, footerText)
+
+    ConfigureSimpleTruncationOwner(raidTitleCell, raidTitle)
+    ConfigureSimpleTruncationOwner(resourceTitleCell, resourceTitle)
+    ConfigureSimpleTruncationOwner(professionHeader, professionHeaderText)
+    ConfigureSimpleTruncationOwner(equipmentHeader, equipmentHeaderText)
+    ConfigureSimpleTruncationOwner(legendaryHeader, legendaryHeaderText)
+    ConfigureSimpleTruncationOwner(fragmentHeader, fragmentHeaderText)
+    ConfigureSimpleTruncationOwner(upgradeHeader, upgradeHeaderText)
+    ConfigureSimpleTruncationOwner(trinketHeader, trinketHeaderText)
+    ConfigureSimpleTruncationOwner(commonHeader, commonHeaderText)
+    ConfigureSimpleTruncationOwner(goldHeader, goldHeaderText)
+    ConfigureSimpleTruncationOwner(emberHeader, emberHeaderText)
+    ConfigureSimpleTruncationOwner(shardHeader, shardHeaderText)
 
     local function EnsureRow(rowIndex)
         if rows[rowIndex] then
@@ -3202,19 +3659,24 @@ local function CreateHoverFrame()
         row.raidCurrentAccent:SetColorTexture(unpack(COLOR.focus))
         row.raidCurrentAccent:Hide()
         row.raidNameHover = CreateRowHoverOverlay(row.raidNameCell, row.raidHoverOverlays)
-        row.raidChevron = row.raidNameCell:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        row.raidChevron = row.raidNameCell:CreateTexture(nil, "OVERLAY")
         row.raidChevron:SetPoint("RIGHT", -7, 0)
-        row.raidChevron:SetText("›")
-        row.raidChevron:SetTextColor(unpack(COLOR.focusText))
+        row.raidChevron:SetSize(CHARACTER_DETAILS_CHEVRON_SIZE, CHARACTER_DETAILS_CHEVRON_SIZE)
+        row.raidChevron:SetTexture(CHARACTER_DETAILS_CHEVRON_TEXTURE)
+        row.raidChevron:SetDesaturated(true)
+        row.raidChevron:SetVertexColor(unpack(COLOR.focusText))
+        row.raidChevron:SetAlpha(CHARACTER_DETAILS_CHEVRON_ALPHA)
         row.raidChevron:Hide()
 
         for _, column in ipairs(LOCKOUT_COLUMNS) do
-            local cell = CreateStatusDisplay(contentFrame, column.compactWidth, ui.rowHeight, 15, 11, true)
+            local cell = CreateStatusDisplay(contentFrame, column.compactWidth, ui.rowHeight, 14, 11, true)
+            ApplyStatusSurfaceColors(cell)
             cell.column = column
             CreateRowHoverOverlay(cell, row.raidHoverOverlays)
             if column.isProfessionCooldown then
                 cell:SetFrameLevel(hoverFrame:GetFrameLevel() + 11)
                 cell:EnableMouse(true)
+                cell:EnableMouseWheel(true)
                 cell:SetScript("OnEnter", function(self)
                     hoverHideSerial = hoverHideSerial + 1
                     if row.raidHover then
@@ -3227,6 +3689,11 @@ local function CreateHoverFrame()
                         SetRowHoverVisible(row.raidHover, false)
                     end
                     GameTooltip:Hide()
+                end)
+                cell:SetScript("OnMouseWheel", function(self, delta)
+                    if ScrollOverview then
+                        ScrollOverview(self, delta)
+                    end
                 end)
             end
             row.raidCells[column.id] = cell
@@ -3245,10 +3712,13 @@ local function CreateHoverFrame()
         row.resourceCurrentAccent:SetColorTexture(unpack(COLOR.focus))
         row.resourceCurrentAccent:Hide()
         row.resourceNameHover = CreateRowHoverOverlay(row.resourceNameCell, row.resourceHoverOverlays)
-        row.resourceChevron = row.resourceNameCell:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        row.resourceChevron = row.resourceNameCell:CreateTexture(nil, "OVERLAY")
         row.resourceChevron:SetPoint("RIGHT", -7, 0)
-        row.resourceChevron:SetText("›")
-        row.resourceChevron:SetTextColor(unpack(COLOR.focusText))
+        row.resourceChevron:SetSize(CHARACTER_DETAILS_CHEVRON_SIZE, CHARACTER_DETAILS_CHEVRON_SIZE)
+        row.resourceChevron:SetTexture(CHARACTER_DETAILS_CHEVRON_TEXTURE)
+        row.resourceChevron:SetDesaturated(true)
+        row.resourceChevron:SetVertexColor(unpack(COLOR.focusText))
+        row.resourceChevron:SetAlpha(CHARACTER_DETAILS_CHEVRON_ALPHA)
         row.resourceChevron:Hide()
 
         row.professionCell = CreateTableCell(contentFrame)
@@ -3284,7 +3754,6 @@ local function CreateHoverFrame()
         row.emberCell = CreateTableCell(contentFrame)
         row.emberCell:SetSize(ui.emberWidth, ui.rowHeight)
         row.ember = CreateResourceNumberText(row.emberCell)
-        row.ember:SetFont(BIAOGE_TEXT_FONT, RESOURCE_NUMBER_FONT_SIZE, "OUTLINE")
         row.ember:ClearAllPoints()
         row.ember:SetPoint("LEFT", 3, 0)
         row.ember:SetPoint("RIGHT", -3, 0)
@@ -3295,8 +3764,50 @@ local function CreateHoverFrame()
         row.shard = CreateResourceNumberText(row.shardCell)
         CreateRowHoverOverlay(row.shardCell, row.resourceHoverOverlays)
 
-        row.raidHover = CreateRowHoverController(row.raidHoverOverlays, row.raidNameHover)
-        row.resourceHover = CreateRowHoverController(row.resourceHoverOverlays, row.resourceNameHover)
+        row.raidHover = CreateRowHoverController(row.raidHoverOverlays)
+        row.resourceHover = CreateRowHoverController(row.resourceHoverOverlays)
+        row.raidNameButton = CreateCharacterNameButton(
+            row.raidHover,
+            row.raidNameHover,
+            row.raidChevron
+        )
+        row.resourceNameButton = CreateCharacterNameButton(
+            row.resourceHover,
+            row.resourceNameHover,
+            row.resourceChevron
+        )
+        RegisterTruncationOwner(row.raidNameButton, row.raidName, true)
+        RegisterTruncationOwner(row.resourceNameButton, row.resourceName, true)
+
+        row.professionCell.rowHoverController = row.resourceHover
+        row.legendaryCell.rowHoverController = row.resourceHover
+        row.fragmentCell.rowHoverController = row.resourceHover
+        row.upgradeCell.rowHoverController = row.resourceHover
+        row.trinketCell.rowHoverController = row.resourceHover
+
+        local function ConfigureResourceValueTooltip(cell, text, controller)
+            cell:SetFrameLevel(hoverFrame:GetFrameLevel() + 11)
+            RegisterTruncationOwner(cell, text, false)
+            cell:EnableMouse(false)
+            if cell.EnableMouseWheel then
+                cell:EnableMouseWheel(true)
+            end
+            cell:SetScript("OnEnter", function(self)
+                hoverHideSerial = hoverHideSerial + 1
+                SetRowHoverVisible(controller, true)
+                ShowTruncatedTextTooltip(self)
+            end)
+            cell:SetScript("OnLeave", function(self)
+                SetRowHoverVisible(controller, false)
+                if self._bgforgeTextIsTruncated then
+                    GameTooltip:Hide()
+                end
+            end)
+            cell:SetScript("OnMouseWheel", ScrollOverview)
+        end
+        ConfigureResourceValueTooltip(row.goldCell, row.gold, row.resourceHover)
+        ConfigureResourceValueTooltip(row.emberCell, row.ember, row.resourceHover)
+        ConfigureResourceValueTooltip(row.shardCell, row.shard, row.resourceHover)
 
         rows[rowIndex] = row
         return row
@@ -3334,16 +3845,141 @@ local function CreateHoverFrame()
     local totalShardCell = CreateTableCell(contentFrame, COLOR.header)
     totalShardCell:SetSize(ui.shardWidth, ui.rowHeight)
     local totalShard = CreateResourceNumberText(totalShardCell)
+    ConfigureSimpleTruncationOwner(totalGoldCell, totalGold)
+    ConfigureSimpleTruncationOwner(totalEmberCell, totalEmber)
+    ConfigureSimpleTruncationOwner(totalShardCell, totalShard)
+
+    local function BuildResourceColumnConstraints(characters, isEmbedded)
+        local constraints = {}
+        local iconColumns = {
+            profession = { width = ui.professionWidth, header = professionHeaderText, count = 0 },
+            legendary = { width = ui.legendaryWidth, header = legendaryHeaderText, count = 0 },
+            fragment = { width = ui.fragmentWidth, header = fragmentHeaderText, count = 0 },
+            upgrade = { width = ui.upgradeWidth, header = upgradeHeaderText, count = 0 },
+            trinket = { width = ui.trinketWidth, header = trinketHeaderText, count = 0 },
+        }
+        local fragmentIDs = {}
+        local totalFragmentCount = 0
+        local goldTotal, emberTotal, shardTotal = 0, 0, 0
+
+        local function CountVisibleProfessions(professions)
+            local count = 0
+            for _, profession in ipairs(professions or {}) do
+                if profession.iconFileID then
+                    count = count + 1
+                end
+            end
+            return count
+        end
+        for _, character in ipairs(characters or {}) do
+            iconColumns.profession.count = max(
+                iconColumns.profession.count,
+                CountVisibleProfessions(character.professions)
+            )
+            iconColumns.legendary.count = max(
+                iconColumns.legendary.count,
+                #(character.legendaryItems or {})
+            )
+            iconColumns.fragment.count = max(
+                iconColumns.fragment.count,
+                #(character.legendaryFragmentItems or {})
+            )
+            iconColumns.upgrade.count = max(
+                iconColumns.upgrade.count,
+                #(character.legendaryUpgradeItems or {})
+            )
+            iconColumns.trinket.count = max(
+                iconColumns.trinket.count,
+                #(character.trinkets or {})
+            )
+            for _, item in ipairs(character.legendaryFragmentItems or {}) do
+                local key = item.itemID or item.link or item.iconFileID
+                if key and not fragmentIDs[key] then
+                    fragmentIDs[key] = true
+                    totalFragmentCount = totalFragmentCount + 1
+                end
+            end
+            goldTotal = goldTotal + (character.money and floor(character.money / 10000) or 0)
+            emberTotal = emberTotal + (character.titanEmbers or 0)
+            shardTotal = shardTotal + (character.titanShards or 0)
+        end
+        iconColumns.fragment.count = max(iconColumns.fragment.count, totalFragmentCount)
+
+        for id, definition in pairs(iconColumns) do
+            local minimumWidth = CalculateItemStripRequiredWidth(definition.count, itemTileSize)
+            local headerWidth = MeasureTextLike(definition.header, definition.header:GetText())
+            constraints[id] = {
+                minimumWidth = minimumWidth,
+                preferredWidth = max(
+                    definition.width,
+                    minimumWidth,
+                    ceil(headerWidth + HEADER_HORIZONTAL_PADDING + HEADER_WIDTH_SAFETY)
+                ),
+            }
+        end
+
+        local numberColumns = {
+            gold = { width = ui.goldWidth, header = goldHeaderText, sample = totalGold },
+            ember = { width = ui.emberWidth, header = emberHeaderText, sample = totalEmber },
+            shard = { width = ui.shardWidth, header = shardHeaderText, sample = totalShard },
+        }
+        local function IncludeNumberWidth(id, value)
+            local definition = numberColumns[id]
+            local measuredWidth = MeasureTextLike(definition.sample, value)
+            definition.measuredWidth = max(definition.measuredWidth or 0, measuredWidth)
+        end
+        for _, character in ipairs(characters or {}) do
+            IncludeNumberWidth(
+                "gold",
+                FormatResourceNumber(character.money and floor(character.money / 10000) or nil)
+            )
+            IncludeNumberWidth(
+                "ember",
+                FormatResourceNumber(
+                    character.titanEmbers,
+                    isEmbedded and character.titanEmbersEarnedThisWeek or nil,
+                    isEmbedded and character.titanEmbersWeeklyMax or nil
+                )
+            )
+            IncludeNumberWidth("shard", FormatResourceNumber(character.titanShards))
+        end
+        IncludeNumberWidth("gold", FormatResourceAmount(goldTotal, GetCoinIconFile()))
+        IncludeNumberWidth(
+            "ember",
+            FormatResourceAmount(emberTotal, GetCurrencyIconFile(TITAN_EMBER_CURRENCY_ID))
+        )
+        IncludeNumberWidth(
+            "shard",
+            FormatResourceAmount(shardTotal, GetCurrencyIconFile(TITAN_SHARD_CURRENCY_ID))
+        )
+        for id, definition in pairs(numberColumns) do
+            local headerWidth = MeasureTextLike(definition.header, definition.header:GetText())
+            constraints[id] = {
+                minimumWidth = 64,
+                preferredWidth = max(
+                    definition.width,
+                    ceil(headerWidth + HEADER_HORIZONTAL_PADDING + HEADER_WIDTH_SAFETY),
+                    ceil((definition.measuredWidth or 0) + HEADER_HORIZONTAL_PADDING)
+                ),
+            }
+        end
+        return constraints
+    end
 
     -- Titan's Lua compiler allows at most 60 upvalues per function. Keep the
     -- renderer's module dependencies behind one context so future columns do
     -- not silently push this already-large UI callback over that limit.
     local renderContext = {
         color = COLOR,
+        calculateConstrainedColumnWidths = CalculateConstrainedColumnWidths,
         calculateColumnWidths = CalculateRaidColumnWidths,
         calculateHorizontalViewport = CalculateHorizontalViewport,
+        calculateItemStripRequiredWidth = CalculateItemStripRequiredWidth,
         calculateMeasuredColumnMinimums = CalculateMeasuredColumnMinimums,
+        calculateOverviewViewportWidth = CalculateOverviewViewportWidth,
         calculateResourceColumnWidths = CalculateResourceColumnWidths,
+        calculateTypographyMetrics = CalculateTypographyMetrics,
+        calculateVerticalViewport = CalculateVerticalViewport,
         ensureRow = EnsureRow,
         formatResetTime = FormatResetTime,
         formatResourceAmount = FormatResourceAmount,
@@ -3361,8 +3997,10 @@ local function CreateHoverFrame()
         legendaryItemQuality = LEGENDARY_ITEM_QUALITY,
         locale = L,
         measureHeaderText = MeasureHeaderText,
+        isTextActuallyTruncated = IsTextActuallyTruncated,
         renderItemStrip = RenderItemStrip,
         renderProfessionStrip = RenderProfessionStrip,
+        resolveSurfaceColor = ResolveHoverSurfaceColor,
         setCellColor = SetCellColor,
         setRowHoverAlpha = SetRowHoverAlpha,
         titanEmberCurrencyID = TITAN_EMBER_CURRENCY_ID,
@@ -3378,43 +4016,129 @@ local function CreateHoverFrame()
         local visibleColumns = renderContext.getVisibleColumns()
         local raidRowCount = max(1, #raidCharacters)
         local resourceRowCount = max(1, #resourceCharacters)
-        local columnMinimums, compactColumnsWidth = renderContext.calculateMeasuredColumnMinimums(
+        local columnPreferredWidths = renderContext.calculateMeasuredColumnMinimums(
             visibleColumns,
             renderContext.measureHeaderText
         )
 
-        local compactEquipmentWidth = ui.legendaryWidth + ui.fragmentWidth
-            + ui.upgradeWidth + ui.trinketWidth
-        local compactCommonWidth = ui.goldWidth + ui.emberWidth + ui.shardWidth
-        local compactResourceWidth = ui.nameWidth + ui.professionWidth
-            + compactEquipmentWidth + compactCommonWidth
-        width = max(
+        raidTitle:SetText(renderContext.locale["副本与任务（装等）"])
+        resourceTitle:SetText(renderContext.locale["角色资源（等级）"])
+        local resetTime = renderContext.getOverviewResetTime()
+        if resetTime then
+            resetText:SetFormattedText(
+                renderContext.locale["周重置 %s"],
+                renderContext.formatResetTime(resetTime)
+            )
+        else
+            resetText:SetText("")
+        end
+        goldHeaderText:SetText(
+            renderContext.locale["金币"]
+                .. renderContext.getResourceIconMarkup(renderContext.getCoinIconFile())
+        )
+        emberHeaderText:SetText(renderContext.locale["泰坦余烬"] .. renderContext.getResourceIconMarkup(
+            renderContext.getCurrencyIconFile(renderContext.titanEmberCurrencyID)
+        ))
+        shardHeaderText:SetText(renderContext.locale["泰坦碎片"] .. renderContext.getResourceIconMarkup(
+            renderContext.getCurrencyIconFile(renderContext.titanShardCurrencyID)
+        ))
+
+        local _, headerFontHeight = MeasureTextLike(raidTitle, "国Ag")
+        local _, numberFontHeight = MeasureTextLike(totalGold, "国Ag")
+        local typography = renderContext.calculateTypographyMetrics(
+            max(headerFontHeight, numberFontHeight),
+            hoverEmbedded
+        )
+        local raidRowHeight = typography.raidRowHeight
+        local resourceRowHeight = typography.resourceRowHeight
+        local totalRowHeight = resourceRowHeight
+        itemTileSize = typography.itemTileSize
+        local raidHeaderGroupHeight = typography.headerTierHeight
+        local raidHeaderSubHeight = typography.headerTierHeight
+        local resourceGroupHeight = typography.headerTierHeight
+        local resourceSubHeaderHeight = typography.headerTierHeight
+
+        local resourceConstraints = BuildResourceColumnConstraints(resourceCharacters, hoverEmbedded)
+        local raidDefinitions = {
+            {
+                id = "name", preferredWidth = ui.nameWidth, minimumWidth = 126,
+                shrinkPriority = 2, growWeight = 0,
+            },
+        }
+        for _, column in ipairs(visibleColumns) do
+            raidDefinitions[#raidDefinitions + 1] = {
+                id = column.id,
+                preferredWidth = columnPreferredWidths[column.id],
+                minimumWidth = column.compactWidth,
+                shrinkPriority = 2,
+            }
+        end
+        local resourceDefinitions = {
+            {
+                id = "name", preferredWidth = ui.nameWidth, minimumWidth = 126,
+                shrinkPriority = 2, growWeight = 0,
+            },
+        }
+        for _, id in ipairs({
+            "profession", "legendary", "fragment", "upgrade", "trinket",
+            "gold", "ember", "shard",
+        }) do
+            local constraint = resourceConstraints[id]
+            resourceDefinitions[#resourceDefinitions + 1] = {
+                id = id,
+                preferredWidth = constraint.preferredWidth,
+                minimumWidth = constraint.minimumWidth,
+                shrinkPriority = (id == "gold" or id == "ember" or id == "shard") and 3 or 1,
+            }
+        end
+        local function SumPreferred(definitions)
+            local total = 0
+            for _, definition in ipairs(definitions) do
+                total = total + definition.preferredWidth
+            end
+            return total
+        end
+        local preferredWidth = max(
             660,
-            ui.padding * 2 + ui.nameWidth + compactColumnsWidth,
-            ui.padding * 2 + compactResourceWidth
+            ui.padding * 2 + SumPreferred(raidDefinitions),
+            ui.padding * 2 + SumPreferred(resourceDefinitions)
         )
         local viewportWidth
-        local horizontalOverflow
-        if hoverEmbedded and BG.MainFrame then
-            local availableWidth = max(320, BG.MainFrame:GetWidth() - ui.padding * 2)
-            width = max(width, availableWidth)
-            viewportWidth = availableWidth
-            horizontalOverflow = max(0, width - viewportWidth)
-        else
-            viewportWidth, horizontalOverflow = renderContext.calculateHorizontalViewport(
-                width,
-                UIParent:GetWidth()
-            )
-        end
-        local columnWidths, lockoutsWidth = renderContext.calculateColumnWidths(
-            visibleColumns,
-            width - ui.padding * 2 - ui.nameWidth,
-            columnMinimums
+        viewportWidth = renderContext.calculateOverviewViewportWidth(
+            preferredWidth,
+            UIParent:GetWidth(),
+            BG.MainFrame and BG.MainFrame:GetWidth() or nil,
+            hoverEmbedded,
+            ui.padding
         )
-        local resourceColumnWidths, resourceColumnsWidth = renderContext.calculateResourceColumnWidths(
-            ui,
-            width - ui.padding * 2 - ui.nameWidth
+        local availableTableWidth = max(0, viewportWidth - ui.padding * 2)
+        local raidLayout, raidWidth = renderContext.calculateConstrainedColumnWidths(
+            raidDefinitions,
+            availableTableWidth
         )
+        local resourceLayout, resourceWidth = renderContext.calculateConstrainedColumnWidths(
+            resourceDefinitions,
+            availableTableWidth
+        )
+        local nameWidth = min(raidLayout.name, resourceLayout.name)
+        raidDefinitions[1].preferredWidth = nameWidth
+        raidDefinitions[1].minimumWidth = nameWidth
+        resourceDefinitions[1].preferredWidth = nameWidth
+        resourceDefinitions[1].minimumWidth = nameWidth
+        raidLayout, raidWidth = renderContext.calculateConstrainedColumnWidths(
+            raidDefinitions,
+            availableTableWidth
+        )
+        resourceLayout, resourceWidth = renderContext.calculateConstrainedColumnWidths(
+            resourceDefinitions,
+            availableTableWidth
+        )
+        local columnWidths = raidLayout
+        local lockoutsWidth = raidWidth - nameWidth
+        local resourceColumnWidths = resourceLayout
+        local resourceColumnsWidth = resourceWidth - nameWidth
+        width = ui.padding * 2 + max(raidWidth, resourceWidth)
+        local horizontalOverflow = max(0, width - viewportWidth)
         local professionWidth = resourceColumnWidths.profession
         local legendaryWidth = resourceColumnWidths.legendary
         local fragmentWidth = resourceColumnWidths.fragment
@@ -3425,18 +4149,21 @@ local function CreateHoverFrame()
         local shardWidth = resourceColumnWidths.shard
         local equipmentWidth = legendaryWidth + fragmentWidth + upgradeWidth + trinketWidth
         local commonWidth = goldWidth + emberWidth + shardWidth
-        local resourceWidth = ui.nameWidth + resourceColumnsWidth
+        local resourceWidth = nameWidth + resourceColumnsWidth
+        local _, topFontHeight = MeasureTextLike(brandTitle, "国Ag")
         local topInset = hoverEmbedded and 0 or ui.padding
         local topBarHeight = hoverEmbedded
-            and BG.UI.Token("size", "pageHeader") or ui.topBarHeight
+            and max(BG.UI.Token("size", "pageHeader"), topFontHeight * 2 + 21)
+            or max(ui.topBarHeight, topFontHeight + 12)
         local pageHeaderGap = hoverEmbedded and BG.UI.Token("spacing", "md") or 0
         hoverFrame:SetWidth(viewportWidth)
         topBar:SetWidth(viewportWidth - ui.padding * 2)
-        topBar:SetHeight(ui.topBarHeight)
+        topBar:SetHeight(topBarHeight)
+        resetText:SetWidth(max(72, min(245, viewportWidth - 360)))
         pageHeader:SetWidth(
-            viewportWidth + ui.padding * 2 - BG.UI.Token("spacing", "hairline")
+            viewportWidth + ui.padding * 2 - pageHeaderEdgeInset * 2
         )
-        pageHeader:SetHeight(BG.UI.Token("size", "pageHeader"))
+        pageHeader:SetHeight(topBarHeight)
         contentScroll:ClearAllPoints()
         contentScroll:SetPoint(
             "TOPLEFT",
@@ -3457,30 +4184,29 @@ local function CreateHoverFrame()
             horizontalScrollBar:SetValue(0)
             horizontalScrollBar:Hide()
         end
-        raidTitle:SetText(renderContext.locale["副本与任务（装等）"])
-        resourceTitle:SetText(renderContext.locale["角色资源（等级）"])
-
         for _, header in pairs(headers) do
             header:Hide()
         end
         for _, header in pairs(groupHeaders) do
             header:Hide()
         end
-        local raidOffsetX = ui.padding + ui.nameWidth
+        raidTitleCell:SetSize(nameWidth, raidHeaderGroupHeight + raidHeaderSubHeight)
+        resourceTitleCell:SetSize(nameWidth, resourceGroupHeight + resourceSubHeaderHeight)
+        local raidOffsetX = ui.padding + nameWidth
         local columnX = {}
         for _, column in ipairs(visibleColumns) do
             local header = headers[column.id]
             columnX[column.id] = raidOffsetX
             header:SetWidth(columnWidths[column.id])
             header:SetHeight(
-                column.groupID and ui.raidHeaderSubHeight
-                    or (ui.raidHeaderGroupHeight + ui.raidHeaderSubHeight)
+                column.groupID and raidHeaderSubHeight
+                    or (raidHeaderGroupHeight + raidHeaderSubHeight)
             )
             header:ClearAllPoints()
             header:SetPoint(
                 "TOPLEFT",
                 raidOffsetX,
-                -(column.groupID and ui.raidHeaderGroupHeight or 0)
+                -(column.groupID and raidHeaderGroupHeight or 0)
             )
             header:Show()
             raidOffsetX = raidOffsetX + columnWidths[column.id]
@@ -3492,98 +4218,90 @@ local function CreateHoverFrame()
                 groupWidth = groupWidth + columnWidths[column.id]
             end
             header:SetWidth(groupWidth)
+            header:SetHeight(raidHeaderGroupHeight)
             header:ClearAllPoints()
             header:SetPoint("TOPLEFT", columnX[group.columns[1].id], 0)
             header:Show()
         end
 
-        local resetTime = renderContext.getOverviewResetTime()
-        if resetTime then
-            resetText:SetFormattedText(
-                renderContext.locale["周重置 %s"],
-                renderContext.formatResetTime(resetTime)
-            )
-        else
-            resetText:SetText("")
-        end
-
-        goldHeaderText:SetText(
-            renderContext.locale["金币"]
-                .. renderContext.getResourceIconMarkup(renderContext.getCoinIconFile())
-        )
-        emberHeaderText:SetText(renderContext.locale["泰坦余烬"] .. renderContext.getResourceIconMarkup(
-            renderContext.getCurrencyIconFile(renderContext.titanEmberCurrencyID)
-        ))
-        shardHeaderText:SetText(renderContext.locale["泰坦碎片"] .. renderContext.getResourceIconMarkup(
-            renderContext.getCurrencyIconFile(renderContext.titanShardCurrencyID)
-        ))
-
-        local raidRowsTop = ui.raidHeaderGroupHeight + ui.raidHeaderSubHeight
-        resourceTop = raidRowsTop + raidRowCount * ui.rowHeight + ui.sectionGap
-        resourceRowsTop = resourceTop + ui.resourceGroupHeight + ui.resourceSubHeaderHeight
+        local raidRowsTop = raidHeaderGroupHeight + raidHeaderSubHeight
+        resourceTop = raidRowsTop + raidRowCount * raidRowHeight + ui.sectionGap
+        resourceRowsTop = resourceTop + resourceGroupHeight + resourceSubHeaderHeight
 
         resourceTitleCell:ClearAllPoints()
         resourceTitleCell:SetPoint("TOPLEFT", ui.padding, -resourceTop)
 
-        local professionX = ui.padding + ui.nameWidth
+        local professionX = ui.padding + nameWidth
+        professionHeader:SetHeight(resourceGroupHeight + resourceSubHeaderHeight)
         professionHeader:SetWidth(professionWidth)
         professionHeader:ClearAllPoints()
         professionHeader:SetPoint("TOPLEFT", professionX, -resourceTop)
 
         local equipmentX = professionX + professionWidth
         equipmentHeader:SetWidth(equipmentWidth)
+        equipmentHeader:SetHeight(resourceGroupHeight)
         equipmentHeader:ClearAllPoints()
         equipmentHeader:SetPoint("TOPLEFT", equipmentX, -resourceTop)
         legendaryHeader:SetWidth(legendaryWidth)
+        legendaryHeader:SetHeight(resourceSubHeaderHeight)
         legendaryHeader:ClearAllPoints()
-        legendaryHeader:SetPoint("TOPLEFT", equipmentX, -(resourceTop + ui.resourceGroupHeight))
+        legendaryHeader:SetPoint("TOPLEFT", equipmentX, -(resourceTop + resourceGroupHeight))
         fragmentHeader:SetWidth(fragmentWidth)
+        fragmentHeader:SetHeight(resourceSubHeaderHeight)
         fragmentHeader:ClearAllPoints()
         fragmentHeader:SetPoint(
             "TOPLEFT",
             equipmentX + legendaryWidth,
-            -(resourceTop + ui.resourceGroupHeight)
+            -(resourceTop + resourceGroupHeight)
         )
         upgradeHeader:SetWidth(upgradeWidth)
+        upgradeHeader:SetHeight(resourceSubHeaderHeight)
         upgradeHeader:ClearAllPoints()
         upgradeHeader:SetPoint(
             "TOPLEFT",
             equipmentX + legendaryWidth + fragmentWidth,
-            -(resourceTop + ui.resourceGroupHeight)
+            -(resourceTop + resourceGroupHeight)
         )
         trinketHeader:SetWidth(trinketWidth)
+        trinketHeader:SetHeight(resourceSubHeaderHeight)
         trinketHeader:ClearAllPoints()
         trinketHeader:SetPoint(
             "TOPLEFT",
             equipmentX + legendaryWidth + fragmentWidth + upgradeWidth,
-            -(resourceTop + ui.resourceGroupHeight)
+            -(resourceTop + resourceGroupHeight)
         )
 
         local commonX = equipmentX + equipmentWidth
         commonHeader:SetWidth(commonWidth)
+        commonHeader:SetHeight(resourceGroupHeight)
         commonHeader:ClearAllPoints()
         commonHeader:SetPoint("TOPLEFT", commonX, -resourceTop)
         goldHeader:SetWidth(goldWidth)
+        goldHeader:SetHeight(resourceSubHeaderHeight)
         goldHeader:ClearAllPoints()
-        goldHeader:SetPoint("TOPLEFT", commonX, -(resourceTop + ui.resourceGroupHeight))
+        goldHeader:SetPoint("TOPLEFT", commonX, -(resourceTop + resourceGroupHeight))
         emberHeader:SetWidth(emberWidth)
+        emberHeader:SetHeight(resourceSubHeaderHeight)
         emberHeader:ClearAllPoints()
-        emberHeader:SetPoint("TOPLEFT", commonX + goldWidth, -(resourceTop + ui.resourceGroupHeight))
+        emberHeader:SetPoint("TOPLEFT", commonX + goldWidth, -(resourceTop + resourceGroupHeight))
         shardHeader:SetWidth(shardWidth)
+        shardHeader:SetHeight(resourceSubHeaderHeight)
         shardHeader:ClearAllPoints()
         shardHeader:SetPoint(
             "TOPLEFT",
             commonX + goldWidth + emberWidth,
-            -(resourceTop + ui.resourceGroupHeight)
+            -(resourceTop + resourceGroupHeight)
         )
 
         for rowIndex, character in ipairs(raidCharacters) do
             local row = renderContext.ensureRow(rowIndex)
             local rowColor = character.isCurrent and renderContext.color.current
                 or renderContext.color.row
-            local rowY = raidRowsTop + (rowIndex - 1) * ui.rowHeight
+            local statusBaseColor = renderContext.resolveSurfaceColor(rowColor)
+            local rowY = raidRowsTop + (rowIndex - 1) * raidRowHeight
 
             row.raidNameCell:Show()
+            row.raidNameCell:SetSize(nameWidth, raidRowHeight)
             row.raidNameCell:ClearAllPoints()
             row.raidNameCell:SetPoint("TOPLEFT", ui.padding, -rowY)
             renderContext.setCellColor(row.raidNameCell, rowColor)
@@ -3597,14 +4315,15 @@ local function CreateHoverFrame()
             for _, cell in pairs(row.raidCells) do
                 cell:Hide()
             end
-            local cellOffsetX = ui.padding + ui.nameWidth
+            local cellOffsetX = ui.padding + nameWidth
             for _, column in ipairs(visibleColumns) do
                 local cell = row.raidCells[column.id]
                 cell:SetWidth(columnWidths[column.id])
+                cell:SetHeight(raidRowHeight)
                 cell:ClearAllPoints()
                 cell:SetPoint("TOPLEFT", cellOffsetX, -rowY)
                 cell.character = character
-                cell.baseColor = rowColor
+                cell.baseColor = statusBaseColor
                 if column.isQuest then
                     renderContext.updateQuestStatusDisplay(cell, character, column)
                 elseif column.isProfessionCooldown then
@@ -3623,15 +4342,16 @@ local function CreateHoverFrame()
             end
             row.raidHover:ClearAllPoints()
             row.raidHover:SetPoint("TOPLEFT", ui.padding, -rowY)
-            row.raidHover:SetSize(
-                hoverEmbedded and ui.nameWidth or (ui.nameWidth + lockoutsWidth),
-                ui.rowHeight
-            )
+            row.raidHover:SetSize(nameWidth + lockoutsWidth, raidRowHeight)
             row.raidHover.isCurrent = character.isCurrent
-            row.raidHover.identityOnly = hoverEmbedded
             row.raidHover.character = character
+            row.raidNameButton:ClearAllPoints()
+            row.raidNameButton:SetPoint("TOPLEFT", ui.padding, -rowY)
+            row.raidNameButton:SetSize(nameWidth, raidRowHeight)
+            row.raidNameButton.character = character
             row.raidChevron:SetShown(hoverEmbedded)
             row.raidHover:Show()
+            row.raidNameButton:Show()
         end
 
         local goldTotal = 0
@@ -3644,8 +4364,8 @@ local function CreateHoverFrame()
             local row = renderContext.ensureRow(rowIndex)
             local rowColor = character.isCurrent and renderContext.color.current
                 or renderContext.color.row
-            local resourceRowY = resourceRowsTop + (rowIndex - 1) * ui.rowHeight
-            local professionX = ui.padding + ui.nameWidth
+            local resourceRowY = resourceRowsTop + (rowIndex - 1) * resourceRowHeight
+            local professionX = ui.padding + nameWidth
             local legendaryX = professionX + professionWidth
             local fragmentX = legendaryX + legendaryWidth
             local upgradeX = fragmentX + fragmentWidth
@@ -3655,6 +4375,7 @@ local function CreateHoverFrame()
             local shardX = emberX + emberWidth
 
             row.resourceNameCell:Show()
+            row.resourceNameCell:SetSize(nameWidth, resourceRowHeight)
             row.resourceNameCell:ClearAllPoints()
             row.resourceNameCell:SetPoint("TOPLEFT", ui.padding, -resourceRowY)
             renderContext.setCellColor(row.resourceNameCell, rowColor)
@@ -3666,14 +4387,14 @@ local function CreateHoverFrame()
             end
 
             row.professionCell:Show()
-            row.professionCell:SetWidth(professionWidth)
+            row.professionCell:SetSize(professionWidth, resourceRowHeight)
             row.professionCell:ClearAllPoints()
             row.professionCell:SetPoint("TOPLEFT", professionX, -resourceRowY)
             renderContext.setCellColor(row.professionCell, rowColor)
             renderContext.renderProfessionStrip(row.professionCell, row.professionTiles, character.professions)
 
             row.legendaryCell:Show()
-            row.legendaryCell:SetWidth(legendaryWidth)
+            row.legendaryCell:SetSize(legendaryWidth, resourceRowHeight)
             row.legendaryCell:ClearAllPoints()
             row.legendaryCell:SetPoint("TOPLEFT", legendaryX, -resourceRowY)
             renderContext.setCellColor(row.legendaryCell, rowColor)
@@ -3686,7 +4407,7 @@ local function CreateHoverFrame()
             )
 
             row.fragmentCell:Show()
-            row.fragmentCell:SetWidth(fragmentWidth)
+            row.fragmentCell:SetSize(fragmentWidth, resourceRowHeight)
             row.fragmentCell:ClearAllPoints()
             row.fragmentCell:SetPoint("TOPLEFT", fragmentX, -resourceRowY)
             renderContext.setCellColor(row.fragmentCell, rowColor)
@@ -3700,7 +4421,7 @@ local function CreateHoverFrame()
             )
 
             row.upgradeCell:Show()
-            row.upgradeCell:SetWidth(upgradeWidth)
+            row.upgradeCell:SetSize(upgradeWidth, resourceRowHeight)
             row.upgradeCell:ClearAllPoints()
             row.upgradeCell:SetPoint("TOPLEFT", upgradeX, -resourceRowY)
             renderContext.setCellColor(row.upgradeCell, rowColor)
@@ -3714,14 +4435,14 @@ local function CreateHoverFrame()
             )
 
             row.trinketCell:Show()
-            row.trinketCell:SetWidth(trinketWidth)
+            row.trinketCell:SetSize(trinketWidth, resourceRowHeight)
             row.trinketCell:ClearAllPoints()
             row.trinketCell:SetPoint("TOPLEFT", trinketX, -resourceRowY)
             renderContext.setCellColor(row.trinketCell, rowColor)
             renderContext.renderItemStrip(row.trinketCell, row.trinketTiles, character.trinkets, "itemLevel")
 
             row.goldCell:Show()
-            row.goldCell:SetWidth(goldWidth)
+            row.goldCell:SetSize(goldWidth, resourceRowHeight)
             row.goldCell:ClearAllPoints()
             row.goldCell:SetPoint("TOPLEFT", goldX, -resourceRowY)
             row.goldCell.character = character
@@ -3730,19 +4451,23 @@ local function CreateHoverFrame()
             row.gold:SetText(renderContext.formatResourceNumber(gold))
 
             row.emberCell:Show()
-            row.emberCell:SetWidth(emberWidth)
+            row.emberCell:SetSize(emberWidth, resourceRowHeight)
             row.emberCell:ClearAllPoints()
             row.emberCell:SetPoint("TOPLEFT", emberX, -resourceRowY)
             row.emberCell.character = character
             renderContext.setCellColor(row.emberCell, rowColor)
+            -- 浮动小界面只显示余烬总量，避免部分角色的周获取字段异常
+            -- 挤进紧凑单元格；嵌入式大界面继续保留周进度。
+            local emberEarnedThisWeek = hoverEmbedded and character.titanEmbersEarnedThisWeek or nil
+            local emberWeeklyMax = hoverEmbedded and character.titanEmbersWeeklyMax or nil
             row.ember:SetText(renderContext.formatResourceNumber(
                 character.titanEmbers,
-                character.titanEmbersEarnedThisWeek,
-                character.titanEmbersWeeklyMax
+                emberEarnedThisWeek,
+                emberWeeklyMax
             ))
 
             row.shardCell:Show()
-            row.shardCell:SetWidth(shardWidth)
+            row.shardCell:SetSize(shardWidth, resourceRowHeight)
             row.shardCell:ClearAllPoints()
             row.shardCell:SetPoint("TOPLEFT", shardX, -resourceRowY)
             row.shardCell.character = character
@@ -3751,12 +4476,16 @@ local function CreateHoverFrame()
 
             row.resourceHover:ClearAllPoints()
             row.resourceHover:SetPoint("TOPLEFT", ui.padding, -resourceRowY)
-            row.resourceHover:SetSize(hoverEmbedded and ui.nameWidth or resourceWidth, ui.rowHeight)
+            row.resourceHover:SetSize(resourceWidth, resourceRowHeight)
             row.resourceHover.isCurrent = character.isCurrent
-            row.resourceHover.identityOnly = hoverEmbedded
             row.resourceHover.character = character
+            row.resourceNameButton:ClearAllPoints()
+            row.resourceNameButton:SetPoint("TOPLEFT", ui.padding, -resourceRowY)
+            row.resourceNameButton:SetSize(nameWidth, resourceRowHeight)
+            row.resourceNameButton.character = character
             row.resourceChevron:SetShown(hoverEmbedded)
             row.resourceHover:Show()
+            row.resourceNameButton:Show()
 
             goldTotal = goldTotal + (gold or 0)
             emberTotal = emberTotal + (character.titanEmbers or 0)
@@ -3787,6 +4516,7 @@ local function CreateHoverFrame()
             local row = rows[rowIndex]
             row.raidNameCell:Hide()
             row.raidHover:Hide()
+            row.raidNameButton:Hide()
             renderContext.setRowHoverAlpha(row.raidHover, 0)
             for _, cell in pairs(row.raidCells) do
                 cell:Hide()
@@ -3805,11 +4535,12 @@ local function CreateHoverFrame()
             row.emberCell:Hide()
             row.shardCell:Hide()
             row.resourceHover:Hide()
+            row.resourceNameButton:Hide()
             renderContext.setRowHoverAlpha(row.resourceHover, 0)
         end
 
-        local totalY = resourceRowsTop + resourceRowCount * ui.rowHeight
-        local professionX = ui.padding + ui.nameWidth
+        local totalY = resourceRowsTop + resourceRowCount * resourceRowHeight
+        local professionX = ui.padding + nameWidth
         local legendaryX = professionX + professionWidth
         local fragmentX = legendaryX + legendaryWidth
         local upgradeX = fragmentX + fragmentWidth
@@ -3818,14 +4549,15 @@ local function CreateHoverFrame()
         local emberX = goldX + goldWidth
         local shardX = emberX + emberWidth
         totalNameCell:ClearAllPoints()
+        totalNameCell:SetSize(nameWidth, totalRowHeight)
         totalNameCell:SetPoint("TOPLEFT", ui.padding, -totalY)
-        totalProfessionCell:SetWidth(professionWidth)
+        totalProfessionCell:SetSize(professionWidth, totalRowHeight)
         totalProfessionCell:ClearAllPoints()
         totalProfessionCell:SetPoint("TOPLEFT", professionX, -totalY)
-        totalLegendaryCell:SetWidth(legendaryWidth)
+        totalLegendaryCell:SetSize(legendaryWidth, totalRowHeight)
         totalLegendaryCell:ClearAllPoints()
         totalLegendaryCell:SetPoint("TOPLEFT", legendaryX, -totalY)
-        totalFragmentCell:SetWidth(fragmentWidth)
+        totalFragmentCell:SetSize(fragmentWidth, totalRowHeight)
         totalFragmentCell:ClearAllPoints()
         totalFragmentCell:SetPoint("TOPLEFT", fragmentX, -totalY)
         renderContext.renderItemStrip(
@@ -3836,19 +4568,19 @@ local function CreateHoverFrame()
             renderContext.legendaryItemQuality,
             "×"
         )
-        totalUpgradeCell:SetWidth(upgradeWidth)
+        totalUpgradeCell:SetSize(upgradeWidth, totalRowHeight)
         totalUpgradeCell:ClearAllPoints()
         totalUpgradeCell:SetPoint("TOPLEFT", upgradeX, -totalY)
-        totalTrinketCell:SetWidth(trinketWidth)
+        totalTrinketCell:SetSize(trinketWidth, totalRowHeight)
         totalTrinketCell:ClearAllPoints()
         totalTrinketCell:SetPoint("TOPLEFT", trinketX, -totalY)
-        totalGoldCell:SetWidth(goldWidth)
+        totalGoldCell:SetSize(goldWidth, totalRowHeight)
         totalGoldCell:ClearAllPoints()
         totalGoldCell:SetPoint("TOPLEFT", goldX, -totalY)
-        totalEmberCell:SetWidth(emberWidth)
+        totalEmberCell:SetSize(emberWidth, totalRowHeight)
         totalEmberCell:ClearAllPoints()
         totalEmberCell:SetPoint("TOPLEFT", emberX, -totalY)
-        totalShardCell:SetWidth(shardWidth)
+        totalShardCell:SetSize(shardWidth, totalRowHeight)
         totalShardCell:ClearAllPoints()
         totalShardCell:SetPoint("TOPLEFT", shardX, -totalY)
         totalGold:SetText(renderContext.formatResourceAmount(goldTotal, renderContext.getCoinIconFile()))
@@ -3862,7 +4594,8 @@ local function CreateHoverFrame()
         ))
 
         footerText:ClearAllPoints()
-        footerText:SetPoint("TOPLEFT", ui.padding + 7, -(totalY + ui.rowHeight + 8))
+        footerText:SetPoint("TOPLEFT", ui.padding + 7, -(totalY + totalRowHeight + 8))
+        footerText:SetWidth(max(0, viewportWidth - ui.padding * 2 - 14))
         if latestResourceRecord then
             footerText:SetFormattedText(
                 renderContext.locale["资源最后记录：%s"],
@@ -3872,16 +4605,76 @@ local function CreateHoverFrame()
             footerText:SetText(renderContext.locale["资源尚未记录"])
         end
 
-        local contentHeight = totalY + ui.rowHeight + ui.footerHeight
+        local contentHeight = totalY + totalRowHeight
+            + max(ui.footerHeight, select(2, MeasureTextLike(footerText, "国Ag")) + 12)
         contentFrame:SetHeight(contentHeight)
-        contentScroll:SetHeight(contentHeight)
+        local availableContentHeight = contentHeight
+        if hoverEmbedded then
+            local parent = hoverFrame:GetParent()
+            local parentHeight = parent and parent:GetHeight() or 0
+            local maximumHoverHeight = max(320, parentHeight - 58 - ui.padding)
+            availableContentHeight = max(
+                120,
+                maximumHoverHeight - topInset - topBarHeight - pageHeaderGap - ui.padding
+            )
+        end
+        local contentViewportHeight, verticalOverflow = renderContext.calculateVerticalViewport(
+            contentHeight,
+            availableContentHeight,
+            horizontalOverflow,
+            ui.horizontalScrollHeight,
+            hoverEmbedded
+        )
+        local previousVerticalOffset = contentScroll.GetVerticalScroll
+            and contentScroll:GetVerticalScroll() or 0
+        contentScroll:SetHeight(contentViewportHeight)
+        verticalScrollBar:ClearAllPoints()
+        verticalScrollBar:SetPoint("TOPRIGHT", contentScroll, "TOPRIGHT", -2, 0)
+        verticalScrollBar:SetPoint("BOTTOMRIGHT", contentScroll, "BOTTOMRIGHT", -2, 0)
+        verticalScrollBar.scrollRange = verticalOverflow
+        verticalScrollBar:SetMinMaxValues(0, verticalOverflow)
+        if verticalOverflow > 0 then
+            local preservedOffset = min(previousVerticalOffset, verticalOverflow)
+            verticalScrollThumb:SetHeight(max(
+                32,
+                contentViewportHeight * contentViewportHeight / contentHeight
+            ))
+            verticalScrollBar:Show()
+            verticalScrollBar:SetValue(verticalOverflow - preservedOffset)
+        else
+            verticalScrollBar:SetValue(0)
+            contentScroll:SetVerticalScroll(0)
+            verticalScrollBar:Hide()
+        end
         hoverFrame:SetHeight(
-            topInset + topBarHeight + pageHeaderGap + contentHeight + ui.padding
+            topInset + topBarHeight + pageHeaderGap + contentViewportHeight + ui.padding
                 + (horizontalOverflow > 0 and ui.horizontalScrollHeight or 0)
         )
+        RefreshTruncationOwners()
     end
 
-    updateHoverFrame()
+    local renderPending = false
+    RequestHoverRender = function()
+        if renderPending or not hoverFrame or not hoverFrame:IsShown() then
+            return
+        end
+        renderPending = true
+        BG.After(0, function()
+            renderPending = false
+            if hoverFrame and hoverFrame:IsShown() and updateHoverFrame then
+                updateHoverFrame()
+            end
+        end)
+    end
+    hoverFrame.chrome.requestLayout = RequestHoverRender
+    if UIParent.HookScript and not UIParent._bgforgeOverviewSizeHooked then
+        UIParent._bgforgeOverviewSizeHooked = true
+        UIParent:HookScript("OnSizeChanged", function()
+            if hoverFrame and hoverFrame:IsShown() and not hoverEmbedded then
+                RequestHoverRender()
+            end
+        end)
+    end
 end
 
 local function SetEmbeddedChrome(isEmbedded)
@@ -3890,21 +4683,19 @@ local function SetEmbeddedChrome(isEmbedded)
         return
     end
 
-    chrome.refresh:ClearAllPoints()
+    chrome.refreshSurfaces()
     if isEmbedded then
         chrome.innerBorder:Hide()
         chrome.topBar:Hide()
         chrome.pageHeader:Show()
         chrome.close:Hide()
         chrome.settings:Hide()
-        chrome.refresh:SetPoint("RIGHT", chrome.pageHeader, "RIGHT", -16, 0)
     else
         chrome.innerBorder:Show()
         chrome.topBar:Show()
         chrome.pageHeader:Hide()
         chrome.close:Show()
         chrome.settings:Show()
-        chrome.refresh:SetPoint("RIGHT", chrome.settings, "LEFT", -5, 0)
     end
 end
 
@@ -3946,9 +4737,21 @@ ShowEmbeddedOverview = function(parent)
     hoverFrame:SetScript("OnEnter", nil)
     hoverFrame:SetScript("OnLeave", nil)
     SetEmbeddedChrome(true)
+    if hoverFrame.chrome.resetVerticalScroll then
+        hoverFrame.chrome.resetVerticalScroll()
+    end
+    if parent.HookScript and not parent._bgforgeOverviewSizeHooked then
+        parent._bgforgeOverviewSizeHooked = true
+        parent:HookScript("OnSizeChanged", function()
+            local chrome = hoverFrame and hoverFrame.chrome
+            if chrome and chrome.requestLayout and hoverEmbedded and hoverFrame:IsShown() then
+                chrome.requestLayout()
+            end
+        end)
+    end
 
     CaptureCurrentQuestProgress()
-    CaptureCurrentResources()
+    CaptureCurrentResources({ money = true, currencies = true })
     updateHoverFrame()
     hoverFrame:Show()
 
@@ -4016,14 +4819,13 @@ function BG.ShowRaidLockoutHover(anchor)
     hoverAnchor = anchor
     PositionHoverFrame(anchor)
     CaptureCurrentQuestProgress()
+    CaptureCurrentResources({ money = true, currencies = true })
     updateHoverFrame()
     hoverFrame:Show()
     hoverFrame:SetScript("OnEnter", function()
         hoverHideSerial = hoverHideSerial + 1
     end)
     hoverFrame:SetScript("OnLeave", ScheduleHoverHide)
-    CaptureCurrentResources()
-
     if not currentCharacter.ready
         or not currentCharacter.lastRequestAt
         or GetTime() - currentCharacter.lastRequestAt > 15
@@ -4216,12 +5018,19 @@ function BG.DeleteRaidLockoutCharacter(realmID, characterName)
     return true
 end
 
-function BG.RefreshRaidLockoutDisplays()
-    if updateOverviewFrame then
-        updateOverviewFrame()
-    elseif updateHoverFrame then
-        updateHoverFrame()
+function BG.RefreshRaidLockoutBackgroundAlpha()
+    if overviewFrame then
+        overviewFrame:SetBackdropColor(unpack(ResolveHoverSurfaceColor(COLOR.panel)))
     end
+    local chrome = hoverFrame and hoverFrame.chrome
+    if chrome and chrome.refreshSurfaces then
+        chrome.refreshSurfaces()
+        RefreshLockoutDisplays()
+    end
+end
+
+function BG.RefreshRaidLockoutDisplays()
+    RefreshLockoutDisplays()
 end
 
 local function CreateRaidLockoutMainFrame()
@@ -4305,13 +5114,20 @@ BG.RegisterEvent("ENCOUNTER_END", function(_, _, _, _, _, _, success)
     end
 end)
 
-BG.RegisterEvent({
-    "CURRENCY_DISPLAY_UPDATE",
-    "PLAYER_LEVEL_UP",
-    "PLAYER_MONEY",
-    "SKILL_LINES_CHANGED",
-}, function()
-    ScheduleResourceRefresh(0.2)
+BG.RegisterEvent("PLAYER_MONEY", function()
+    ScheduleResourceRefresh(0.2, "money")
+end)
+
+BG.RegisterEvent("CURRENCY_DISPLAY_UPDATE", function()
+    ScheduleResourceRefresh(0.2, "currencies")
+end)
+
+BG.RegisterEvent("PLAYER_LEVEL_UP", function()
+    ScheduleResourceRefresh(0.2, "identity")
+end)
+
+BG.RegisterEvent("SKILL_LINES_CHANGED", function()
+    ScheduleResourceRefresh(0.2, "professions")
 end)
 
 BG.RegisterEvent("PLAYER_EQUIPMENT_CHANGED", function()
@@ -4335,19 +5151,17 @@ BG.RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", function(_, _, unitTarget, _, spell
 end)
 
 BG.RegisterEvent("BAG_UPDATE_DELAYED", function()
-    ScheduleResourceRefresh(0.2)
     ScheduleBackpackRefresh(0.3)
 end)
 
 BG.RegisterEvent({ "BANKFRAME_OPENED", "PLAYERBANKSLOTS_CHANGED", "PLAYERBANKBAGSLOTS_CHANGED" }, function()
-    ScheduleResourceRefresh(0.2)
+    ScheduleResourceRefresh(0.2, "bank")
 end)
 
 BG.RegisterEvent("GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
     if not success then
         return
     end
-    ScheduleResourceRefresh(0.1)
     if itemID and pendingEquipmentItemIDs[tonumber(itemID)] then
         ScheduleEquipmentRefresh(0.1)
     end
@@ -4370,7 +5184,7 @@ BG.Init2(function()
     SLASH_BGFORGERAIDLOCKOUT2 = "/bgraid"
 
     ClearExpiredRaidData()
-    ScheduleResourceRefresh(0.5)
+    ScheduleResourceRefresh(0.5, "all")
     ScheduleEquipmentRefresh(0.7)
     ScheduleBackpackRefresh(1.0)
     BG.After(3, CaptureCurrentQuestProgress)

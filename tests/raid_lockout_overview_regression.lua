@@ -163,6 +163,26 @@ local function FindUpvalue(callback, targetName)
     end
 end
 
+local function SetUpvalue(callback, targetName, replacement)
+    for index = 1, 100 do
+        local name = debug.getupvalue(callback, index)
+        if not name then
+            return false
+        end
+        if name == targetName then
+            debug.setupvalue(callback, index, replacement)
+            return true
+        end
+    end
+    return false
+end
+
+local function DrainCallbacks(callbacks)
+    while #callbacks > 0 do
+        table.remove(callbacks, 1)()
+    end
+end
+
 local function TestSkillLineFallbackCapturesPrimaryProfessions()
     local _, events = ResetEnvironment()
     GetProfessions = nil
@@ -363,6 +383,136 @@ local function TestWideTablesUseScreenBoundedViewport()
         "tables that fit the screen must not enable horizontal overflow")
 end
 
+local function TestConstrainedColumnsCompressInPriorityOrder()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local calculateWidths = FindUpvalue(createHoverFrame, "CalculateConstrainedColumnWidths")
+    assert(calculateWidths, "priority-aware column compression is missing")
+
+    local definitions = {
+        { id = "icons", preferredWidth = 150, minimumWidth = 100, shrinkPriority = 1 },
+        { id = "name", preferredWidth = 160, minimumWidth = 126, shrinkPriority = 2 },
+        { id = "header", preferredWidth = 100, minimumWidth = 50, shrinkPriority = 2 },
+        { id = "number", preferredWidth = 100, minimumWidth = 64, shrinkPriority = 3 },
+    }
+
+    local widths, totalWidth, overflow = calculateWidths(definitions, 510)
+    assert(widths.icons == 150 and widths.name == 160 and widths.header == 100
+        and widths.number == 100 and totalWidth == 510 and overflow == 0,
+        "a roomy viewport must preserve every preferred column width")
+
+    widths, totalWidth, overflow = calculateWidths(definitions, 470)
+    assert(widths.icons == 110 and widths.name == 160 and widths.header == 100
+        and widths.number == 100,
+        "layout must remove unused icon-column width before compressing text columns")
+    assert(totalWidth == 470 and overflow == 0,
+        "a viewport above the hard-minimum sum must not scroll")
+
+    widths, totalWidth, overflow = calculateWidths(definitions, 200)
+    assert(widths.icons >= 100 and widths.name >= 126
+        and widths.header >= 50 and widths.number >= 64,
+        "column compression crossed a hard minimum")
+    assert(totalWidth == 340 and overflow == 140,
+        "layout must keep hard minimums and report only the unavoidable overflow")
+
+    for _, scale in ipairs({ 1, 1.25, 1.5 }) do
+        local scaled = {
+            { id = "name", preferredWidth = 160 * scale, minimumWidth = 126, shrinkPriority = 2 },
+            { id = "header", preferredWidth = 90 * scale, minimumWidth = 54, shrinkPriority = 2 },
+            { id = "number", preferredWidth = 88 * scale, minimumWidth = 64, shrinkPriority = 3 },
+        }
+        widths = calculateWidths(scaled, 1)
+        assert(widths.name >= 126 and widths.header >= 54 and widths.number >= 64,
+            "wide-font simulation crossed a hard column minimum")
+    end
+end
+
+local function TestIconColumnRequirementsNeverDropTiles()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local requiredWidth = FindUpvalue(createHoverFrame, "CalculateItemStripRequiredWidth")
+    local calculateStrip = FindUpvalue(createHoverFrame, "CalculateItemStripLayout")
+    assert(requiredWidth and calculateStrip, "item-strip width helpers are missing")
+
+    local expected = { [0] = 54, [1] = 54, [2] = 54, [6] = 150, [10] = 246 }
+    for count, minimumWidth in pairs(expected) do
+        assert(requiredWidth(count) == minimumWidth,
+            "icon hard minimum does not cover the complete strip for count " .. count)
+        local visibleCount = calculateStrip(minimumWidth, count)
+        assert(visibleCount == count,
+            "icon strip silently dropped tiles for count " .. count)
+    end
+    assert(requiredWidth(6, 30) == 198,
+        "embedded 30-point icon strips must expand their column hard minimum")
+    local embeddedVisible, _, embeddedSize = calculateStrip(198, 6, 30)
+    assert(embeddedVisible == 6 and embeddedSize == 30,
+        "embedded icon layout must keep every enlarged tile visible")
+end
+
+local function TestTextMetricsGrowRowsAndTooltipsRequireTruncation()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local calculateMetrics = FindUpvalue(createHoverFrame, "CalculateTypographyMetrics")
+    local isTruncated = FindUpvalue(createHoverFrame, "IsTextActuallyTruncated")
+    assert(calculateMetrics and isTruncated, "adaptive text-height helpers are missing")
+
+    local normal = calculateMetrics(14)
+    assert(normal.rowHeight == 24 and normal.raidRowHeight == 24
+        and normal.resourceRowHeight == 24 and normal.itemTileSize == 22
+        and normal.headerTierHeight == 22,
+        "normal fonts must preserve the current compact table density")
+    local embedded = calculateMetrics(14, true)
+    assert(embedded.raidRowHeight == 30 and embedded.resourceRowHeight == 36
+        and embedded.itemTileSize == 30 and embedded.headerTierHeight == 26,
+        "embedded overview must use the approved roomier row and icon sizes")
+    local tall = calculateMetrics(30)
+    assert(tall.rowHeight >= 36 and tall.headerTierHeight >= 36,
+        "a tall font must grow rows and both header tiers")
+
+    assert(isTruncated({ IsTruncated = function() return true end }),
+        "truncated text must enable its full-text tooltip")
+    assert(not isTruncated({ IsTruncated = function() return false end }),
+        "complete text must not enable a redundant tooltip")
+    assert(not isTruncated({}), "missing IsTruncated support must fail closed")
+end
+
+local function TestEmbeddedOverviewAddsVerticalOverflowOnlyWhenNeeded()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local calculateViewport = FindUpvalue(createHoverFrame, "CalculateVerticalViewport")
+    assert(calculateViewport, "embedded vertical viewport calculation is missing")
+
+    local viewport, overflow = calculateViewport(500, 700, 0, 16, true)
+    assert(viewport == 500 and overflow == 0,
+        "short embedded content must not show a vertical scrollbar")
+    viewport, overflow = calculateViewport(900, 700, 0, 16, true)
+    assert(viewport == 700 and overflow == 200,
+        "many characters must overflow the embedded content viewport")
+    viewport, overflow = calculateViewport(900, 700, 20, 16, true)
+    assert(viewport == 684 and overflow == 216,
+        "horizontal scrolling must reserve its height before vertical overflow is calculated")
+    viewport, overflow = calculateViewport(900, 700, 20, 16, false)
+    assert(viewport == 900 and overflow == 0,
+        "small overview must retain its current natural-height behavior")
+end
+
+local function TestSmallAndLargeOverviewUseTheirOwnViewport()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local calculateViewport = FindUpvalue(createHoverFrame, "CalculateOverviewViewportWidth")
+    assert(calculateViewport, "shared overview viewport selector is missing")
+
+    assert(calculateViewport(1200, 1024, nil, false, 10) == 992,
+        "small overview must use the UIParent-bounded viewport")
+    assert(calculateViewport(1200, 1024, 1400, true, 10) == 1380,
+        "large overview must use the BGForge main-frame viewport")
+end
+
 local function TestHoverFrameStaysWithinTitanUpvalueLimit()
     local BG = ResetEnvironment()
     local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
@@ -402,6 +552,8 @@ local function TestHoverFrameUsesDesignSystemPalette()
 
     local focus = BG.UI.Token("color", "focus")
     local forgeGold = BG.UI.Token("color", "forgeGold")
+    local focusSurfaceSubtle = BG.UI.Token("color", "focusSurfaceSubtle")
+    local success = BG.UI.Token("color", "success")
     assert(colors.focus[1] == focus[1] and colors.focus[2] == focus[2]
         and colors.focus[3] == focus[3],
         "hover interactions must use the shared focus color")
@@ -412,6 +564,31 @@ local function TestHoverFrameUsesDesignSystemPalette()
         "standard character rows must share one base surface")
     assert(colors.current[1] ~= colors.gold[1] or colors.current[2] ~= colors.gold[2],
         "current-character selection must not fall back to the legacy gold row tint")
+    assert(colors.current[1] == focusSurfaceSubtle[1]
+        and colors.current[2] == focusSurfaceSubtle[2],
+        "current-character row must use the quiet dense-table selection surface")
+    assert(colors.success[1] == success[1] and colors.success[2] == success[2],
+        "completion checks must use the shared muted-success foreground")
+
+    local resolveSurfaceColor = FindUpvalue(createHoverFrame, "ResolveHoverSurfaceColor")
+    assert(resolveSurfaceColor, "hover surface-mode color resolver is missing")
+    BiaoGe = { options = { alpha = 0.35 } }
+    assert(resolveSurfaceColor(colors.panel)[4] == 0.35,
+        "overview canvas must use the shared background opacity")
+    assert(resolveSurfaceColor(colors.row)[4] == 0.35,
+        "overview rows must use the shared background opacity")
+    assert(resolveSurfaceColor(colors.header)[4] == 0.35,
+        "overview headers must use the shared background opacity")
+    assert(resolveSurfaceColor(colors.headerStrong)[4] == 0.35,
+        "overview section headers must use the shared background opacity")
+    assert(resolveSurfaceColor(colors.current)[4] == 0.35,
+        "current-character background must use the shared background opacity")
+    assert(colors.row[4] ~= 0.35,
+        "resolving overview opacity must not mutate design-system tokens")
+
+    BiaoGe.options.alpha = 2
+    assert(resolveSurfaceColor(colors.panel)[4] == 1,
+        "overview opacity must clamp invalid high saved values")
 end
 
 local function TestEquipmentUsesIconTilesWithTopLeftValues()
@@ -927,9 +1104,8 @@ local function TestTitanProfessionCooldownSnapshotsAndSummary()
 
     character.professionCooldowns.jewelcraftingIcyPrism.endTime = nil
     updateCooldownStatus(status, character)
-    local successSurface = BG.UI.Token("color", "successSurface")
-    assert(status.check.shown and status.background.color[1] == successSurface[1],
-        "all-ready crafting cooldowns must render the semantic success state")
+    assert(status.check.shown and status.background.color[1] == status.baseColor[1],
+        "all-ready crafting cooldowns must keep the clean neutral cell background")
 end
 
 local function TestAlchemyTransmutesCollapseIntoOneSharedCooldown()
@@ -1299,7 +1475,7 @@ local function TestUpgradeItemsAreExcludedFromFinishedLegendaries()
 
     GetItemInfoInstant = function(itemInfo)
         local itemID = GetTestItemID(itemInfo)
-        return itemID, nil, nil, "INVTYPE_NECK", itemID and itemID + 100000
+        return itemID, nil, nil, "INVTYPE_NECK", itemID and itemID + 100000, 4
     end
     GetItemInfo = function(itemInfo)
         local itemID = GetTestItemID(itemInfo)
@@ -1359,7 +1535,7 @@ local function TestUpgradeItemsAreExcludedFromFinishedLegendaries()
         },
     }
 
-    events.PLAYER_MONEY()
+    events.BAG_UPDATE_DELAYED()
 
     local stored = GetStoredCharacter()
     assert(#stored.legendaryItems == 1 and stored.legendaryItems[1].itemID == 264750,
@@ -1602,9 +1778,8 @@ local function TestQuestColumnsFollowVaultInTwoGroups()
         ready = true,
         questCompletions = { fishingDaily = { questID = 13836 } },
     }, { id = "fishingDaily" })
-    local successSurface = BG.UI.Token("color", "successSurface")
-    assert(status.check.shown and status.background.color[1] == successSurface[1],
-        "completed profession dailies must render a green check")
+    assert(status.check.shown and status.background.color[1] == status.baseColor[1],
+        "completed profession dailies must keep the clean neutral cell background")
 end
 
 local function TestQuestTurnInsStoreSeparateMinimalSnapshots()
@@ -1707,6 +1882,158 @@ local function TestLegacyWeeklyQuestMigratesToRaidWeekly()
         "legacy weeklyQuest completion was not migrated to raidWeekly")
 end
 
+local function TestResourceEventsOnlyCaptureTheirOwnDataDomain()
+    local BG, events = ResetEnvironment()
+    local callbacks = {}
+    BG.After = function(_, callback)
+        callbacks[#callbacks + 1] = callback
+    end
+
+    local moneyReads = 0
+    local knownSpellReads = 0
+    local bagItemReads = 0
+    local itemCountReads = 0
+    GetMoney = function()
+        moneyReads = moneyReads + 1
+        return 1230000
+    end
+    IsPlayerSpell = function()
+        knownSpellReads = knownSpellReads + 1
+        return false
+    end
+    C_Container.GetContainerNumSlots = function()
+        return 20
+    end
+    C_Container.GetContainerItemInfo = function()
+        bagItemReads = bagItemReads + 1
+        return nil
+    end
+    C_Item.GetItemCount = function()
+        itemCountReads = itemCountReads + 1
+        return 0
+    end
+
+    events.PLAYER_MONEY()
+    DrainCallbacks(callbacks)
+    assert(moneyReads == 1, "money events must still update the current money snapshot")
+    assert(knownSpellReads == 0 and bagItemReads == 0 and itemCountReads == 0,
+        "money events must not scan professions, bags, or item-count resources")
+
+    bagItemReads = 0
+    events.BAG_UPDATE_DELAYED()
+    DrainCallbacks(callbacks)
+    assert(bagItemReads == (NUM_BAG_SLOTS + 1) * 20,
+        "one bag event must traverse each physical bag slot only once")
+
+    bagItemReads = 0
+    events.GET_ITEM_INFO_RECEIVED(nil, nil, 999999, true)
+    DrainCallbacks(callbacks)
+    assert(bagItemReads == 0,
+        "unrelated item-info events must not trigger a resource or backpack scan")
+end
+
+local function TestHiddenOverviewDoesNotRenderOnDataEvents()
+    local BG, events = ResetEnvironment()
+    local callbacks = {}
+    BG.After = function(_, callback)
+        callbacks[#callbacks + 1] = callback
+    end
+    local renders = 0
+    local fakeFrame = {
+        IsShown = function()
+            return false
+        end,
+    }
+    assert(SetUpvalue(BG.ShowRaidLockoutHover, "hoverFrame", fakeFrame),
+        "hoverFrame upvalue is missing")
+    assert(SetUpvalue(BG.ShowRaidLockoutHover, "updateHoverFrame", function()
+        renders = renders + 1
+    end), "updateHoverFrame upvalue is missing")
+
+    events.PLAYER_MONEY()
+    DrainCallbacks(callbacks)
+    assert(renders == 0, "hidden overview must not run its full renderer")
+end
+
+local function TestWarmHoverRendersOnce()
+    local BG = ResetEnvironment()
+    local callbacks = {}
+    BG.After = function(_, callback)
+        callbacks[#callbacks + 1] = callback
+    end
+    local renders = 0
+    local fakeFrame = {
+        Show = function() end,
+        SetScript = function() end,
+    }
+    assert(SetUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame", function() end))
+    assert(SetUpvalue(BG.ShowRaidLockoutHover, "PositionHoverFrame", function() end))
+    assert(SetUpvalue(BG.ShowRaidLockoutHover, "CaptureCurrentQuestProgress", function() end))
+    assert(SetUpvalue(BG.ShowRaidLockoutHover, "hoverFrame", fakeFrame))
+    assert(SetUpvalue(BG.ShowRaidLockoutHover, "updateHoverFrame", function()
+        renders = renders + 1
+    end))
+    local currentCharacter = assert(FindUpvalue(BG.ShowRaidLockoutHover, "currentCharacter"))
+    currentCharacter.ready = true
+    currentCharacter.lastRequestAt = GetTime()
+
+    BG.ShowRaidLockoutHover({})
+    DrainCallbacks(callbacks)
+    assert(renders == 1, "one warm hover must commit one full overview render")
+end
+
+local function TestStoredCharacterReadsNormalizeOnlyOncePerStore()
+    local BG = ResetEnvironment()
+    local itemInfoReads = 0
+    GetItemInfoInstant = function(link)
+        itemInfoReads = itemInfoReads + 1
+        local itemID = tonumber(tostring(link):match("item:(%d+)")) or 1
+        return itemID, nil, nil, "", 134400, 0
+    end
+    local items = {}
+    for index = 1, 6 do
+        items[index] = {
+            link = "item:" .. (1000 + index),
+            count = 1,
+            classID = 0,
+            isEquipment = false,
+        }
+    end
+    BiaoGe = {
+        BGForgeRaidLockouts = {
+            schemaVersion = 1,
+            realms = {
+                [100] = {
+                    nextOrder = 2,
+                    characters = {
+                        Tester = {
+                            name = "Tester",
+                            order = 1,
+                            instances = {},
+                            details = {
+                                schemaVersion = 1,
+                                equipment = { slots = {} },
+                                backpack = {
+                                    totalSlots = 6,
+                                    usedSlots = 6,
+                                    items = items,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    BG.GetRaidLockoutStoredCharacters(100)
+    local firstReadCost = itemInfoReads
+    BG.GetRaidLockoutStoredCharacters(100)
+    assert(firstReadCost == 6, "the first read must normalize the injected saved store")
+    assert(itemInfoReads == firstReadCost,
+        "subsequent display-model reads must not renormalize every backpack item")
+end
+
 local tests = {
     fallback = TestSkillLineFallbackCapturesPrimaryProfessions,
     preserve = TestUnavailableProfessionDataDoesNotEraseSnapshot,
@@ -1715,6 +2042,11 @@ local tests = {
     raid_width = TestRaidColumnsFillAvailableWidth,
     wide_font_headers = TestWideFontHeadersExpandColumns,
     wide_table_viewport = TestWideTablesUseScreenBoundedViewport,
+    constrained_columns = TestConstrainedColumnsCompressInPriorityOrder,
+    icon_column_requirements = TestIconColumnRequirementsNeverDropTiles,
+    adaptive_text_metrics = TestTextMetricsGrowRowsAndTooltipsRequireTruncation,
+    embedded_vertical_scroll = TestEmbeddedOverviewAddsVerticalOverflowOnlyWhenNeeded,
+    overview_viewports = TestSmallAndLargeOverviewUseTheirOwnViewport,
     hover_upvalues = TestHoverFrameStaysWithinTitanUpvalueLimit,
     ember_weekly = TestPerCharacterEmberWeeklyProgressFormatting,
     hover_design_system = TestHoverFrameUsesDesignSystemPalette,
@@ -1745,6 +2077,10 @@ local tests = {
     quest_turnin = TestQuestTurnInsStoreSeparateMinimalSnapshots,
     quest_backfill = TestQuestLoginBackfillAndIndependentExpiry,
     quest_migration = TestLegacyWeeklyQuestMigratesToRaidWeekly,
+    resource_event_scope = TestResourceEventsOnlyCaptureTheirOwnDataDomain,
+    hidden_render = TestHiddenOverviewDoesNotRenderOnDataEvents,
+    hover_render_once = TestWarmHoverRendersOnce,
+    normalize_once = TestStoredCharacterReadsNormalizeOnlyOncePerStore,
 }
 
 if arg[1] then
@@ -1754,6 +2090,11 @@ else
         "fallback", "preserve", "primary", "incomplete_primary", "raid_width",
         "wide_font_headers", "item_tiles",
         "wide_table_viewport",
+        "constrained_columns",
+        "icon_column_requirements",
+        "adaptive_text_metrics",
+        "embedded_vertical_scroll",
+        "overview_viewports",
         "hover_upvalues",
         "ember_weekly",
         "hover_design_system",
@@ -1783,6 +2124,10 @@ else
         "quest_turnin",
         "quest_backfill",
         "quest_migration",
+        "resource_event_scope",
+        "hidden_render",
+        "hover_render_once",
+        "normalize_once",
     }) do
         tests[testName]()
     end

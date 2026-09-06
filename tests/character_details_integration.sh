@@ -14,7 +14,41 @@ rg -Fq 'local pageHeader = BG.UI.CreatePageHeader(hoverFrame, {' "$overview"
 rg -Fq 'subtitle = L["点击角色名称可查看装备、背包、专业、资源与进度"]' "$overview"
 rg -Fq 'chrome.topBar:Hide()' "$overview"
 rg -Fq 'chrome.pageHeader:Show()' "$overview"
-rg -Fq 'chrome.refresh:SetPoint("RIGHT", chrome.pageHeader, "RIGHT", -16, 0)' "$overview"
+rg -Fq 'local verticalScrollBar = CreateFrame("Slider", nil, hoverFrame)' "$overview"
+rg -Fq 'calculateVerticalViewport = CalculateVerticalViewport' "$overview"
+rg -Fq 'verticalScrollBar:SetPoint("TOPRIGHT", contentScroll, "TOPRIGHT", -2, 0)' "$overview"
+rg -Fq 'if verticalScrollBar:IsShown() and not (IsShiftKeyDown and IsShiftKeyDown()) then' "$overview"
+rg -Fq 'resetVerticalScroll = function()' "$overview"
+rg -Fq 'local CHARACTER_DETAILS_CHEVRON_TEXTURE = "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up"' "$overview"
+rg -Fq 'local CHARACTER_DETAILS_CHEVRON_SIZE = 16' "$overview"
+rg -Fq 'row.raidChevron:SetTexture(CHARACTER_DETAILS_CHEVRON_TEXTURE)' "$overview"
+rg -Fq 'row.resourceChevron:SetTexture(CHARACTER_DETAILS_CHEVRON_TEXTURE)' "$overview"
+rg -Fq 'local function CreateCharacterNameButton(rowController, identityOverlay, navigationIndicator)' "$overview"
+rg -Fq 'row.raidHover:SetSize(nameWidth + lockoutsWidth, raidRowHeight)' "$overview"
+rg -Fq 'row.resourceHover:SetSize(resourceWidth, resourceRowHeight)' "$overview"
+rg -Fq 'SetRowHoverVisible(self.rowController, false)' "$overview"
+rg -Fq 'self.identityOverlay:SetAlpha(self.rowController.isCurrent and 0 or 1)' "$overview"
+rg -Fq 'row.raidChevron:SetShown(hoverEmbedded)' "$overview"
+rg -Fq 'row.resourceChevron:SetShown(hoverEmbedded)' "$overview"
+rg -Fq 'BG.MainFrame:Show()' "$overview"
+rg -Fq 'BG.ClickTabButton(BG.RaidLockoutMainFrameTabNum)' "$overview"
+rg -Fq 'tile.rowHoverController = cell.rowHoverController' "$overview"
+if rg -q 'row\.(raid|resource)Hover:SetSize\(hoverEmbedded and nameWidth' "$overview"; then
+    echo "Embedded character overview row hover must cover the complete row" >&2
+    exit 1
+fi
+if rg -Fq 'if mouseButton == "LeftButton" and hoverEmbedded then' "$overview"; then
+    echo "Small character overview names must remain clickable" >&2
+    exit 1
+fi
+if rg -Fq 'SetText("›")' "$overview"; then
+    echo "Character overview navigation indicators must not depend on a font glyph" >&2
+    exit 1
+fi
+if rg -q 'chrome\.refresh:' "$overview"; then
+    echo "Embedded character overview must not keep the redundant manual refresh control" >&2
+    exit 1
+fi
 rg -Fq 'ScheduleEquipmentRefresh(0.2)' "$overview"
 rg -Fq 'for slotID = 1, 19 do' "$overview"
 rg -Fq 'schemaVersion = CHARACTER_DETAILS_VERSION' "$overview"
@@ -88,7 +122,11 @@ fi
 rg -Fq 'function BG.GetRaidLockoutProfessionTracks(character, now)' "$overview"
 rg -Fq 'character.titanEmbersEarnedThisWeek' "$overview"
 rg -Fq 'character.titanEmbersWeeklyMax' "$overview"
-rg -Fq 'row.ember:SetFont(BIAOGE_TEXT_FONT, RESOURCE_NUMBER_FONT_SIZE, "OUTLINE")' "$overview"
+rg -Fq 'text:SetFont(BIAOGE_TEXT_FONT, RESOURCE_NUMBER_FONT_SIZE, "OUTLINE")' "$overview"
+if rg -Fq 'RobotoCondensed-Medium.ttf' "$overview"; then
+    echo "Character overview common resources must use the selected game font" >&2
+    exit 1
+fi
 rg -Fq 'C_Spell.GetSpellTexture(spellID)' "$module"
 rg -Fq 'character.titanEmberIconFileID' "$module"
 rg -Fq 'local function FormatWeeklyResourceDetail(earned, maximum)' "$module"
@@ -149,6 +187,12 @@ rg -Fq 'row.textGroup:SetHeight(40)' "$module"
 rg -Fq 'row.name = CreateText(row.textGroup, "body")' "$module"
 rg -Fq 'row.updatedAt = CreateText(row.textGroup, "caption")' "$module"
 rg -Fq 'local function GetCharacterUpdatedAt(character)' "$module"
+rg -Fq 'renderedCharacters = characters' "$module"
+rg -Fq 'RenderCharacterList(characters)' "$module"
+if rg -Uq 'left:SetScript\("OnMouseWheel".*M\.Refresh\(\)' "$module"; then
+    echo "Character-list scrolling must not rebuild the selected detail view" >&2
+    exit 1
+fi
 rg -Fq 'row.itemLevel = CreateText(row, "number")' "$module"
 rg -Fq 'SetTextColor(row.itemLevel, "forgeGold")' "$module"
 
