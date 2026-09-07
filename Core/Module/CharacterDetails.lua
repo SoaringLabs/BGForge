@@ -40,7 +40,7 @@ local BACKPACK_ITEM_GAP = 8
 local BACKPACK_GROUP_HEADER_HEIGHT = 26
 local BACKPACK_GROUP_GAP = 8
 local CHARACTER_ROW_HEIGHT = 56
-local CHARACTER_ROW_STRIDE = 58
+local CHARACTER_ROW_STRIDE = CHARACTER_ROW_HEIGHT
 local MAX_CHARACTER_ROWS = 10
 local WHITE_TEXTURE = "Interface\\Buttons\\WHITE8X8"
 local EMPTY_SLOT_TEXTURE = "Interface\\PaperDoll\\UI-Backpack-EmptySlot"
@@ -59,9 +59,18 @@ local ALERT_STATUS_TEXTURE = (GetFileIDFromPath and GetFileIDFromPath(ALERT_STAT
 local GOLD_TEXTURE = "Interface\\MoneyFrame\\UI-GoldIcon"
 local GOLD_ATLAS = "auctionhouse-icon-coin-gold"
 local DAILY_DEFINITIONS = {
-    { id = "jewelcraftingDaily", name = L["珠宝日常"], iconFileID = 134071, skillLineID = 755 },
-    { id = "cookingDaily", name = L["烹饪日常"], iconFileID = 133971 },
-    { id = "fishingDaily", name = L["钓鱼日常"], iconFileID = 136245 },
+    {
+        id = "jewelcraftingDaily", name = L["珠宝日常"], professionName = L["珠宝加工"],
+        iconFileID = 134071, skillLineID = 755,
+    },
+    {
+        id = "cookingDaily", name = L["烹饪日常"], professionName = L["烹饪"],
+        iconFileID = 133971, skillLineID = 185, secondarySkill = true, minLevel = 65, minRank = 350,
+    },
+    {
+        id = "fishingDaily", name = L["钓鱼日常"], professionName = L["钓鱼"],
+        iconFileID = 136245, skillLineID = 356, secondarySkill = true, minLevel = 70, minRank = 1,
+    },
 }
 local PROFESSION_TRACK_COUNT = 2
 local PROFESSION_COOLDOWN_CELL_COUNT = 2
@@ -79,6 +88,26 @@ local PROGRESS_BOSS_ROW_HEIGHT = 28
 local PROGRESS_HEADER_HEIGHT = 46
 local PROGRESS_WEEKLY_HEIGHT = 70
 local PROGRESS_MAX_SEGMENTS = 20
+-- “今日”页严格按已选中的三线战备舱效果图布局。比例来自目标图内容区：
+-- 左 25.2%、中 39.6%、右侧使用剩余宽度；列间只保留 8px 设计系统间距。
+-- 集中维护这些尺寸，避免各模块自行微调后逐渐偏离视觉基准。
+local TODAY_PANEL_MIN_HEIGHT = 620
+local TODAY_COLUMN_GAP = 8
+local TODAY_LEFT_COLUMN_RATIO = 0.252
+local TODAY_RAID_COLUMN_RATIO = 0.396
+local TODAY_COLUMN_TITLE_HEIGHT = 38
+local TODAY_SUMMARY_HEIGHT = 52
+local TODAY_SECTION_TITLE_HEIGHT = 34
+local TODAY_TASK_ROW_HEIGHT = 52
+local TODAY_RESOURCE_ROW_HEIGHT = 37
+local TODAY_RESOURCE_DETAIL_GAP = 4
+local TODAY_PREVIEW_HEIGHT = 64
+local TODAY_RAID_PROGRESS_WIDTH = 170
+local TODAY_RAID_MAX_SEGMENTS = 20
+local TODAY_RAID_ROW_HEIGHT = 40
+local TODAY_RAID_ROW_STRIDE = TODAY_RAID_ROW_HEIGHT
+local TODAY_RAID_COMPLETED_TOP = 72
+local TODAY_RAID_GROUP_GAP = 32
 
 local frame
 local selectedRealmID
@@ -86,12 +115,20 @@ local selectedCharacterName
 local backCallback
 local suppressBackCallback
 local characterOffset = 0
-local activeView = "equipment"
+local activeView = "today"
 local SetActiveView
 local selectedProgressRaidID
 local progressSelectionCharacterName
 local renderedCharacters
 local RenderCharacterList
+local selectedEquipmentSlot = 1
+local backpackFilter = "all"
+local backpackSearch = ""
+
+local function Text(key)
+    local value = L[key]
+    return value == true and key or value or key
+end
 
 local function Token(name)
     return UI.Token("color", name)
@@ -315,6 +352,39 @@ local function CreateTab(parent, text, selected, enabled)
     return button
 end
 
+-- 角色详情的页签是轻量导航：只用文字和底部焦点线表达状态。
+-- 它故意不复用通用方块 Tab，避免在信息密集的详情页再增加一层边框。
+local function CreateDetailTab(parent, text)
+    local button = CreateFrame("Button", nil, parent)
+    button:SetHeight(42)
+    button.label = CreateText(button, "body", text)
+    button.label:SetAllPoints()
+    button.label:SetJustifyH("CENTER")
+    button.line = button:CreateTexture(nil, "ARTWORK")
+    button.line:SetPoint("BOTTOMLEFT", 8, 0)
+    button.line:SetPoint("BOTTOMRIGHT", -8, 0)
+    button.line:SetHeight(2)
+    button.line:SetColorTexture(unpack(Token("focus")))
+    button.line:Hide()
+    button:SetScript("OnEnter", function(self)
+        if not self.selected then
+            SetTextColor(self.label, "textPrimary")
+        end
+    end)
+    button:SetScript("OnLeave", function(self)
+        if not self.selected then
+            SetTextColor(self.label, "textSecondary")
+        end
+    end)
+    return button
+end
+
+local function SetDetailTabState(tab, selected)
+    tab.selected = selected and true or false
+    SetTextColor(tab.label, tab.selected and "focusText" or "textSecondary")
+    tab.line:SetShown(tab.selected)
+end
+
 local function CreateItemButton(parent, size, iconInset)
     iconInset = iconInset or 2
     local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
@@ -467,6 +537,12 @@ local function CreateEquipmentRow(parent, index)
     row.itemButton:SetPoint("LEFT", 70, 0)
     row.itemButton:SetPoint("RIGHT", -178, 0)
     row.itemButton:SetHeight(25)
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetSize(22, 22)
+    row.icon:SetPoint("LEFT", 66, 0)
+    row.itemButton:ClearAllPoints()
+    row.itemButton:SetPoint("LEFT", 94, 0)
+    row.itemButton:SetPoint("RIGHT", -178, 0)
     row.itemButton.text = CreateText(row.itemButton, "body")
     row.itemButton.text:SetAllPoints()
     row.itemButton.text:SetJustifyH("LEFT")
@@ -478,8 +554,11 @@ local function CreateEquipmentRow(parent, index)
         GameTooltip:Hide()
     end)
     row.itemButton:SetScript("OnClick", function(self)
-        if self.link and HandleModifiedItemClick then
+        if self.link and IsModifiedClick and IsModifiedClick() and HandleModifiedItemClick then
             HandleModifiedItemClick(self.link)
+        else
+            selectedEquipmentSlot = index
+            M.Refresh()
         end
     end)
 
@@ -498,6 +577,7 @@ local function CreateEquipmentRow(parent, index)
 end
 
 local function SetEquipmentRow(row, definition, item)
+    row.icon:SetTexture(item and (item.iconFileID or GetItemIcon(item.link)) or EMPTY_SLOT_TEXTURE)
     row.slot:SetText(definition.label)
     row.itemButton.link = item and item.link or nil
     row.itemButton.text:SetText(item and item.link or "—")
@@ -513,13 +593,12 @@ local function SetEquipmentRow(row, definition, item)
     end
 
     local enchantID, gems = ParseItemEnhancements(item.link)
-    local enhancementIndex = 1
+    local enhancementIndex = 2
     if enchantID then
-        local button = row.enhancements[enhancementIndex]
+        local button = row.enhancements[1]
         button.link = item.link
         button.icon:SetTexture(ENCHANT_TEXTURE)
         button:Show()
-        enhancementIndex = enhancementIndex + 1
     end
     for _, gemID in ipairs(gems) do
         local button = row.enhancements[enhancementIndex]
@@ -534,11 +613,18 @@ local function SetEquipmentRow(row, definition, item)
 end
 
 local function CreateCharacterRow(parent, index)
-    local row = UI.Create("button", parent, {
-        variant = "secondary",
-        state = "default",
-        height = CHARACTER_ROW_HEIGHT,
+    local row = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    UI.Style(row, "surface", { role = "row" })
+    row:SetHeight(CHARACTER_ROW_HEIGHT)
+    -- 列表是一张连续的表，而不是一摞独立卡片。每行只画自己的底部分隔线，
+    -- 避免相邻边框叠成粗线；选中态由底色和左侧焦点线表达。
+    row:SetBackdropBorderColor(0, 0, 0, 0)
+    row.divider = UI.Create("divider", row, {
+        color = "borderSubtle",
+        height = 1,
     })
+    row.divider:SetPoint("BOTTOMLEFT", 0, 0)
+    row.divider:SetPoint("BOTTOMRIGHT", 0, 0)
 
     row.selectedBackground = row:CreateTexture(nil, "ARTWORK", nil, -8)
     row.selectedBackground:SetPoint("TOPLEFT", 1, -1)
@@ -586,6 +672,12 @@ local function CreateCharacterRow(parent, index)
             selectedCharacterName = self.character.name
             M.Refresh()
         end
+    end)
+    row:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(unpack(Token("hover")))
+    end)
+    row:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(unpack(Token("row")))
     end)
     row.index = index
     return row
@@ -799,6 +891,81 @@ local function EnsureProfessionResourcesView()
         divider:SetPoint("LEFT", tile, "RIGHT", 5, 0)
         frame.resourceDividers[index] = divider
     end
+    panel:ClearAllPoints()
+    panel:SetPoint("TOPLEFT", 8, -50)
+    panel:SetPoint("BOTTOMRIGHT", -8, 8)
+    daily:ClearAllPoints()
+    daily:SetPoint("TOPLEFT")
+    daily:SetPoint("TOPRIGHT", panel, "TOP", 70, 0)
+    daily:SetHeight(280)
+    for index, card in ipairs(frame.professionDailyCards) do
+        card:ClearAllPoints()
+        card:SetPoint("TOPLEFT", 12, -60 - (index - 1) * 68)
+        card:SetPoint("TOPRIGHT", -12, -60 - (index - 1) * 68)
+    end
+    for index, track in ipairs(frame.professionTracks) do
+        track:ClearAllPoints()
+        track:SetPoint("TOPLEFT", daily, "BOTTOMLEFT", 0, -8 - (index - 1) * 158)
+        track:SetPoint("RIGHT", daily, "RIGHT")
+        track:SetHeight(150)
+        track.divider:Hide()
+        track.iconButton:ClearAllPoints()
+        track.iconButton:SetPoint("TOPLEFT", 12, -12)
+        for i, cell in ipairs(track.cooldowns) do
+            cell:ClearAllPoints()
+            cell:SetPoint("TOPLEFT", 12 + (i - 1) * 260, -66)
+            cell:SetWidth(250)
+        end
+        track.empty:ClearAllPoints()
+        track.empty:SetPoint("TOPLEFT", 12, -78)
+    end
+    resources:ClearAllPoints()
+    resources:SetPoint("TOPLEFT", daily, "TOPRIGHT", 12, 0)
+    resources:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT")
+    resourceStrip:ClearAllPoints()
+    resourceStrip:SetPoint("TOPLEFT", 12, -48)
+    resourceStrip:SetPoint("BOTTOMRIGHT", -12, 12)
+    for index, tile in ipairs({ frame.resourceGold, frame.resourceEmbers,
+        frame.resourceShards, frame.resourceFragments, frame.resourceUpgrades }) do
+        tile:ClearAllPoints()
+        tile:SetPoint("TOPLEFT", 12, -12 - (index - 1) * 92)
+        tile:SetPoint("RIGHT", -12, 0)
+        if tile.detail then
+            tile.detail:ClearAllPoints()
+            tile.detail:SetPoint("TOPLEFT", tile.value, "BOTTOMLEFT", 0, -4)
+        end
+    end
+    for _, divider in ipairs(frame.resourceDividers) do divider:Hide() end
+end
+
+local function GetDailyApplicability(character, definition, learnedSkillLines)
+    if definition.secondarySkill then
+        local skills = character.dailyProfessionSkills
+        if type(skills) ~= "table" then
+            return nil, L["资格尚未记录"], "unknown"
+        end
+        local skill = skills[definition.skillLineID]
+        if type(skill) ~= "table" then
+            return false, L["尚未学习"], "unlearned"
+        end
+        local level = tonumber(character.level)
+        if definition.minLevel and (not level or level < definition.minLevel) then
+            return false, format(L["角色等级需达到 %d"], definition.minLevel), "locked"
+        end
+        if definition.minRank and (tonumber(skill.rank) or 0) < definition.minRank then
+            return false, format(L["技能需达到 %d"], definition.minRank), "locked"
+        end
+        return true, nil, "eligible"
+    end
+
+    local professionSnapshotKnown = character.dailyProfessionSkillsUpdatedAt
+        or #(character.professions or {}) > 0
+    if definition.skillLineID and professionSnapshotKnown
+        and not learnedSkillLines[definition.skillLineID]
+    then
+        return false, L["未学习珠宝加工"], "unlearned"
+    end
+    return true, nil, "eligible"
 end
 
 local function SetDailyCard(card, definition, character, learnedSkillLines)
@@ -808,16 +975,21 @@ local function SetDailyCard(card, definition, character, learnedSkillLines)
     card.name:SetText(definition.name)
     local completed = character.questCompletions
         and character.questCompletions[definition.id] ~= nil
-    local notApplicable = #(character.professions or {}) > 0 and definition.skillLineID
-        and not learnedSkillLines[definition.skillLineID]
+    local applicable, ineligibleReason = GetDailyApplicability(character, definition, learnedSkillLines)
     if completed then
         card.meta:SetText(L["每日重置"])
         card.statusIcon:SetTexture(READY_STATUS_TEXTURE)
         card.statusIcon:SetVertexColor(unpack(Token("success")))
         card.status:SetText(L["已完成"])
         SetTextColor(card.status, "success")
-    elseif notApplicable then
-        card.meta:SetText(L["未学习珠宝加工"])
+    elseif applicable == nil then
+        card.meta:SetText(ineligibleReason or L["资格尚未记录"])
+        card.statusIcon:SetTexture(UNKNOWN_STATUS_TEXTURE)
+        card.statusIcon:SetVertexColor(unpack(Token("textMuted")))
+        card.status:SetText(L["未扫描"])
+        SetTextColor(card.status, "textMuted")
+    elseif not applicable then
+        card.meta:SetText(ineligibleReason or L["资格尚未记录"])
         card.statusIcon:SetTexture(UNKNOWN_STATUS_TEXTURE)
         card.statusIcon:SetVertexColor(unpack(Token("textMuted")))
         card.status:SetText(L["不适用"])
@@ -884,7 +1056,7 @@ local function SetProfessionTrack(track, profession)
             track.cooldowns[index]:Hide()
         end
         track.empty:SetText(format(L["打开%s窗口刷新"], profession.name))
-        track.empty:SetPoint("LEFT", 204, 0)
+        track.empty:SetPoint("TOPLEFT", 12, -78)
         track.empty:Show()
     else
         for index = 1, PROFESSION_COOLDOWN_CELL_COUNT do
@@ -895,7 +1067,7 @@ local function SetProfessionTrack(track, profession)
         or not profession.hasTrackedCooldowns
     then
         track.empty:SetText(L["本专业无长 CD 项"])
-        track.empty:SetPoint("LEFT", 204, 0)
+        track.empty:SetPoint("TOPLEFT", 12, -78)
         track.empty:Show()
     elseif profession.scanned then
         track.empty:Hide()
@@ -1116,6 +1288,8 @@ local function CreateProgressRaidRow(parent)
     row.status:SetPoint("RIGHT", -12, 0)
     row.status:SetWidth(92)
     row.status:SetJustifyH("RIGHT")
+    row.kills = CreateText(row, "number")
+    row.kills:SetPoint("RIGHT", -108, 0)
 
     row:SetScript("OnClick", function(self)
         if not self.canExpand then
@@ -1135,7 +1309,7 @@ local function SetProgressRaidRow(row, entry, selected)
     local lockout, bosses = GetProgressBosses(entry)
     local killedCount = lockout and (tonumber(lockout.killedCount) or 0) or 0
     local encounterCount = lockout and (tonumber(lockout.numEncounters) or #bosses) or 0
-    local complete = lockout and encounterCount > 0 and killedCount >= encounterCount
+    local complete = killedCount > 0
 
     row.raidID = entry.id
     row.canExpand = true
@@ -1172,15 +1346,8 @@ local function SetProgressRaidRow(row, entry, selected)
         SetTextColor(row.status, "warning")
     end
 
-    for index, segment in ipairs(row.segments) do
-        if lockout and index <= min(encounterCount, PROGRESS_MAX_SEGMENTS) then
-            local boss = bosses[index]
-            SetProgressSegment(segment, boss and boss.killed or index <= killedCount)
-            segment:Show()
-        else
-            segment:Hide()
-        end
-    end
+    row.kills:SetText(lockout and format("%d/%d", killedCount, encounterCount) or "—")
+    for _, segment in ipairs(row.segments) do segment:Hide() end
 
     UI.SetState(row, "default")
     row.selectedBackground:SetShown(selected)
@@ -1247,7 +1414,7 @@ local function SetProgressBossPanel(panel, entry, lockout, bosses)
         panel.summary:SetText("—")
     end
     panel.empty:SetShown(#bosses == 0)
-    local rowsPerColumn = ceil(#bosses / 2)
+    local rowsPerColumn = #bosses
     for index = #panel.rows + 1, #bosses do
         panel.rows[index] = CreateProgressBossRow(panel)
     end
@@ -1260,7 +1427,7 @@ local function SetProgressBossPanel(panel, entry, lockout, bosses)
             local top = -36 - (rowIndex - 1) * (PROGRESS_BOSS_ROW_HEIGHT + 2)
             if column == 1 then
                 row:SetPoint("TOPLEFT", 12, top)
-                row:SetPoint("TOPRIGHT", panel, "TOP", -4, top)
+                row:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -12, top)
             else
                 row:SetPoint("TOPLEFT", panel, "TOP", 4, top)
                 row:SetPoint("TOPRIGHT", -12, top)
@@ -1380,7 +1547,7 @@ local function EnsureProgressView()
     frame.progressScrollContent = content
     frame.progressRaidRows = {}
 
-    local bossPanel = CreateSurface(content, "selected")
+    local bossPanel = CreateSurface(panel, "panel")
     bossPanel.title = CreateText(bossPanel, "heading")
     bossPanel.title:SetPoint("TOPLEFT", 12, -10)
     bossPanel.summary = CreateText(bossPanel, "number")
@@ -1392,11 +1559,16 @@ local function EnsureProgressView()
     bossPanel.rows = {}
     bossPanel:Hide()
     frame.progressBossPanel = bossPanel
+    scroll:ClearAllPoints()
+    scroll:SetPoint("TOPLEFT", 0, -PROGRESS_HEADER_HEIGHT - 8)
+    scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOM", 64, PROGRESS_WEEKLY_HEIGHT + 8)
+    bossPanel:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 16, 0)
+    bossPanel:SetPoint("RIGHT", panel, "RIGHT", -8, 0)
 
     local scrollBar = CreateFrame("Slider", nil, panel)
     scrollBar:SetOrientation("VERTICAL")
-    scrollBar:SetPoint("TOPRIGHT", -3, -PROGRESS_HEADER_HEIGHT - 10)
-    scrollBar:SetPoint("BOTTOMRIGHT", -3, PROGRESS_WEEKLY_HEIGHT + 10)
+    scrollBar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 2, -2)
+    scrollBar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 2, 2)
     scrollBar:SetWidth(10)
     scrollBar:SetMinMaxValues(0, 0)
     scrollBar:SetValue(0)
@@ -1435,13 +1607,27 @@ local function RenderProgress(character)
     if not model then
         return
     end
+    local ordered, completed = {}, 0
+    for _, entry in ipairs(model.raids) do
+        ordered[#ordered + 1] = entry
+        local lockout = GetPrimaryProgressLockout(entry)
+        if lockout and (tonumber(lockout.killedCount) or 0) > 0 then completed = completed + 1 end
+    end
+    table.sort(ordered, function(a, b)
+        local al, bl = GetPrimaryProgressLockout(a), GetPrimaryProgressLockout(b)
+        local ac = al and (tonumber(al.killedCount) or 0) > 0 or false
+        local bc = bl and (tonumber(bl.killedCount) or 0) > 0 or false
+        if ac ~= bc then return not ac end
+        return tostring(a.id) < tostring(b.id)
+    end)
+    model.raids = ordered
 
     frame.updatedAt:SetText(model.updatedAt > 0
         and (L["进度更新"] .. " " .. date("%m-%d %H:%M", model.updatedAt))
         or L["进度尚未记录"])
     frame.progressSummary:SetFormattedText(
         L["副本 %d/%d · 周常 %d/%d"],
-        model.raidCount,
+        completed,
         #model.raids,
         model.weeklyCompleted,
         model.weeklyTotal
@@ -1489,12 +1675,6 @@ local function RenderProgress(character)
             row:SetPoint("TOPRIGHT", 0, -yOffset)
             SetProgressRaidRow(row, entry, entry.id == selectedProgressRaidID)
             yOffset = yOffset + PROGRESS_RAID_ROW_HEIGHT + PROGRESS_RAID_ROW_GAP
-            if entry.id == selectedProgressRaidID and bossPanelHeight > 0 then
-                frame.progressBossPanel:ClearAllPoints()
-                frame.progressBossPanel:SetPoint("TOPLEFT", 0, -yOffset)
-                frame.progressBossPanel:SetPoint("TOPRIGHT", 0, -yOffset)
-                yOffset = yOffset + bossPanelHeight + PROGRESS_RAID_ROW_GAP
-            end
         else
             row:Hide()
         end
@@ -1522,18 +1702,34 @@ local function CreateFrameContents(parent)
     frame:Hide()
 
     local header = CreateSurface(frame, "header")
-    header:SetPoint("TOPLEFT", 0, 0)
+    header:SetPoint("TOPLEFT", 228, 0)
     header:SetPoint("TOPRIGHT", 0, 0)
-    header:SetHeight(54)
+    header:SetHeight(82)
+    -- Header 与下方内容区相邻时，只由内容区绘制共享分隔线。
+    -- 否则两个 1px Backdrop 边框会分别向内绘制，看起来像一条粗线。
+    header:SetBackdropBorderColor(0, 0, 0, 0)
+    header.accent = header:CreateTexture(nil, "ARTWORK")
+    header.accent:SetPoint("TOPLEFT", 0, -1)
+    header.accent:SetPoint("BOTTOMLEFT", 0, 1)
+    header.accent:SetWidth(3)
+    header.accent:SetColorTexture(unpack(Token("focus")))
     frame.header = header
 
-    local back = UI.Create("button", header, {
+    local leftHeader = CreateSurface(frame, "header")
+    leftHeader:SetPoint("TOPLEFT", 0, 0)
+    leftHeader:SetWidth(220)
+    leftHeader:SetHeight(54)
+    leftHeader:SetBackdropBorderColor(0, 0, 0, 0)
+    frame.leftHeader = leftHeader
+
+    local back = UI.Create("button", leftHeader, {
         variant = "secondary",
         text = L["全角色总览"],
-        width = 126,
+        width = 196,
         height = 32,
     })
-    back:SetPoint("LEFT", 10, 0)
+    back:SetPoint("LEFT", 12, 0)
+    frame.back = back
     back.icon = back:CreateTexture(nil, "ARTWORK")
     back.icon:SetPoint("LEFT", 7, 0)
     back.icon:SetSize(24, 24)
@@ -1547,25 +1743,21 @@ local function CreateFrameContents(parent)
         frame:Hide()
     end)
 
-    local backDivider = UI.Create("divider", header, {
-        color = "borderStrong",
-        width = 1,
-        height = 26,
-    })
-    backDivider:SetPoint("LEFT", back, "RIGHT", 12, 0)
-
     frame.characterTitle = CreateText(header, "title")
-    frame.characterTitle:SetPoint("LEFT", backDivider, "RIGHT", 18, 0)
+    frame.portrait = CreateGameIcon(header, 54)
+    frame.portrait:SetPoint("LEFT", 12, 0)
+    frame.characterTitle:SetPoint("TOPLEFT", 80, -11)
     frame.characterMeta = CreateText(header, "body")
-    frame.characterMeta:SetPoint("LEFT", frame.characterTitle, "RIGHT", 18, 0)
+    frame.characterMeta:SetPoint("TOPLEFT", 80, -35)
     frame.updatedAt = CreateText(header, "caption")
+    frame.updatedAt:SetPoint("TOPLEFT", 80, -58)
     frame.updatedAt:SetPoint("RIGHT", -12, 0)
-    frame.updatedAt:SetJustifyH("RIGHT")
+    frame.updatedAt:SetJustifyH("LEFT")
 
     local left = CreateSurface(frame, "panel")
-    left:SetPoint("TOPLEFT", 0, -62)
+    left:SetPoint("TOPLEFT", leftHeader, "BOTTOMLEFT", 0, 0)
     left:SetPoint("BOTTOMLEFT", 0, 0)
-    left:SetWidth(270)
+    left:SetWidth(220)
     frame.left = left
     local listTitle = CreateText(left, "heading", L["选择角色"])
     listTitle:SetPoint("TOPLEFT", 12, -10)
@@ -1587,23 +1779,33 @@ local function CreateFrameContents(parent)
     end)
 
     local right = CreateSurface(frame, "panel")
-    right:SetPoint("TOPLEFT", left, "TOPRIGHT", 8, 0)
+    right:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
     right:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.right = right
 
-    local tabs = CreateSurface(right, "header")
+    local tabs = CreateFrame("Frame", nil, right)
     tabs:SetPoint("TOPLEFT", 0, 0)
     tabs:SetPoint("TOPRIGHT", 0, 0)
     tabs:SetHeight(42)
+    local tabsDivider = UI.Create("divider", tabs, {
+        color = "borderSubtle",
+        height = 1,
+    })
+    tabsDivider:SetPoint("BOTTOMLEFT", 0, 0)
+    tabsDivider:SetPoint("BOTTOMRIGHT", 0, 0)
     local tabLabels = { L["装备"], L["背包"], L["专业与资源"], L["进度"] }
-    local previous
+    local todayTab = CreateDetailTab(tabs, Text("今日"))
+    todayTab:SetWidth(84)
+    todayTab:SetPoint("LEFT", 8, 0)
+    todayTab:SetScript("OnClick", function() SetActiveView("today") end)
+    local previous = todayTab
     frame.tabs = {}
+    frame.todayTab = todayTab
     for index, label in ipairs(tabLabels) do
-        local enabled = true
-        local tab = CreateTab(tabs, label, index == 1, enabled)
+        local tab = CreateDetailTab(tabs, label)
         tab:SetWidth(index == 3 and 132 or 102)
         if previous then
-            tab:SetPoint("LEFT", previous, "RIGHT", 6, 0)
+            tab:SetPoint("LEFT", previous, "RIGHT", 2, 0)
         else
             tab:SetPoint("LEFT", 10, 0)
         end
@@ -1668,6 +1870,29 @@ local function CreateFrameContents(parent)
     tablePanel:SetPoint("TOPLEFT", paperDoll, "TOPRIGHT", 8, 0)
     tablePanel:SetPoint("BOTTOMRIGHT", -8, 8)
     frame.tablePanel = tablePanel
+    paperDoll:Hide()
+    tablePanel:ClearAllPoints()
+    tablePanel:SetPoint("TOPLEFT", 8, -50)
+    tablePanel:SetPoint("BOTTOMRIGHT", -258, 8)
+    frame.equipmentInspector = CreateSurface(right, "panel")
+    frame.equipmentInspector:SetPoint("TOPLEFT", tablePanel, "TOPRIGHT", 8, 0)
+    frame.equipmentInspector:SetPoint("BOTTOMRIGHT", -8, 8)
+    local inspectorTitle = CreateText(frame.equipmentInspector, "heading", Text("物品详情"))
+    inspectorTitle:SetPoint("TOPLEFT", 12, -14)
+    frame.inspectorIcon = CreateItemButton(frame.equipmentInspector, 56)
+    frame.inspectorIcon:SetPoint("TOPLEFT", 12, -48)
+    frame.inspectorName = CreateText(frame.equipmentInspector, "body")
+    frame.inspectorName:SetPoint("TOPLEFT", 12, -118)
+    frame.inspectorName:SetPoint("RIGHT", -12, 0)
+    frame.inspectorMeta = CreateText(frame.equipmentInspector, "body")
+    frame.inspectorMeta:SetPoint("TOPLEFT", 12, -168)
+    frame.inspectorEnhancements = {}
+    for i = 1, 5 do
+        local icon = CreateEnhancementButton(frame.equipmentInspector)
+        icon:SetSize(28, 28)
+        icon:SetPoint("TOPLEFT", 12 + (i - 1) * 38, -214)
+        frame.inspectorEnhancements[i] = icon
+    end
     local tableHeader = CreateSurface(tablePanel, "header")
     tableHeader:SetPoint("TOPLEFT", 0, 0)
     tableHeader:SetPoint("TOPRIGHT", 0, 0)
@@ -1675,7 +1900,7 @@ local function CreateFrameContents(parent)
     local slotHeader = CreateText(tableHeader, "label", L["部位"])
     slotHeader:SetPoint("LEFT", 8, 0)
     local itemHeader = CreateText(tableHeader, "label", L["物品"])
-    itemHeader:SetPoint("LEFT", 70, 0)
+    itemHeader:SetPoint("LEFT", 94, 0)
     local levelHeader = CreateText(tableHeader, "label", L["物品等级"])
     levelHeader:SetPoint("RIGHT", -126, 0)
     local enhancementHeader = CreateText(tableHeader, "label", L["附魔 / 宝石"])
@@ -1736,7 +1961,6 @@ RenderCharacterList = function(characters)
             local specIcon = GetCharacterSpecIcon(character)
             row.icon:SetTexture(specIcon or UNKNOWN_SPEC_TEXTURE)
             row.icon:SetDesaturated(not specIcon)
-            UI.SetState(row, "default")
             local selected = character.name == selectedCharacterName
             row.selectedBackground:SetShown(selected)
             row.selectedAccent:SetShown(selected)
@@ -1757,6 +1981,20 @@ local function RenderEquipment(character)
         local item = slots[definition.nativeSlotID or definition.id]
         SetEquipmentRow(frame.equipmentRows[index], definition, item)
         SetItemButton(frame.paperDollButtons[definition.id], item)
+        local row = frame.equipmentRows[index]
+        row:SetBackdropColor(unpack(Token(index == selectedEquipmentSlot and "focusSurface" or "panel")))
+        if index == selectedEquipmentSlot then
+            SetItemButton(frame.inspectorIcon, item)
+            frame.inspectorName:SetText(item and item.link or Text("尚未记录"))
+            frame.inspectorMeta:SetText(definition.label .. "  ·  " .. L["物品等级"] .. " "
+                .. (item and item.itemLevel and floor(item.itemLevel + 0.5) or "—"))
+            for i, icon in ipairs(frame.inspectorEnhancements) do
+                local source = row.enhancements[i]
+                icon.link, icon.itemID = source.link, source.itemID
+                icon.icon:SetTexture(source.icon:GetTexture())
+                icon:SetShown(source:IsShown())
+            end
+        end
     end
 end
 
@@ -1786,6 +2024,53 @@ local function EnsureBackpackView()
     frame.backpackEmpty:SetJustifyH("CENTER")
     frame.backpackItemButtons = {}
     frame.backpackGroupHeaders = {}
+    local search = CreateFrame("EditBox", nil, header, "InputBoxTemplate")
+    search:SetSize(180, 24)
+    search:SetPoint("LEFT", 64, 0)
+    search:SetAutoFocus(false)
+    search:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(Text("搜索背包物品"))
+        GameTooltip:Show()
+    end)
+    search:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    search:SetScript("OnTextChanged", function(self)
+        backpackSearch = self:GetText() or ""
+        M.Refresh()
+    end)
+    search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    frame.backpackSearch = search
+    local filters = { {"all", "全部"}, {"consumable", "消耗品"},
+        {"miscellaneous", "杂货"}, {"equipment", "装备"} }
+    frame.backpackFilters = {}
+    for i, entry in ipairs(filters) do
+        local key = entry[1]
+        local tab = CreateTab(panel, Text(entry[2]), key == backpackFilter, true)
+        tab:SetSize(78, 28)
+        tab:SetPoint("TOPLEFT", 12 + (i - 1) * 84, -48)
+        tab:SetScript("OnClick", function() backpackFilter = key; M.Refresh() end)
+        frame.backpackFilters[key] = tab
+    end
+    local scroll = CreateFrame("ScrollFrame", nil, panel)
+    scroll:SetPoint("TOPLEFT", 0, -86)
+    scroll:SetPoint("BOTTOMRIGHT", -220, 8)
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(1, 1)
+    scroll:SetScrollChild(content)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        self:SetVerticalScroll(max(0, min(max(0, content:GetHeight() - self:GetHeight()),
+            self:GetVerticalScroll() - delta * 40)))
+    end)
+    frame.backpackScroll, frame.backpackContent = scroll, content
+    frame.backpackInfo = CreateText(panel, "body")
+    frame.backpackInfo:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 16, -12)
+    frame.backpackInfo:SetPoint("RIGHT", -12, 0)
+    frame.backpackInfo:SetJustifyH("LEFT")
+    frame.backpackInfo:SetJustifyV("TOP")
+    frame.backpackSelected = CreateText(panel, "body")
+    frame.backpackSelected:SetPoint("TOPLEFT", frame.backpackInfo, "BOTTOMLEFT", 0, -36)
+    frame.backpackSelected:SetPoint("RIGHT", -12, 0)
 end
 
 local BACKPACK_GROUP_DEFINITIONS = {
@@ -1850,13 +2135,34 @@ local function RenderBackpack(character)
         frame.backpackEmpty:SetText(L["背包尚未记录"])
     end
 
-    local groups = BuildBackpackGroups(items)
+    local filtered = {}
+    for _, item in ipairs(items) do
+        local name = item.name or (item.link and GetItemInfo and GetItemInfo(item.link)) or item.link or ""
+        if (backpackFilter == "all" or GetBackpackCategory(item) == backpackFilter)
+            and string.find(string.lower(name), string.lower(backpackSearch), 1, true) then
+            filtered[#filtered + 1] = item
+        end
+    end
+    if backpack and #items > 0 then
+        frame.backpackEmpty:SetShown(#filtered == 0)
+        frame.backpackEmpty:SetText(Text("没有匹配的物品"))
+    end
+    for key, tab in pairs(frame.backpackFilters) do
+        UI.SetState(tab, key == backpackFilter and "selected" or "default")
+    end
+    frame.backpackInfo:SetText(backpack and format("%s\n\n%d / %d\n\n%s %d\n\n%d %s",
+        Text("背包"), backpack.usedSlots or 0, backpack.totalSlots or 0, Text("剩余格数"),
+        max(0, (backpack.totalSlots or 0) - (backpack.usedSlots or 0)), #items, Text("种物品")) or Text("背包尚未记录"))
+    frame.backpackSelected:SetText("")
+    local groups = BuildBackpackGroups(filtered)
+    local columns = max(1, floor((frame.backpackScroll:GetWidth() - 28) / (BACKPACK_ITEM_SIZE + BACKPACK_ITEM_GAP)))
+    frame.backpackContent:SetWidth(max(1, frame.backpackScroll:GetWidth()))
     local buttonIndex = 0
-    local yOffset = 52
+    local yOffset = 0
     for groupIndex, group in ipairs(groups) do
         local groupHeader = frame.backpackGroupHeaders[groupIndex]
         if not groupHeader then
-            groupHeader = CreateSurface(frame.backpackPanel, "header")
+            groupHeader = CreateSurface(frame.backpackContent, "header")
             groupHeader:SetHeight(BACKPACK_GROUP_HEADER_HEIGHT)
             groupHeader.text = CreateText(groupHeader, "heading")
             groupHeader.text:SetPoint("LEFT", 10, 0)
@@ -1874,14 +2180,17 @@ local function RenderBackpack(character)
             buttonIndex = buttonIndex + 1
             local button = frame.backpackItemButtons[buttonIndex]
             if not button then
-                button = CreateItemButton(frame.backpackPanel, BACKPACK_ITEM_SIZE, 1)
+                button = CreateItemButton(frame.backpackContent, BACKPACK_ITEM_SIZE, 1)
+                button:HookScript("OnEnter", function(self)
+                    frame.backpackSelected:SetText(self.link or "")
+                end)
                 button.level:ClearAllPoints()
                 button.level:SetPoint("BOTTOMRIGHT", -2, 2)
                 button.level:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
                 frame.backpackItemButtons[buttonIndex] = button
             end
-            local column = (groupItemIndex - 1) % BACKPACK_COLUMNS
-            local row = floor((groupItemIndex - 1) / BACKPACK_COLUMNS)
+            local column = (groupItemIndex - 1) % columns
+            local row = floor((groupItemIndex - 1) / columns)
             button:ClearAllPoints()
             button:SetPoint(
                 "TOPLEFT",
@@ -1892,7 +2201,7 @@ local function RenderBackpack(character)
             button:Show()
         end
         yOffset = yOffset
-            + ceil(#group.items / BACKPACK_COLUMNS) * (BACKPACK_ITEM_SIZE + BACKPACK_ITEM_GAP)
+            + ceil(#group.items / columns) * (BACKPACK_ITEM_SIZE + BACKPACK_ITEM_GAP)
             + BACKPACK_GROUP_GAP
     end
     for index = #groups + 1, #frame.backpackGroupHeaders do
@@ -1901,19 +2210,671 @@ local function RenderBackpack(character)
     for index = buttonIndex + 1, #frame.backpackItemButtons do
         frame.backpackItemButtons[index]:Hide()
     end
+    frame.backpackContent:SetHeight(max(1, yOffset))
+    frame.backpackScroll:SetVerticalScroll(min(frame.backpackScroll:GetVerticalScroll(),
+        max(0, yOffset - frame.backpackScroll:GetHeight())))
+end
+
+local function CreateTodaySection(parent, title, metaRole)
+    local section = CreateFrame("Frame", nil, parent)
+    section.title = CreateText(section, "heading", title)
+    section.title:SetPoint("TOPLEFT", 12, -9)
+    section.meta = CreateText(section, metaRole or "caption")
+    section.meta:SetPoint("TOPRIGHT", -12, -11)
+    section.meta:SetJustifyH("RIGHT")
+    section.divider = UI.Create("divider", section, {
+        color = "borderSubtle",
+        height = 1,
+    })
+    section.divider:SetPoint("BOTTOMLEFT", 0, 0)
+    section.divider:SetPoint("BOTTOMRIGHT", 0, 0)
+    return section
+end
+
+local function CreateTodayRow(parent)
+    local row = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    UI.Style(row, "surface", { role = "row" })
+    row:SetBackdropBorderColor(0, 0, 0, 0)
+    row:SetHeight(TODAY_TASK_ROW_HEIGHT)
+    row.divider = UI.Create("divider", row, {
+        color = "borderSubtle",
+        height = 1,
+    })
+    row.divider:SetPoint("BOTTOMLEFT", 0, 0)
+    row.divider:SetPoint("BOTTOMRIGHT", 0, 0)
+    row.iconButton = CreateGameIcon(row, 32)
+    row.iconButton:SetPoint("LEFT", 8, 0)
+    row.name = CreateText(row, "body")
+    row.name:SetPoint("TOPLEFT", row.iconButton, "TOPRIGHT", 9, -1)
+    row.name:SetJustifyH("LEFT")
+    row.detail = CreateText(row, "caption")
+    row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
+    row.detail:SetJustifyH("LEFT")
+    row.status = CreateText(row, "label")
+    row.status:SetPoint("RIGHT", -48, 0)
+    row.status:SetWidth(72)
+    row.status:SetJustifyH("RIGHT")
+    row.action = CreateText(row, "label", Text("查看"))
+    row.action:SetPoint("RIGHT", -8, 0)
+    row.action:SetWidth(34)
+    row.action:SetJustifyH("RIGHT")
+    SetTextColor(row.action, "focusText")
+    row:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(unpack(Token(self.interactive and "hover" or "panel")))
+    end)
+    row:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(unpack(Token("panel")))
+    end)
+    return row
+end
+
+local function SetTodayRow(row, icon, name, detail, status, statusToken, view)
+    SetGameIcon(row.iconButton, icon)
+    row.iconButton.icon:SetDesaturated(false)
+    row.iconButton:SetAlpha(1)
+    row.name:SetText(name or "—")
+    SetTextColor(row.name, "textPrimary")
+    row.detail:SetText(detail or "")
+    SetTextColor(row.detail, "textMuted")
+    row.status:SetText(status or "")
+    SetTextColor(row.status, statusToken or "textSecondary")
+    row.view = view
+    row.interactive = view ~= nil
+    row.action:SetShown(view ~= nil)
+    row:SetScript("OnClick", function(self)
+        if self.view then SetActiveView(self.view) end
+    end)
+    row:Show()
+end
+
+local function SetTodayUnavailableRow(row, definition, detail, status)
+    SetTodayRow(row, definition.iconFileID, definition.name, detail, status,
+        "textMuted", nil)
+    row.iconButton.icon:SetDesaturated(true)
+    row.iconButton:SetAlpha(0.45)
+    SetTextColor(row.name, "textMuted")
+    SetTextColor(row.detail, "textDisabled")
+end
+
+local function CreateTodayRaidRow(parent)
+    local row = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    UI.Style(row, "surface", { role = "row" })
+    row:SetBackdropBorderColor(0, 0, 0, 0)
+    row:SetHeight(TODAY_RAID_ROW_HEIGHT)
+    row.divider = UI.Create("divider", row, {
+        color = "borderSubtle",
+        height = 1,
+    })
+    row.divider:SetPoint("BOTTOMLEFT", 12, 0)
+    row.divider:SetPoint("BOTTOMRIGHT", -12, 0)
+    row.statusIcon = row:CreateTexture(nil, "ARTWORK")
+    row.statusIcon:SetPoint("LEFT", 9, 0)
+    row.statusIcon:SetSize(18, 18)
+    row.statusIcon:SetTexCoord(0, 1, 0, 1)
+
+    row.action = CreateText(row, "label", Text("查看"))
+    row.action:SetPoint("RIGHT", -9, 0)
+    SetTextColor(row.action, "focusText")
+    row.kills = CreateText(row, "numberCompact")
+    row.kills:SetPoint("RIGHT", -48, 0)
+    row.kills:SetWidth(48)
+    row.kills:SetJustifyH("RIGHT")
+
+    row.progress = CreateFrame("Frame", nil, row)
+    row.progress:SetPoint("RIGHT", -106, 0)
+    row.progress:SetSize(TODAY_RAID_PROGRESS_WIDTH, 7)
+    row.segments = {}
+    for index = 1, TODAY_RAID_MAX_SEGMENTS do
+        local segment = row.progress:CreateTexture(nil, "ARTWORK")
+        segment:SetHeight(7)
+        row.segments[index] = segment
+    end
+
+    row.name = CreateText(row, "body")
+    row.name:SetPoint("LEFT", 36, 0)
+    row.name:SetPoint("RIGHT", row.progress, "LEFT", -10, 0)
+    row.name:SetJustifyH("LEFT")
+    row.status = CreateText(row, "caption")
+    -- 分组标题、状态图标和进度数字共同表达状态，不再为重复文案占一行。
+    -- FontString 仍保留文本，供状态测试和辅助提示使用。
+    row.status:Hide()
+    row:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(unpack(Token("hover")))
+    end)
+    row:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(unpack(Token("panel")))
+    end)
+    row:SetScript("OnClick", function()
+        SetActiveView("progress")
+    end)
+    return row
+end
+
+local function SetTodayRaidRow(row, entry)
+    local lockout, bosses = GetProgressBosses(entry)
+    local killedCount = lockout and (tonumber(lockout.killedCount) or 0) or 0
+    local encounterCount = lockout and (tonumber(lockout.numEncounters) or #bosses) or #bosses
+    encounterCount = max(encounterCount, #bosses)
+    local completed = killedCount > 0
+
+    row.name:SetText(entry.name or "—")
+    row.status:SetText(completed and L["已完成"] or L["未开始"])
+    SetTextColor(row.status, completed and "success" or "textMuted")
+    row.statusIcon:SetTexture(completed and READY_STATUS_TEXTURE or WAITING_STATUS_TEXTURE)
+    row.statusIcon:SetVertexColor(unpack(Token(completed and "success" or "textMuted")))
+    row.kills:SetText(encounterCount > 0 and format("%d/%d", killedCount, encounterCount) or "—")
+    SetTextColor(row.kills, completed and "success" or "textMuted")
+
+    local segmentCount = min(encounterCount, TODAY_RAID_MAX_SEGMENTS)
+    local segmentGap = segmentCount > 12 and 1 or 2
+    local segmentWidth = segmentCount > 0
+        and max(2, floor((TODAY_RAID_PROGRESS_WIDTH - (segmentCount - 1) * segmentGap) / segmentCount)) or 0
+    local representedKills = encounterCount > TODAY_RAID_MAX_SEGMENTS
+        and floor((killedCount / encounterCount) * segmentCount + 0.5) or killedCount
+    for index, segment in ipairs(row.segments) do
+        if index <= segmentCount then
+            segment:ClearAllPoints()
+            segment:SetPoint("LEFT", (index - 1) * (segmentWidth + segmentGap), 0)
+            segment:SetWidth(segmentWidth)
+            local boss = encounterCount <= TODAY_RAID_MAX_SEGMENTS and bosses[index] or nil
+            local killed
+            if boss then
+                -- boss.killed=false 是有效的逐 Boss 结果，不能再回退到击杀总数。
+                -- 否则前 killedCount 个未击杀 Boss 也会被错误点亮。
+                killed = boss.killed and true or false
+            else
+                killed = index <= representedKills
+            end
+            SetProgressSegment(segment, killed)
+            segment:Show()
+        else
+            segment:Hide()
+        end
+    end
+    row.progress:SetShown(segmentCount > 0)
+    row:Show()
+end
+
+local function CreateTodayResourceRow(parent)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetHeight(TODAY_RESOURCE_ROW_HEIGHT)
+    row.iconButton = CreateGameIcon(row, 26)
+    row.iconButton:SetPoint("LEFT", 0, 0)
+    row.name = CreateText(row, "body")
+    row.name:SetPoint("LEFT", row.iconButton, "RIGHT", 9, 0)
+    row.detail = CreateText(row, "number")
+    row.detail:SetPoint("RIGHT", -72, 0)
+    row.detail:SetJustifyH("RIGHT")
+    row.value = CreateText(row, "number")
+    row.value:SetPoint("RIGHT", 0, 0)
+    row.value:SetWidth(66)
+    row.value:SetJustifyH("RIGHT")
+    return row
+end
+
+local function SetTodayPreviewHover(group, hovered)
+    group:SetBackdropColor(unpack(Token(hovered and "hover" or "raised")))
+    group.hoverAccent:SetShown(hovered)
+end
+
+local function CreateTodayPreview(parent, title, view)
+    local group = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    UI.Style(group, "surface", { role = "raised" })
+    -- 快捷入口用底色区分为两个可点击区域，不额外增加边框。
+    -- 悬停时同时抬高底色并显示左侧焦点线，点击范围仍覆盖整块。
+    group:SetBackdropBorderColor(0, 0, 0, 0)
+    group:SetHeight(TODAY_PREVIEW_HEIGHT)
+    group.hoverAccent = group:CreateTexture(nil, "ARTWORK")
+    group.hoverAccent:SetPoint("TOPLEFT", 0, 0)
+    group.hoverAccent:SetPoint("BOTTOMLEFT", 0, 0)
+    group.hoverAccent:SetWidth(2)
+    group.hoverAccent:SetTexture(WHITE_TEXTURE)
+    group.hoverAccent:SetVertexColor(unpack(Token("focus")))
+    group.hoverAccent:Hide()
+    group.title = CreateText(group, "body", title)
+    group.title:SetPoint("TOPLEFT", 10, -7)
+    group.summary = CreateText(group, "caption")
+    group.summary:SetPoint("TOPRIGHT", -10, -9)
+    group.items = {}
+    for index = 1, 5 do
+        local button = CreateItemButton(group, 32, 1)
+        button:SetPoint("BOTTOMLEFT", 10 + (index - 1) * 38, 5)
+        button:HookScript("OnEnter", function() SetTodayPreviewHover(group, true) end)
+        button:HookScript("OnLeave", function() SetTodayPreviewHover(group, false) end)
+        group.items[index] = button
+    end
+    group.link = CreateText(group, "label", view == "equipment" and Text("查看装备") or Text("查看背包"))
+    group.link:SetPoint("BOTTOMRIGHT", -10, 12)
+    SetTextColor(group.link, "focusText")
+    group:SetScript("OnEnter", function(self)
+        SetTodayPreviewHover(self, true)
+    end)
+    group:SetScript("OnLeave", function(self)
+        SetTodayPreviewHover(self, false)
+    end)
+    group:SetScript("OnClick", function() SetActiveView(view) end)
+    return group
+end
+
+local function CreateTodayColumn(parent, title)
+    local column = CreateSurface(parent, "panel")
+    column.header = CreateFrame("Frame", nil, column)
+    column.header:SetPoint("TOPLEFT", 0, 0)
+    column.header:SetPoint("TOPRIGHT", 0, 0)
+    column.header:SetHeight(TODAY_COLUMN_TITLE_HEIGHT)
+    column.title = CreateText(column.header, "heading", title)
+    column.title:SetPoint("LEFT", 12, 0)
+    column.title:SetJustifyV("MIDDLE")
+    column.meta = CreateText(column.header, "caption")
+    column.meta:SetPoint("RIGHT", -12, 0)
+    column.meta:SetJustifyH("RIGHT")
+    column.meta:SetJustifyV("MIDDLE")
+    column.headerDivider = UI.Create("divider", column, {
+        color = "borderSubtle",
+        height = 1,
+    })
+    column.headerDivider:SetPoint("BOTTOMLEFT", column.header, "BOTTOMLEFT", 12, 0)
+    column.headerDivider:SetPoint("BOTTOMRIGHT", column.header, "BOTTOMRIGHT", -12, 0)
+    return column
+end
+
+local function LayoutTodayColumns(panel, width)
+    width = max(1, width or panel:GetWidth())
+    local leftWidth = floor(width * TODAY_LEFT_COLUMN_RATIO + 0.5)
+    local raidWidth = floor(width * TODAY_RAID_COLUMN_RATIO + 0.5)
+    local minimumRightWidth = 260
+    if width - leftWidth - raidWidth - TODAY_COLUMN_GAP * 2 < minimumRightWidth then
+        local available = max(1, width - minimumRightWidth - TODAY_COLUMN_GAP * 2)
+        leftWidth = floor(available * 0.39 + 0.5)
+        raidWidth = available - leftWidth
+    end
+    panel.actionColumn:SetWidth(leftWidth)
+    panel.raidSection:SetWidth(raidWidth)
+end
+
+local function EnsureTodayView()
+    if frame.todayPanel then return end
+    local scroll = CreateFrame("ScrollFrame", nil, frame.right)
+    scroll:SetPoint("TOPLEFT", 8, -50)
+    scroll:SetPoint("BOTTOMRIGHT", -8, 8)
+    frame.todayScroll = scroll
+    local panel = CreateFrame("Frame", nil, scroll)
+    panel:SetSize(max(1, scroll:GetWidth()), TODAY_PANEL_MIN_HEIGHT)
+    panel.requiredHeight = TODAY_PANEL_MIN_HEIGHT
+    scroll:SetScrollChild(panel)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        self:SetVerticalScroll(max(0, min(max(0, panel:GetHeight() - self:GetHeight()),
+            self:GetVerticalScroll() - delta * 42)))
+    end)
+    scroll:SetScript("OnSizeChanged", function(_, width, height)
+        panel:SetWidth(max(1, width))
+        panel:SetHeight(max(panel.requiredHeight or TODAY_PANEL_MIN_HEIGHT, height))
+        LayoutTodayColumns(panel, width)
+    end)
+    frame.todayPanel = panel
+
+    -- 仅三列容器保留 1px 外边框。模块和数据行通过单条分隔线组织，
+    -- 不再叠加独立 Surface 边框。
+    local actions = CreateTodayColumn(panel, Text("今日任务"))
+    actions:SetPoint("TOPLEFT", 0, 0)
+    actions:SetPoint("BOTTOMLEFT", 0, 0)
+    panel.actionColumn = actions
+
+    local raid = CreateTodayColumn(panel, Text("团队副本"))
+    raid:SetPoint("TOPLEFT", actions, "TOPRIGHT", TODAY_COLUMN_GAP, 0)
+    raid:SetPoint("BOTTOMLEFT", actions, "BOTTOMRIGHT", TODAY_COLUMN_GAP, 0)
+    panel.raidSection = raid
+
+    local operations = CreateTodayColumn(panel, Text("资源与快捷入口"))
+    operations:SetPoint("TOPLEFT", raid, "TOPRIGHT", TODAY_COLUMN_GAP, 0)
+    operations:SetPoint("BOTTOMRIGHT", 0, 0)
+    panel.operationsColumn = operations
+
+    local summary = CreateFrame("Frame", nil, actions)
+    summary:SetPoint("TOPLEFT", 12, -TODAY_COLUMN_TITLE_HEIGHT)
+    summary:SetPoint("TOPRIGHT", -12, -TODAY_COLUMN_TITLE_HEIGHT)
+    summary:SetHeight(TODAY_SUMMARY_HEIGHT)
+    summary.icon = summary:CreateTexture(nil, "ARTWORK")
+    summary.icon:SetPoint("LEFT", 0, 0)
+    summary.icon:SetSize(24, 24)
+    summary.icon:SetTexture("Interface\\Icons\\INV_Misc_Note_05")
+    summary.icon:SetVertexColor(unpack(Token("textSecondary")))
+    summary.count = CreateText(summary, "numberStrong")
+    summary.count:SetPoint("LEFT", summary.icon, "RIGHT", 8, 0)
+    SetTextColor(summary.count, "warning")
+    summary.label = CreateText(summary, "body", Text("项待完成"))
+    summary.label:SetPoint("LEFT", summary.count, "RIGHT", 7, 0)
+    summary.weekly = CreateText(summary, "body")
+    summary.weekly:SetPoint("RIGHT", 0, 0)
+    summary.weekly:SetJustifyH("RIGHT")
+    summary.weekly:Hide()
+    summary.divider = UI.Create("divider", summary, {
+        color = "borderSubtle",
+        height = 1,
+    })
+    -- 这条线分隔的是完整的“今日任务”概览与下方每日任务模块，
+    -- 因此抵消 summary 的 12px 内容内边距，贯穿整列而不是跟随文字缩进。
+    summary.divider:SetPoint("BOTTOMLEFT", -12, 0)
+    summary.divider:SetPoint("BOTTOMRIGHT", 12, 0)
+    panel.todaySummary = summary
+
+    panel.dailySection = CreateTodaySection(actions, Text("专业日常"), "heading")
+    panel.dailySection:SetPoint("TOPLEFT", 0, -TODAY_COLUMN_TITLE_HEIGHT - TODAY_SUMMARY_HEIGHT)
+    panel.dailySection:SetPoint("TOPRIGHT", 0, -TODAY_COLUMN_TITLE_HEIGHT - TODAY_SUMMARY_HEIGHT)
+    panel.dailySection:SetHeight(204)
+    panel.dailyRows = {}
+    for index = 1, #DAILY_DEFINITIONS do
+        local row = CreateTodayRow(panel.dailySection)
+        row:SetPoint("TOPLEFT", 12, -TODAY_SECTION_TITLE_HEIGHT - (index - 1) * TODAY_TASK_ROW_HEIGHT)
+        row:SetPoint("TOPRIGHT", -12, -TODAY_SECTION_TITLE_HEIGHT - (index - 1) * TODAY_TASK_ROW_HEIGHT)
+        -- 模块底部已有独立边界线，最后一个日常不再重复绘制行分隔线。
+        row.divider:SetShown(index < #DAILY_DEFINITIONS)
+        panel.dailyRows[index] = row
+    end
+    panel.weeklySection = CreateTodaySection(actions, Text("周常任务"), "heading")
+    panel.weeklySection:SetPoint("TOPLEFT", panel.dailySection, "BOTTOMLEFT", 0, 0)
+    panel.weeklySection:SetPoint("TOPRIGHT", panel.dailySection, "BOTTOMRIGHT", 0, 0)
+    panel.weeklySection:SetHeight(148)
+    panel.weeklyRows = {}
+    for index = 1, 2 do
+        local row = CreateTodayRow(panel.weeklySection)
+        row:SetPoint("TOPLEFT", 12, -TODAY_SECTION_TITLE_HEIGHT - (index - 1) * TODAY_TASK_ROW_HEIGHT)
+        row:SetPoint("TOPRIGHT", -12, -TODAY_SECTION_TITLE_HEIGHT - (index - 1) * TODAY_TASK_ROW_HEIGHT)
+        -- 周常与未开始团本共用等待状态语义。图标放在原 32px 图标槽中居中，
+        -- 避免放大的黄色感叹号抢过任务名称。
+        row.iconButton:Hide()
+        row.iconButton:SetBackdropBorderColor(0, 0, 0, 0)
+        row.weeklyStatusIcon = row:CreateTexture(nil, "ARTWORK")
+        row.weeklyStatusIcon:SetPoint("CENTER", row.iconButton, "CENTER", 0, 0)
+        row.weeklyStatusIcon:SetSize(18, 18)
+        row.weeklyStatusIcon:SetTexCoord(0, 1, 0, 1)
+        panel.weeklyRows[index] = row
+    end
+    panel.weeklySection.divider:Hide()
+
+    panel.raidRows = {}
+    panel.raidCompletedLabel = CreateText(raid, "heading", Text("已有进度"))
+    panel.raidCompletedLabel:SetPoint("TOPLEFT", 12, -52)
+    SetTextColor(panel.raidCompletedLabel, "success")
+    panel.raidPendingLabel = CreateText(raid, "heading", Text("尚未开始"))
+    panel.raidPendingLabel:SetPoint("TOPLEFT", 12, -340)
+    SetTextColor(panel.raidPendingLabel, "textSecondary")
+
+    panel.resourceSection = CreateTodaySection(operations, Text("资源总览"))
+    panel.resourceSection:SetPoint("TOPLEFT", 0, -TODAY_COLUMN_TITLE_HEIGHT)
+    panel.resourceSection:SetPoint("TOPRIGHT", 0, -TODAY_COLUMN_TITLE_HEIGHT)
+    panel.resourceSection:SetHeight(230)
+    panel.resourceRows = {}
+    for index = 1, 5 do
+        local row = CreateTodayResourceRow(panel.resourceSection)
+        row:SetPoint("TOPLEFT", 12, -40 - (index - 1) * TODAY_RESOURCE_ROW_HEIGHT)
+        row:SetPoint("TOPRIGHT", -12, -40 - (index - 1) * TODAY_RESOURCE_ROW_HEIGHT)
+        panel.resourceRows[index] = row
+    end
+
+    panel.professionSection = CreateTodaySection(operations, Text("专业技能"))
+    panel.professionSection:SetPoint("TOPLEFT", panel.resourceSection, "BOTTOMLEFT", 0, 0)
+    panel.professionSection:SetPoint("TOPRIGHT", panel.resourceSection, "BOTTOMRIGHT", 0, 0)
+    panel.professionSection:SetHeight(142)
+    panel.professionRows = {}
+    for index = 1, PROFESSION_TRACK_COUNT do
+        local row = CreateTodayRow(panel.professionSection)
+        row:SetPoint("TOPLEFT", 12, -TODAY_SECTION_TITLE_HEIGHT - (index - 1) * TODAY_TASK_ROW_HEIGHT)
+        row:SetPoint("TOPRIGHT", -12, -TODAY_SECTION_TITLE_HEIGHT - (index - 1) * TODAY_TASK_ROW_HEIGHT)
+        row.name:SetPoint("TOPRIGHT", row.status, "TOPLEFT", -8, -1)
+        row.name:SetJustifyH("LEFT")
+        row.detail:SetPoint("RIGHT", row.status, "LEFT", -8, 0)
+        row.detail:SetJustifyH("LEFT")
+        row.status:SetWidth(138)
+        panel.professionRows[index] = row
+    end
+
+    panel.quickSection = CreateTodaySection(operations, Text("快速查看"))
+    panel.quickSection:SetPoint("TOPLEFT", panel.professionSection, "BOTTOMLEFT", 0, 0)
+    panel.quickSection:SetPoint("BOTTOMRIGHT", operations, "BOTTOMRIGHT", 0, 0)
+    panel.quickSection.divider:Hide()
+    panel.equipmentPreview = CreateTodayPreview(panel.quickSection, L["装备"], "equipment")
+    panel.equipmentPreview:SetPoint("TOPLEFT", 12, -TODAY_SECTION_TITLE_HEIGHT)
+    panel.equipmentPreview:SetPoint("TOPRIGHT", -12, -TODAY_SECTION_TITLE_HEIGHT)
+    panel.backpackPreview = CreateTodayPreview(panel.quickSection, L["背包"], "backpack")
+    panel.backpackPreview:SetPoint("TOPLEFT", panel.equipmentPreview, "BOTTOMLEFT", 0, -10)
+    panel.backpackPreview:SetPoint("TOPRIGHT", panel.equipmentPreview, "BOTTOMRIGHT", 0, -10)
+
+    LayoutTodayColumns(panel, scroll:GetWidth())
+end
+
+local function RenderToday(character)
+    EnsureTodayView()
+    local panel = frame.todayPanel
+    local learned = {}
+    for _, profession in ipairs(character.professions or {}) do
+        if profession.skillLineID then learned[tonumber(profession.skillLineID)] = true end
+    end
+    local dailyEligibleCount = 0
+    local dailyCompletedCount = 0
+    local dailyIncompleteCount = 0
+    for index, definition in ipairs(DAILY_DEFINITIONS) do
+        local row = panel.dailyRows[index]
+        local completed = character.questCompletions and character.questCompletions[definition.id] ~= nil
+        local applicable, ineligibleReason, eligibilityState = GetDailyApplicability(
+            character, definition, learned
+        )
+        if applicable then
+            dailyEligibleCount = dailyEligibleCount + 1
+            if completed then
+                dailyCompletedCount = dailyCompletedCount + 1
+            else
+                dailyIncompleteCount = dailyIncompleteCount + 1
+            end
+            SetTodayRow(row, definition.iconFileID, definition.name, L["每日重置"],
+                completed and L["已完成"] or L["未完成"],
+                completed and "success" or "warning", "professionResources")
+        elseif eligibilityState == "unlearned" then
+            SetTodayUnavailableRow(row, definition,
+                format(L["未学习%s"], definition.professionName or definition.name),
+                L["未学习"])
+        elseif eligibilityState == "locked" then
+            SetTodayUnavailableRow(row, definition, ineligibleReason, L["暂不可做"])
+        else
+            SetTodayUnavailableRow(row, definition,
+                ineligibleReason or L["资格尚未记录"], L["未扫描"])
+        end
+    end
+    panel.dailySection.meta:SetFormattedText("%d/%d", dailyCompletedCount, dailyEligibleCount)
+
+    local now = GetServerTime()
+    local model = BG.GetRaidLockoutProgressModel and BG.GetRaidLockoutProgressModel(character, now)
+        or { raids = {}, weeklies = {}, weeklyCompleted = 0, weeklyTotal = 0 }
+    for index, row in ipairs(panel.weeklyRows) do
+        local entry = model.weeklies[index]
+        if entry then
+            SetTodayRow(row, WAITING_STATUS_TEXTURE, entry.name, Text("每周重置"),
+                entry.completed and L["已完成"] or L["未完成"],
+                entry.completed and "success" or "warning", "progress")
+            row.weeklyStatusIcon:SetTexture(entry.completed and READY_STATUS_TEXTURE or WAITING_STATUS_TEXTURE)
+            row.weeklyStatusIcon:SetVertexColor(unpack(Token(entry.completed and "success" or "warning")))
+        else
+            row:Hide()
+        end
+    end
+    panel.weeklySection.meta:SetFormattedText("%d/%d", model.weeklyCompleted or 0, model.weeklyTotal or 0)
+    local weeklyIncompleteCount = max(0, (model.weeklyTotal or 0) - (model.weeklyCompleted or 0))
+    panel.todaySummary.count:SetText(tostring(dailyIncompleteCount + weeklyIncompleteCount))
+
+    local orderedRaids = {}
+    for index, entry in ipairs(model.raids or {}) do
+        orderedRaids[index] = entry
+    end
+    table.sort(orderedRaids, function(a, b)
+        local aLockout = GetPrimaryProgressLockout(a)
+        local bLockout = GetPrimaryProgressLockout(b)
+        local aCompleted = aLockout and (tonumber(aLockout.killedCount) or 0) > 0 or false
+        local bCompleted = bLockout and (tonumber(bLockout.killedCount) or 0) > 0 or false
+        if aCompleted ~= bCompleted then return aCompleted end
+        return tostring(a.id) < tostring(b.id)
+    end)
+    local completedCount = 0
+    for _, entry in ipairs(orderedRaids) do
+        local lockout = GetPrimaryProgressLockout(entry)
+        if lockout and (tonumber(lockout.killedCount) or 0) > 0 then
+            completedCount = completedCount + 1
+        end
+    end
+    local pendingHeaderTop = completedCount > 0
+        and (TODAY_RAID_COMPLETED_TOP + completedCount * TODAY_RAID_ROW_STRIDE + TODAY_RAID_GROUP_GAP)
+        or TODAY_RAID_COMPLETED_TOP
+    panel.raidCompletedLabel:SetShown(completedCount > 0)
+    panel.raidPendingLabel:ClearAllPoints()
+    panel.raidPendingLabel:SetPoint("TOPLEFT", 12, -pendingHeaderTop + 18)
+    panel.raidPendingLabel:SetShown(completedCount < #orderedRaids)
+    local completedIndex, pendingIndex = 0, 0
+    for index, entry in ipairs(orderedRaids) do
+        local row = panel.raidRows[index]
+        if not row then
+            row = CreateTodayRaidRow(panel.raidSection)
+            panel.raidRows[index] = row
+        end
+        local lockout = GetPrimaryProgressLockout(entry)
+        local completed = lockout and (tonumber(lockout.killedCount) or 0) > 0 or false
+        local top
+        if completed then
+            completedIndex = completedIndex + 1
+            top = TODAY_RAID_COMPLETED_TOP + (completedIndex - 1) * TODAY_RAID_ROW_STRIDE
+        else
+            pendingIndex = pendingIndex + 1
+            top = pendingHeaderTop + (pendingIndex - 1) * TODAY_RAID_ROW_STRIDE
+        end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 10, -top)
+        row:SetPoint("TOPRIGHT", -10, -top)
+        row.divider:ClearAllPoints()
+        local groupBoundary = completed and completedIndex == completedCount
+            and completedCount < #orderedRaids
+        -- 分组边界与列标题下方的分隔线同宽：row 本身内缩 10px，
+        -- 因此边界线只再内缩 2px；普通行仍保持原来的 12px 内容缩进。
+        row.divider:SetPoint("BOTTOMLEFT", groupBoundary and 2 or 12, 0)
+        row.divider:SetPoint("BOTTOMRIGHT", groupBoundary and -2 or -12, 0)
+        SetTodayRaidRow(row, entry)
+    end
+    for index = #orderedRaids + 1, #panel.raidRows do panel.raidRows[index]:Hide() end
+    panel.raidSection.meta:SetFormattedText(L["副本 %d/%d"],
+        completedCount, #(model.raids or {}))
+    panel.requiredHeight = max(TODAY_PANEL_MIN_HEIGHT,
+        pendingHeaderTop + pendingIndex * TODAY_RAID_ROW_STRIDE + 12)
+    panel:SetHeight(max(panel.requiredHeight, frame.todayScroll:GetHeight()))
+
+    local resources = panel.resourceRows
+    local fragment = character.legendaryFragmentItems and character.legendaryFragmentItems[1]
+    local upgrades = character.legendaryUpgradeItems or {}
+    local upgradeCount = 0
+    for _, item in ipairs(upgrades) do upgradeCount = upgradeCount + (tonumber(item.count) or 1) end
+    local resourceData = {
+        { GOLD_TEXTURE, GOLD_ATLAS, L["金币"], character.money and FormatCompactNumber(floor(character.money / 10000)) or "—", "" },
+        { character.titanEmberIconFileID, nil, L["泰坦余烬"], FormatOptionalNumber(character.titanEmbers),
+            FormatWeeklyResourceDetail(character.titanEmbersEarnedThisWeek, character.titanEmbersWeeklyMax) or "" },
+        { character.titanShardIconFileID, nil, L["泰坦碎片"], FormatOptionalNumber(character.titanShards), "" },
+        { fragment and fragment.iconFileID or 134888, nil, L["橙武碎片"],
+            fragment and FormatOptionalNumber(fragment.count) or (character.resourcesUpdatedAt and "0" or "—"), "" },
+        { upgrades[1] and upgrades[1].iconFileID or UNKNOWN_SPEC_TEXTURE, nil, L["传说级升级材料"],
+            #upgrades == 0 and "—" or FormatCompactNumber(upgradeCount), "" },
+    }
+    local emberEarned = tonumber(character.titanEmbersEarnedThisWeek)
+    local emberMaximum = tonumber(character.titanEmbersWeeklyMax)
+    local emberCapped = emberEarned and emberMaximum and emberMaximum > 0
+        and emberEarned >= emberMaximum
+    for index, data in ipairs(resourceData) do
+        local row = resources[index]
+        SetGameIcon(row.iconButton, data[1], data[2])
+        row.name:SetText(data[3])
+        row.value:SetText(data[4])
+        row.detail:SetText(data[5])
+        row.detail:ClearAllPoints()
+        row.detail:SetPoint("RIGHT", row.value, "RIGHT",
+            -row.value:GetStringWidth() - TODAY_RESOURCE_DETAIL_GAP, 0)
+        SetTextColor(row.detail, index == 2 and data[5] ~= ""
+            and (emberCapped and "danger" or "success") or "textMuted")
+        SetTextColor(row.value, index <= 2 and "forgeGold" or "textPrimary")
+    end
+    local resourceUpdatedAt = max(tonumber(character.resourcesUpdatedAt) or 0,
+        tonumber(character.professionCooldownsUpdatedAt) or 0)
+    panel.resourceSection.meta:SetText("")
+    -- 资源、专业、装备与背包的更新时间并不一致，列标题不再挂一个含义模糊的时间。
+    -- 最新快照时间仍统一保留在角色头部。
+    panel.operationsColumn.meta:SetText("")
+
+    local tracks = BG.GetRaidLockoutProfessionTracks and BG.GetRaidLockoutProfessionTracks(character) or {}
+    local visibleProfessionCount = min(#tracks, #panel.professionRows)
+    for index, row in ipairs(panel.professionRows) do
+        local track = tracks[index]
+        if track then
+            local status = L["本专业无长 CD 项"]
+            local statusToken = "textMuted"
+            if track.hasTrackedCooldowns and not track.scanned then
+                status = format(L["打开%s窗口刷新"], track.name)
+            elseif track.entries and #track.entries > 0 then
+                local entry = track.entries[1]
+                status = entry.state == "ready" and L["可制造"]
+                    or entry.state == "cooling" and (L["冷却中"] .. " · " .. FormatProfessionCooldownTime(entry.remaining))
+                    or L["未扫描"]
+                statusToken = entry.state == "ready" and "success"
+                    or entry.state == "cooling" and "warning" or "textMuted"
+            end
+            SetTodayRow(row, track.iconFileID, track.name,
+                format("%d / %d", track.rank or 0, track.maxRank or 0), status, statusToken,
+                "professionResources")
+            -- 模块自身已有底部分隔线，最后一个专业不再重复画一条紧邻边框。
+            row.divider:SetShown(index < visibleProfessionCount)
+        else
+            row:Hide()
+            row.divider:Hide()
+        end
+    end
+
+    local equipment = character.details and character.details.equipment
+    local slots = equipment and equipment.slots or {}
+    local equipmentItems = {}
+    for _, definition in ipairs(SLOT_DEFINITIONS) do
+        local item = slots[definition.nativeSlotID or definition.id]
+        if item then equipmentItems[#equipmentItems + 1] = item end
+    end
+    for index, button in ipairs(panel.equipmentPreview.items) do
+        SetItemButton(button, equipmentItems[index])
+        button:SetShown(equipmentItems[index] ~= nil)
+    end
+    panel.equipmentPreview.summary:SetText(L["装等"] .. " "
+        .. (character.itemLevel and floor(character.itemLevel + 0.5) or "—"))
+    local backpack = character.details and character.details.backpack
+    local bagItems = backpack and backpack.items or {}
+    for index, button in ipairs(panel.backpackPreview.items) do
+        SetBackpackItemButton(button, bagItems[index])
+        button:SetShown(bagItems[index] ~= nil)
+    end
+    panel.backpackPreview.summary:SetText(backpack
+        and format("%d/%d · %d %s", backpack.usedSlots or 0, backpack.totalSlots or 0,
+            #bagItems, L["物品"]) or L["背包尚未记录"])
+
+    local latest = max(tonumber(model.updatedAt) or 0, resourceUpdatedAt,
+        equipment and tonumber(equipment.updatedAt) or 0,
+        backpack and tonumber(backpack.updatedAt) or 0)
+    frame.updatedAt:SetText(latest > 0 and (Text("数据快照") .. "：" .. date("%m-%d %H:%M", latest))
+        or L["尚未记录"])
+    frame.todayScroll:Show()
 end
 
 SetActiveView = function(view)
     local wasProgress = activeView == "progress"
     activeView = view == "backpack" and "backpack"
         or (view == "professionResources" and "professionResources")
+        or (view == "today" and "today")
         or (view == "progress" and "progress" or "equipment")
     if activeView == "progress" and not wasProgress then
         selectedProgressRaidID = nil
         progressSelectionCharacterName = selectedCharacterName
     end
     local showEquipment = activeView == "equipment"
-    frame.paperDoll:SetShown(showEquipment)
+    frame.paperDoll:Hide()
+    frame.equipmentInspector:SetShown(showEquipment)
     frame.tablePanel:SetShown(showEquipment)
     if activeView == "backpack" then
         EnsureBackpackView()
@@ -1931,10 +2892,13 @@ SetActiveView = function(view)
     if frame.progressPanel then
         frame.progressPanel:SetShown(activeView == "progress")
     end
-    UI.SetState(frame.tabs[1], showEquipment and "selected" or "default")
-    UI.SetState(frame.tabs[2], activeView == "backpack" and "selected" or "default")
-    UI.SetState(frame.tabs[3], activeView == "professionResources" and "selected" or "default")
-    UI.SetState(frame.tabs[4], activeView == "progress" and "selected" or "default")
+    if frame.todayPanel then frame.todayPanel:SetShown(activeView == "today") end
+    if frame.todayScroll then frame.todayScroll:SetShown(activeView == "today") end
+    SetDetailTabState(frame.todayTab, activeView == "today")
+    SetDetailTabState(frame.tabs[1], showEquipment)
+    SetDetailTabState(frame.tabs[2], activeView == "backpack")
+    SetDetailTabState(frame.tabs[3], activeView == "professionResources")
+    SetDetailTabState(frame.tabs[4], activeView == "progress")
     if frame:IsShown() then
         M.Refresh()
     end
@@ -1951,6 +2915,7 @@ function M.Refresh()
         return
     end
     selectedCharacterName = character.name
+    SetGameIcon(frame.portrait, GetCharacterSpecIcon(character) or UNKNOWN_SPEC_TEXTURE)
     renderedCharacters = characters
     RenderCharacterList(characters)
 
@@ -1968,7 +2933,9 @@ function M.Refresh()
         "|cffffd200" .. L["等级"] .. (character.level or "—") .. "|r  "
             .. "|c" .. classColorHex .. GetClassName(character.classFile) .. "|r"
     )
-    if activeView == "backpack" then
+    if activeView == "today" then
+        RenderToday(character)
+    elseif activeView == "backpack" then
         RenderBackpack(character)
     elseif activeView == "professionResources" then
         RenderProfessionResources(character)
@@ -1995,7 +2962,7 @@ function M.Show(parent, realmID, characterName, onBack)
         frame:SetPropagateKeyboardInput(true)
     end
     frame:Show()
-    SetActiveView("equipment")
+    SetActiveView("today")
 end
 
 function M.Hide(suppressBack)

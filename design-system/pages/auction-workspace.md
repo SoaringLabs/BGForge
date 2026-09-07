@@ -27,6 +27,95 @@ Use the selected Arcane Archive structure:
 - Utility anchors are independent of the selector so gaining or losing raid-leader status does not move them.
 - Close remains the rightmost control and is not mixed into either navigation group.
 
+## Character details — Today
+
+The selected visual truth for the large-interface character-details Today page is
+[`../../docs/design/character-details-today-three-lane.png`](../../docs/design/character-details-today-three-lane.png).
+
+The implementation must preserve its three-lane composition:
+
+1. Today tasks: 25.2% of the available content width.
+2. Raid progress: 39.6% of the available content width.
+3. Resources and shortcuts: the remaining width.
+
+Use an 8px gap between lanes. Only the three lane surfaces draw outer 1px borders.
+Sections inside a lane are borderless and use a single shared divider where the visual
+truth shows one. Task, profession, and raid rows never draw a complete rectangle.
+
+The following measurements are fixed fidelity constraints rather than suggestions:
+
+| Element | Size |
+| --- | ---: |
+| Lane heading | 38px high |
+| Today summary | 52px high |
+| Inner section heading | 34px high |
+| Task and profession row | 52px high |
+| Resource row | 37px high |
+| Raid row | 40px high |
+| Raid progress track | 170px wide × 7px high |
+| Task/profession icon | 32px |
+| Weekly status icon | 18px, centered in the existing 32px icon slot |
+| Quick-preview icon | 32px |
+| Quick-preview group | 64px high |
+
+Raid rows are grouped as `已有进度` and `尚未开始`. The group label, status icon,
+segmented progress track, and exact kill count communicate state together; do not add a
+second status line or a status badge. Preserve every daily, weekly, raid, resource,
+profession, equipment, backpack, timestamp, summary, and navigation action already in
+the Today data model.
+
+The `团队副本` lane header metadata shows only `副本 completed/total`. Weekly progress
+belongs exclusively to the `周常任务` section and must not be repeated in the raid header.
+
+The divider beneath the final `已有进度` raid is the group boundary above `尚未开始`.
+It spans from 12px inside the raid lane to 12px inside the opposite edge, matching the
+lane-header divider. Ordinary raid-row dividers keep their narrower row-content inset.
+In `专业技能`, the final visible profession row suppresses its own divider so that only
+the section boundary remains; `专业日常` follows the same rule for its fixed final row.
+Never render two adjacent horizontal lines at either module boundary.
+
+The `专业日常` section is a fixed catalog: always render `珠宝日常`, `烹饪日常`, and
+`钓鱼日常` in that order. Eligible rows retain the 32px full-color icon, reset copy,
+semantic completion state, hover, and `查看` action. An unlearned row keeps the same 52px
+geometry but uses a 45%-alpha icon, muted name/detail/status, detail copy `未学习{专业}`,
+status `未学习`, and no hover or `查看`. A learned character below a level or skill threshold
+uses the same de-emphasized treatment with the exact reason and status `暂不可做`; unknown
+legacy snapshots use `未扫描`. Only eligible unfinished rows contribute to `项待完成`.
+Do not add badges, cards, borders, or an eligibility footnote. Weekly rows reuse the same
+Blizzard ready/waiting status artwork as raid rows, with the 18px artwork centered inside
+the unchanged task-icon slot.
+
+The divider beneath the Today summary spans the full width of the task lane. It marks the
+summary above as a complete `今日任务` module before the independent `专业日常` module begins;
+unlike row dividers, it does not inherit the lane's 12px content inset.
+
+The Today summary contains only the combined `N 项待完成` value; do not repeat a weekly-only
+count on its right. Put the breakdown beside the corresponding section titles using the
+same 14px `heading` role as the title: `专业日常` shows completed/eligible dailies and excludes unlearned,
+locked, or unknown rows from its denominator; `周常任务` shows completed/total weeklies.
+The two incomplete counts must add up to the combined pending total.
+
+Each lane title and its optional metadata are vertically centered inside the same fixed
+38px header frame. Profession names and rank details are left-aligned immediately after
+the icon slot; reserving room for the right-hand cooldown status must not center the name.
+The `资源与快捷入口` lane does not render header metadata: its resources, profession
+cooldowns, equipment, and backpack have different snapshot times, so one timestamp there
+would be ambiguous. The consolidated latest snapshot remains in the character header.
+
+In the `泰坦余烬` resource row, weekly acquisition progress is secondary to but visually
+paired with the current quantity. It uses the same 14px `number` role, and its right edge
+sits one `xs` (4px) token before the rendered quantity text rather than before the quantity's
+fixed-width alignment box. Use `success` while earned is below the weekly maximum and
+`danger` once earned reaches or exceeds that maximum. Missing or invalid weekly data remains hidden.
+
+Equipment and backpack remain separate 64px quick-preview groups with a 10px gap. Each is
+a borderless `raised` surface, and whole-block hover changes the surface to `hover` while
+revealing a 2px Rune Blue leading accent. This is the only new interaction emphasis; do
+not add card outlines around either group.
+
+Use only Arcane Archive tokens. Do not add local colors, gradients, decorative textures,
+rounded containers, drop shadows, or additional borders while implementing this page.
+
 ## Primary module navigation
 
 - Place the full-page module tabs directly below the global header and above the instance selector.

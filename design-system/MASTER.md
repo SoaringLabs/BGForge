@@ -85,7 +85,7 @@ Primary and secondary text exceed 4.5:1 contrast on all standard surfaces. Statu
 
 ## 4. Typography
 
-BGForge keeps the user's configured WoW font for Chinese and general UI text. Tabular values use the bundled `RobotoCondensed-Medium.ttf`.
+BGForge keeps the user's configured WoW font for all UI text, including tabular values.
 
 | Role | Size | Use |
 | --- | ---: | --- |

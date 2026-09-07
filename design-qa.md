@@ -1,3 +1,250 @@
+# Character Details · raid-header metadata QA — 2026-09-07
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Source visual truth**
+
+- `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-bb5f6418-537b-4f90-985a-58cfbb5d5124.png`.
+
+**Implementation evidence**
+
+- The `团队副本` header metadata contains only `副本 completed/total`.
+- Weekly progress remains in the dedicated `周常任务` section and is no longer duplicated.
+- Header height, right anchor, typography, divider, raid ordering, and progress semantics are unchanged.
+
+**Verification**
+
+- [x] Runtime assertion rejects weekly copy in the Today raid header.
+- [x] Static integration and all three locale checks cover the dedicated raid-only format.
+- [x] `git diff --check`.
+- [ ] In-client focused-region comparison. This iteration does not operate the game client.
+
+final result: blocked
+
+# Character Details · Ember weekly-progress emphasis QA — 2026-09-07
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Source visual truth**
+
+- `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-932aa44a-04a6-4d00-94a7-d68a1c263a55.png`.
+
+**Implementation evidence**
+
+- Weekly Ember progress uses the existing 14px `number` role, matching the current Ember quantity.
+- Its right edge is positioned from the rendered quantity width with one existing 4px `xs` spacing token between the two strings.
+- The existing `success` token is used below cap and `danger` at or above cap; missing weekly data remains empty.
+- Resource row height, quantity alignment box, icon, outer border, and all other resource rows are unchanged.
+
+**Verification**
+
+- [x] Runtime assertions cover cap red, below-cap green, equal font size, and exact 4px text gap.
+- [x] Static integration checks cover the design-system roles and semantic color rule.
+- [x] `git diff --check`.
+- [ ] In-client focused-region comparison. This iteration does not operate the game client.
+
+final result: blocked
+
+# Character Details · Today count hierarchy QA — 2026-09-07
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Source visual truth**
+
+- `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-e36d67f3-fb2c-48cb-8e9b-7f0868df1ebc.png`.
+
+**Implementation evidence**
+
+- The overview band shows only the combined pending count; its weekly-only right label is hidden.
+- `专业日常` and `周常任务` each use the same existing 14px `heading` role as their left-hand title for the `completed/total` value.
+- The profession-daily denominator includes eligible rows only, so unlearned, locked, and unknown rows cannot distort the pending-total breakdown.
+- Existing header heights, row heights, icons, dividers, colors, and horizontal anchors are unchanged.
+
+**Verification**
+
+- [x] Runtime assertions cover `0/1`, `0/2`, `0/3`, and `1/3` profession-daily states plus the hidden overview breakdown.
+- [x] Static integration guard rejects the old weekly-only overview label.
+- [x] `git diff --check`.
+- [ ] In-client focused-region comparison. This iteration does not operate the game client.
+
+final result: blocked
+
+# Character Details · operations timestamp removal QA — 2026-09-07
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Source visual truth**
+
+- `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-5b6df433-b765-4408-85e8-b023a11f0bc7.png`.
+
+**Implementation evidence**
+
+- The `资源与快捷入口` header metadata is always empty; its title, fixed 38px header,
+  divider, and lane geometry are unchanged.
+- The consolidated latest snapshot remains in the character identity header.
+- No spacing, border, row, icon, or typography changes were introduced.
+
+**Verification**
+
+- [x] Static integration guard rejects the old resource-timestamp assignment.
+- [x] Runtime assertion verifies the operations header metadata is empty.
+- [x] `git diff --check`.
+- [ ] In-client focused-region comparison. This iteration does not operate the game client.
+
+final result: blocked
+
+# Character Details · raid/profession divider polish QA — 2026-09-07
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Source visual truth**
+
+- Raid lane and group boundary: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-9de53a9f-99eb-4d2a-81f6-0fd902774d6c.png`.
+- Focused raid-row treatment: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-979180ae-cd55-4925-a742-6befddf8b4e6.png`.
+- Profession/quick-view boundary: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-921bebea-e504-49f9-83a1-774c5aa88a25.png`.
+- Profession-daily/weekly boundary: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-bfe353e1-4608-4ebe-9e46-2cb1a49377f4.png`.
+
+**Implementation evidence**
+
+- The last `已有进度` row extends its bottom divider from the row's normal 22px lane inset to the same 12px lane inset used by the `团队副本` header divider.
+- All ordinary raid rows retain their prior dimensions and narrower divider inset.
+- The final visible profession row hides its own divider; the profession section boundary remains unchanged, leaving exactly one line above `快速查看`.
+- The fixed final profession-daily row follows the same rule, leaving exactly one section boundary above `周常任务`.
+- No row height, icon size, typography, outer border, local color, or section geometry changed.
+
+**Verification**
+
+- [x] Static integration checks cover both divider rules.
+- [x] Runtime assertions verify the group-boundary width, ordinary row inset, and final-profession divider suppression.
+- [x] `git diff --check`.
+- [ ] In-client focused-region comparison. This iteration does not operate the game client.
+
+final result: blocked
+
+# Character Details · fixed profession-daily catalog QA — 2026-09-07
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Source visual truth**
+
+- Selected direction 1: `/Users/liushuxiang/.codex/generated_images/01a07b24-851f-76e3-a764-9a2238d8d18a/exec-cbb95c66-61c6-4bf2-8835-2fda52bef4be.png`.
+- Required state: a fixed `珠宝日常 / 烹饪日常 / 钓鱼日常` list; eligible rows remain full-strength and interactive, while unlearned rows are visibly subordinate without changing row geometry.
+
+**Implementation evidence**
+
+- The list always renders the same three definitions in the same order; unavailable entries are no longer removed or replaced by a synthetic completion row.
+- Existing 52px rows, 32px icon slots, 1px dividers, typography roles, and spacing are unchanged.
+- Unlearned rows use 45%-alpha icons plus existing muted/disabled text tokens, show `未学习{专业}` and `未学习`, and omit both hover emphasis and `查看`.
+- Learned but locked rows reuse that geometry with the exact requirement and `暂不可做`; unknown snapshots show `未扫描`.
+- No badges, new containers, local colors, gradients, shadows, or borders were introduced.
+
+**Verification**
+
+- [x] Static integration checks cover the fixed catalog and prohibit the old synthetic placeholder.
+- [x] Runtime assertions cover learned unfinished, learned completed, unlearned, locked, and unknown eligibility states.
+- [x] `git diff --check`.
+- [ ] In-client full-view and focused-region comparison. The user explicitly asked not to operate the client for this iteration.
+
+final result: blocked
+
+# Character Details · Today focused polish QA — 2026-09-07
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Source visual truth**
+
+- Daily eligibility note: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-4c9da7b3-83a0-4ec4-88ee-655012517996.png`.
+- Weekly status icon: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-db2fb00f-6eab-41b8-9712-dbf4b287b6f3.png` and the proposed centered treatment in `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-dacef9b6-1be0-4b97-b9f9-affcd0d3c179.png`.
+- Lane-title baseline: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-cf4dc71a-ffae-4f5a-8d82-716511743149.png`.
+- Profession alignment: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-a481e5a1-8f79-4b76-a49d-1259527798c8.png`.
+- Quick previews: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-8aae0a6f-2ade-4424-9f72-7fb408e811df.png`.
+- Full-width summary divider: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-74ca2c2d-7e1e-46b4-bbcf-c3488ce5a216.png`.
+
+**Implementation evidence**
+
+- Inapplicable daily notes are removed from Today; exact eligibility reasons remain on `专业与资源`.
+- Weekly rows use the same Blizzard ready/waiting textures as raid rows. The artwork is fixed at 18 × 18 and centered in the unchanged 32px icon slot.
+- All three lane headings and their metadata are children of one fixed 38px header frame and use middle vertical justification.
+- Profession name and rank text use explicit left justification and terminate before the right-hand status region.
+- Equipment and backpack remain fixed 64px previews with 32px item icons. They are separate borderless `raised` surfaces with a 10px gap; hover changes the whole background and reveals a 2px focus accent.
+- No new local colors, gradients, shadows, rounded containers, or card borders were introduced.
+- The divider above `每日任务` cancels the summary's 12px left/right content inset and spans the complete Today-task lane; its height and vertical position are unchanged.
+
+**Verification**
+
+- [x] Static character-details integration checks.
+- [x] Runtime frame assertions cover hidden eligibility notes, weekly icon texture/size, title-header centering, profession alignment, fixed preview dimensions, and preview hover state.
+- [x] `git diff --check`.
+- [ ] In-client full-view and focused-region comparison. The user explicitly asked not to operate the client for this iteration.
+
+final result: blocked
+
+# Character Details · Today three-lane QA — 2026-09-07
+
+**Result: passed**
+
+**Source visual truth**
+
+- Selected third concept: `/Users/liushuxiang/Desktop/Personal/BGForge/docs/design/character-details-today-three-lane.png` (1396 × 1127).
+- Required state: `大界面` → character details → `今日`, preserving every existing task, raid, resource, profession, equipment, and bag entry shown by the source.
+- Fidelity contract: three outer lanes only; 8px lane gaps; 25.2% / 39.6% / remaining-width columns; no per-row frames; 1px hairline dividers; fixed task, raid, resource, and preview dimensions.
+
+**Implementation evidence**
+
+- Production UI: `Core/Module/CharacterDetails.lua`.
+- Localization: `Locales/zhCN.lua`, `Locales/zhTW.lua`, and `Locales/enUS.lua`.
+- Design-system contract: `design-system/pages/auction-workspace.md`.
+- Post-fix in-client screenshot: `/Users/liushuxiang/Desktop/Personal/BGForge/docs/design/character-details-today-inclient-2026-09-07.jpg` (3840 × 2160).
+- Captured state: Titan client, current character `凋零序曲`, BGForge `大界面`, `今日` tab, live task/raid/resource data.
+- The implementation screenshot is a full-client capture. The BGForge detail surface is centered and remains readable at source comparison scale; the surrounding game UI and character selector are host context rather than part of the selected concept.
+
+**Full-view comparison evidence**
+
+- The reference and implementation were inspected together at original source resolution and full 4K client resolution.
+- Overall composition matches: character header and navigation remain unchanged, followed by three equal-height outer lanes with the task lane narrowest, raid lane widest, and operations lane between them.
+- All source content groups are present in the same order: daily/weekly tasks; completed/not-started raids; resources; professions; equipment; bag.
+- No clipping, overlap, unintended wrapping, missing texture, or extra row container is visible in the captured state.
+
+**Focused-region comparison evidence**
+
+- Borders: exactly the three outer lane surfaces use the design-system border; rows use only bottom hairline dividers. No decorative card borders were added.
+- Dimensions: lane gaps are 8px; the fixed row dimensions are task 52px, raid 40px, resource 37px, preview 64px; task icons and preview icons are 32px; the raid progress track is 170 × 7px.
+- Typography: existing BGForge title, body, secondary, warning, success, and link roles are reused. Names, values, reset copy, and actions remain legible in the live client.
+- Colors: the implementation uses the existing panel/canvas/border/focus and semantic status tokens. Gold, cyan, green, warning yellow, and secondary gray retain their established meanings.
+- Image quality: all item, profession, currency, and status artwork comes from live Blizzard textures or the saved game snapshot. No generated mock asset is referenced by addon code.
+- Copy/content: the live implementation contains `今日任务`, the pending-count summary, `每日任务`, `周常任务`, `团队副本`, `已有进度`, `尚未开始`, `资源与快捷入口`, `资源总览`, `专业技能`, and `快速查看`, with the same underlying records and actions as the previous page.
+
+**Interaction evidence**
+
+- `今日` tab opens and renders with live data.
+- A daily-task `查看` action switches to `专业与资源`.
+- A raid `查看` action switches to `进度`.
+- Returning to `今日` restores the three-lane view without errors.
+
+**Comparison history**
+
+- Iteration 1: replaced the previous two-column card wall with three measured outer lanes while preserving all existing content and shortcuts.
+- Iteration 1: removed row borders and retained only lane outlines plus shared hairline dividers.
+- Iteration 1: separated completed and pending raids into labeled groups and moved completion state into icon, color, progress, and count rather than a redundant status line.
+- Iteration 1: promoted the task summary to a compact overview band and kept daily and weekly sections in one scan path.
+- Iteration 1: consolidated resources, professions, equipment, and bag into one operations lane with precise fixed heights.
+- Post-fix evidence: in-client 4K capture matches the selected hierarchy and measured proportions; structural and integration regressions pass.
+
+**Verification**
+
+- [x] `tests/character_details_integration.sh`
+- [x] `tests/design_system_integration.sh`
+- [x] `tests/character_overview_status_visual_integration.sh`
+- [x] `tests/character_overview_reset_visibility_integration.sh`
+- [x] `tests/bglite_v13_sync_integration.sh`
+- [x] `tests/character_details_render_regression.lua` under Fengari
+- [x] `tests/design_system_regression.lua` under Fengari
+- [x] `tests/raid_lockout_overview_regression.lua` under Fengari
+- [x] `git diff --check`
+- [ ] Native Lua 5.1 compiler check is unavailable on this machine; Fengari successfully loads and exercises the changed Lua modules.
+
+final result: passed
+
 # Character Overview profession cooldown QA — 2026-09-01
 
 **Source visual truth**
