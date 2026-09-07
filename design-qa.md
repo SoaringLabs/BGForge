@@ -1,3 +1,153 @@
+# Character Details · Progress page removal QA — 2026-09-08
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Implementation evidence**
+
+- The `进度` tab, route, panel construction, accordion, boss panel, scroll state, and page-only helpers are removed.
+- The shared raid/weekly progress model and the Today-specific boss-segment renderer remain intact.
+- Today raid and weekly rows are non-interactive summaries; their obsolete `查看` actions and hover states are removed.
+- Large-interface character details now exposes exactly `今日`, `装备`, and `背包`.
+
+**Verification**
+
+- [x] Runtime navigation asserts exactly three visible destinations and exercises Equipment and Backpack.
+- [x] Static integration rejects retained Progress routes, panels, renderers, or page-only state.
+- [x] Today raid/weekly model, sorting, exact boss-state segments, and summary assertions remain active.
+- [ ] In-client focused navigation comparison. This iteration does not operate the game client.
+
+final result: blocked
+
+# Character Details · Professions/Resources page removal QA — 2026-09-08
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Source visual truth**
+
+- Removal target: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-608df489-34cf-4b31-848b-914f2bb79e63.png`.
+- Source pixels: 1612 × 336.
+- Intended state: large-interface character details navigation containing only `今日`,
+  `装备`, and `背包` after the subsequent Progress-page removal.
+
+**Implementation evidence**
+
+- The `专业与资源` tab, route, panel construction, renderer, and page-only component helpers are removed.
+- Today remains the sole UI owner of professional dailies, profession status/cooldowns,
+  currencies, fragments, and upgrade-material summaries.
+- Page-level data collection and storage are unchanged; removing the presentation does not
+  remove snapshots still required by Today.
+- Profession daily and profession status rows no longer expose a dead `查看` action or hover state.
+- Equipment and Backpack quick links remain functional.
+
+**Verification**
+
+- [x] Runtime navigation asserts exactly three visible destinations and exercises Equipment and Backpack.
+- [x] Static integration rejects any retained profession/resources route, panel, renderer, or page component.
+- [x] Today profession/resource content and snapshot assertions remain active.
+- [ ] In-client focused navigation comparison. This iteration does not operate the game client.
+
+final result: blocked
+
+# Character Details · Backpack visual-system alignment QA — 2026-09-08
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Comparison target**
+
+- Pre-alignment Backpack capture: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-76bd5a0d-3f7a-4618-9ba4-082c88164e3b.png`.
+- Today palette and hierarchy reference: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-7e05b238-ca3e-4e62-8324-b5663d6e8923.png`.
+- Equipment panel and detail-rail reference: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-3666f7e1-8059-4f15-bcaf-147520b5f41b.png`.
+- Source pixels: 2920 × 2456, 2882 × 2318, and 2912 × 2378 respectively.
+- Implementation screenshot: unavailable because this iteration does not operate the game client.
+- Intended state: large-interface character details, Backpack tab, `全部` selected.
+
+**Findings**
+
+- [P2] Final font and spacing comparison remains pending
+  Location: category filters, grouped item grid, and capacity summary rail.
+  Evidence: runtime assertions verify the shared panel palette, unchanged 78 × 28px filter
+  hit areas, 35px item icons, 26px group headings, single-divider treatment, and preserved
+  search/filter interactions. Without a post-change Titan client capture, WoW UI scaling
+  and final glyph metrics cannot be compared against the references.
+  Impact: implementation structure is deterministic, but optical alignment cannot be signed off.
+  Fix: reload BGForge and capture the full Backpack tab at the same UI scale.
+
+**Required fidelity surfaces**
+
+- Colors: Backpack now uses the same `panel`, `borderSubtle`, focus, and text roles as Today and Equipment.
+- Borders: the outer panel, header divider, group dividers, one grid/summary divider, input border, and native item-quality borders are the only visible outlines.
+- Dimensions: search, filters, grid, summary width, item size, item gap, and heading height are unchanged.
+- Interaction: search, category selection, item hover/tooltips, and modified clicks remain active.
+- Data/privacy: no collection, storage, synchronization, or player-data field changed.
+
+**Verification**
+
+- [x] Runtime assertions cover palette inheritance, lightweight filters, borderless group headings, the summary divider, unchanged item size, and search behavior.
+- [x] Static integration checks reject restoration of bordered block filters.
+- [ ] In-client full-view and focused-region comparison. This iteration does not operate the game client.
+
+final result: blocked
+
+# Character Details · Equipment palette and detail rail QA — 2026-09-08
+
+**Result: blocked for final in-client visual comparison; structural implementation passed**
+
+**Comparison target**
+
+- Today palette reference: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-7e05b238-ca3e-4e62-8324-b5663d6e8923.png`.
+- Pre-fix Equipment capture: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-3666f7e1-8059-4f15-bcaf-147520b5f41b.png`.
+- Detail-list treatment reference: `/var/folders/8r/xdsf4nhn2cj4yb9030z85w900000gn/T/codex-clipboard-21d836af-f468-469b-a780-68c44852ebd2.png`.
+- Source pixels: 2882 × 2318, 2912 × 2378, and 1824 × 1330 respectively.
+- Implementation screenshot: unavailable because this iteration does not operate the game client.
+- Implementation pixels, CSS size, and density normalization: unavailable for the same reason.
+- Intended state: large-interface character details, Equipment tab, first occupied slot selected.
+
+**Findings**
+
+- [P2] Final proportion and font-metric comparison is pending
+  Location: paper-doll stage and right equipment-detail rail.
+  Evidence: the source references are open and readable, while there is no post-change Titan client capture to combine with them. Runtime assertions verify a 520px detail rail, 44px paper-doll icons inside unchanged 48px slot geometry, 32px detail rows, 17 functional detail positions, enhancement ordering, and borderless hover/selection states; they cannot verify WoW's final UI-scale rendering.
+  Impact: the exact stage/list balance, long-name truncation, and live optical alignment cannot be signed off from code alone.
+  Fix: reload BGForge, capture the Equipment tab at the same UI scale, then compare the complete panel and a focused detail-row crop with both references.
+
+**Required fidelity surfaces**
+
+- Fonts and typography: existing Arcane Archive roles are preserved; live glyph metrics and long-name truncation remain unverified.
+- Spacing and layout rhythm: fixed measurements and column anchors pass runtime assertions; in-client proportions remain unverified.
+- Colors and visual tokens: the equipment surface now uses the same `panel` background and `borderSubtle` roles as the Today lanes; only existing `hover`, `focusSurfaceSubtle`, `focus`, text, and item-quality colors supplement it.
+- Image quality and asset fidelity: all item, empty-slot, spec, enchant, and gem imagery comes from Blizzard/client data; no generated artwork is referenced by addon code.
+- Copy and content: detail rows show slot, item level, resolved item name, enchant, and gem data; shirt and tabard remain in the paper doll but are intentionally omitted from the functional detail list.
+
+**Full-view comparison evidence**
+
+- Blocked because no rendered post-change implementation capture is available.
+
+**Focused region comparison evidence**
+
+- Blocked for the same reason; a crop containing the detail header and several occupied/empty rows is required.
+
+**Comparison history**
+
+- Initial paper-doll implementation used the complete width and repeated names beside each side icon.
+- Current implementation converts the paper doll to an icon-led stage, adds one vertical divider, and uses the reclaimed right side for a continuous 17-row equipment-detail rail with enchant/gem icons.
+- The first in-client capture exposed a brighter gray-blue Equipment surface than the Today lanes. The Equipment surface was changed from `raised` to the exact same `panel` role used by `CreateTodayColumn`; runtime assertions now compare their rendered RGBA values directly.
+- The next focused capture showed the perimeter item icons reading too large. Their artwork was reduced from 48px to 44px while preserving every rail anchor, stride, and the 48px interaction slot.
+- Runtime, navigation, design-system, privacy, synchronization, and Lua syntax checks pass.
+- Post-fix visual evidence remains unavailable pending an in-game capture.
+
+**Implementation checklist**
+
+- Reload the addon in Titan Reforged Classic.
+- Capture the complete Equipment tab at the current UI scale.
+- Compare the stage/list width balance and a focused group of detail rows.
+- Adjust only measured layout or typography values if the client capture exposes drift.
+
+**Follow-up polish**
+
+- Revisit the fixed 520px rail only if real long item names consistently truncate at the user's UI scale.
+
+final result: blocked
+
 # Character Details · raid-header metadata QA — 2026-09-07
 
 **Result: blocked for final in-client visual comparison; structural implementation passed**
@@ -212,13 +362,13 @@ final result: blocked
 - Typography: existing BGForge title, body, secondary, warning, success, and link roles are reused. Names, values, reset copy, and actions remain legible in the live client.
 - Colors: the implementation uses the existing panel/canvas/border/focus and semantic status tokens. Gold, cyan, green, warning yellow, and secondary gray retain their established meanings.
 - Image quality: all item, profession, currency, and status artwork comes from live Blizzard textures or the saved game snapshot. No generated mock asset is referenced by addon code.
-- Copy/content: the live implementation contains `今日任务`, the pending-count summary, `每日任务`, `周常任务`, `团队副本`, `已有进度`, `尚未开始`, `资源与快捷入口`, `资源总览`, `专业技能`, and `快速查看`, with the same underlying records and actions as the previous page.
+- Copy/content: the live implementation contains `今日任务`, the pending-count summary, `专业日常`, `周常任务`, `团队副本`, `已有进度`, `尚未开始`, `资源与快捷入口`, `资源总览`, `专业技能`, and `快速查看`, with the same underlying records as the previous page.
 
 **Interaction evidence**
 
 - `今日` tab opens and renders with live data.
-- A daily-task `查看` action switches to `专业与资源`.
-- A raid `查看` action switches to `进度`.
+- Profession-daily, profession-skill, weekly, and raid summaries do not expose dead `查看` or hover states.
+- Equipment and Backpack quick-preview surfaces remain interactive.
 - Returning to `今日` restores the three-lane view without errors.
 
 **Comparison history**

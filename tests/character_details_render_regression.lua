@@ -110,6 +110,16 @@ GetServerTime = function() return 1788739200 end
 GetClassColor = function() return 1,1,0,"ffffff00" end
 GetItemInfoInstant = function() return nil,nil,nil,nil,134400 end
 GetItemInfo = function(link) return tostring(link),link,4 end
+local inventorySlots = {
+    HeadSlot=1, NeckSlot=2, ShoulderSlot=3, ShirtSlot=4, ChestSlot=5,
+    WaistSlot=6, LegsSlot=7, FeetSlot=8, WristSlot=9, HandsSlot=10,
+    Finger0Slot=11, Finger1Slot=12, Trinket0Slot=13, Trinket1Slot=14,
+    BackSlot=15, MainHandSlot=16, SecondaryHandSlot=17, RangedSlot=18,
+    TabardSlot=19,
+}
+GetInventorySlotInfo = function(token)
+    return inventorySlots[token], "empty:" .. token
+end
 GameTooltip = NewRegion()
 UISpecialFrames = {}
 function Region:GetTexture() return self.texture end
@@ -176,6 +186,10 @@ assert(f.updatedAt.pointCalls[1][1]=="TOPLEFT" and f.updatedAt.pointCalls[1][2]=
     and f.updatedAt.pointCalls[1][3]==-58, "snapshot timestamp belongs to the left-aligned identity stack")
 assert(f.todayTab.line:IsShown(), "today tab uses the blue underline active state")
 assert(not f.tabs[1].line:IsShown(), "inactive detail tabs must not keep an underline")
+assert(#f.tabs==2 and f.tabs[1].label:GetText()=="装备"
+    and f.tabs[2].label:GetText()=="背包"
+    and not f.professionResourcesPanel and not f.progressPanel,
+    "character details exposes only Today, Equipment, and Backpack")
 assert(f.todayPanel.actionColumn._bgforgeKind=="surface"
     and f.todayPanel.raidSection._bgforgeKind=="surface"
     and f.todayPanel.operationsColumn._bgforgeKind=="surface",
@@ -224,9 +238,9 @@ assert(f.todayPanel.todaySummary.divider.pointCalls[1][2]==-12
 assert(f.todayPanel.dailyRows[1]:IsShown()
     and f.todayPanel.dailyRows[1].name:GetText()=="珠宝日常"
     and f.todayPanel.dailyRows[1].status:GetText()=="未完成"
-    and f.todayPanel.dailyRows[1].action:IsShown()
+    and not f.todayPanel.dailyRows[1].action:IsShown()
     and f.todayPanel.dailyRows[1].iconButton.alpha==1
-    and f.todayPanel.dailyRows[1].interactive
+    and not f.todayPanel.dailyRows[1].interactive
     and f.todayPanel.dailyRows[2]:IsShown()
     and f.todayPanel.dailyRows[2].name:GetText()=="烹饪日常"
     and f.todayPanel.dailyRows[2].detail:GetText()=="未学习烹饪"
@@ -259,7 +273,7 @@ assert(f.todayPanel.todaySummary.count:GetText()=="3"
     and f.todayPanel.dailyRows[2].iconButton.alpha==0.45
     and f.todayPanel.dailyRows[3].name:GetText()=="钓鱼日常"
     and f.todayPanel.dailyRows[3].status:GetText()=="未完成"
-    and f.todayPanel.dailyRows[3].action:IsShown()
+    and not f.todayPanel.dailyRows[3].action:IsShown()
     and f.todayPanel.dailyRows[3].iconButton.alpha==1,
     "fixed daily rows distinguish locked Cooking from eligible Fishing")
 assert(not f.todayPanel.dailyNote,
@@ -270,7 +284,7 @@ assert(f.todayPanel.todaySummary.count:GetText()=="4"
     and f.todayPanel.dailySection.meta:GetText()=="0/3"
     and f.todayPanel.dailyRows[2].name:GetText()=="烹饪日常"
     and f.todayPanel.dailyRows[2].status:GetText()=="未完成"
-    and f.todayPanel.dailyRows[2].action:IsShown()
+    and not f.todayPanel.dailyRows[2].action:IsShown()
     and f.todayPanel.dailyRows[2].iconButton.alpha==1
     and not f.todayPanel.dailyRows[2].iconButton.icon.desaturated
     and f.todayPanel.dailyRows[3].name:GetText()=="钓鱼日常",
@@ -280,25 +294,11 @@ BG.CharacterDetails.Refresh()
 assert(f.todayPanel.todaySummary.count:GetText()=="3"
     and f.todayPanel.dailySection.meta:GetText()=="1/3"
     and f.todayPanel.dailyRows[2].status:GetText()=="已完成"
-    and f.todayPanel.dailyRows[2].action:IsShown()
+    and not f.todayPanel.dailyRows[2].action:IsShown()
     and f.todayPanel.dailyRows[2].iconButton.alpha==1,
-    "completed learned dailies remain full-strength interactive rows")
+    "completed learned dailies remain full-strength rows without a dead detail action")
 character.questCompletions = nil
-character.dailyProfessionSkills = {}
-BG.CharacterDetails.Refresh()
-f.tabs[3].scripts.OnClick(f.tabs[3])
-BG.CharacterDetails.Refresh()
-assert(f.professionDailyCards[2].status:GetText()=="不适用"
-    and f.professionDailyCards[2].meta:GetText()=="尚未学习"
-    and f.professionDailyCards[3].status:GetText()=="不适用"
-    and f.professionDailyCards[3].meta:GetText()=="尚未学习",
-    "profession-resource cards must not label unlearned secondary dailies incomplete")
 character.dailyProfessionSkills = nil
-BG.CharacterDetails.Refresh()
-assert(f.professionDailyCards[2].status:GetText()=="未扫描"
-    and f.professionDailyCards[2].meta:GetText()=="资格尚未记录",
-    "legacy characters must distinguish unknown eligibility from not applicable")
-f.todayTab.scripts.OnClick(f.todayTab)
 BG.CharacterDetails.Refresh()
 assert(f.todayPanel.dailyRows[2].status:GetText()=="未扫描"
     and f.todayPanel.dailyRows[2].detail:GetText()=="资格尚未记录"
@@ -317,6 +317,9 @@ assert(f.todayPanel.weeklyRows[1].weeklyStatusIcon.pointCalls[1][1]=="CENTER"
     "weekly status artwork is anchored to the center of the task icon slot")
 assert(f.todayPanel.weeklyRows[1].weeklyStatusIcon.texture=="Interface\\RaidFrame\\ReadyCheck-Waiting",
     "incomplete weekly tasks reuse the pending-raid waiting status texture")
+assert(not f.todayPanel.weeklyRows[1].action:IsShown()
+    and not f.todayPanel.weeklyRows[1].interactive,
+    "weekly summaries do not keep a dead link to the removed Progress page")
 assert(f.todayPanel.raidSection.meta:GetText()=="副本 1/2",
     "the Today raid heading shows raid progress without repeating weeklies")
 assert(f.todayPanel.raidRows[1].name:GetText()=="Partial")
@@ -324,6 +327,15 @@ assert(f.todayPanel.raidRows[1].status:GetText()=="已完成", "partial raid use
 assert(not f.todayPanel.raidRows[1].status:IsShown(),
     "raid rows avoid a redundant second status line inside grouped lanes")
 assert(f.todayPanel.raidRows[1].kills:GetText()=="2/4", "partial raid keeps exact boss progress")
+assert(not f.todayPanel.raidRows[1].action
+    and (not f.todayPanel.raidRows[1].scripts
+        or (not f.todayPanel.raidRows[1].scripts.OnClick
+            and not f.todayPanel.raidRows[1].scripts.OnEnter
+            and not f.todayPanel.raidRows[1].scripts.OnLeave)),
+    "raid summaries do not advertise interaction after the Progress page is removed")
+assert(f.todayPanel.raidRows[1].kills.pointCalls[1][2]==-9
+    and f.todayPanel.raidRows[1].progress.pointCalls[1][2]==-67,
+    "raid summaries reclaim the removed action column without changing track dimensions")
 assert(f.todayPanel.raidRows[1].progress.width==170, "boss segments stay inside a fixed-width track")
 assert(f.todayPanel.raidRows[1].segments[4]:IsShown() and not f.todayPanel.raidRows[1].segments[5]:IsShown(),
     "boss count controls the visible segment count")
@@ -372,8 +384,10 @@ assert(emberDetail:GetText()=="（19/20）"
 character.titanEmbersEarnedThisWeek = 20
 BG.CharacterDetails.Refresh()
 assert(f.todayPanel.professionRows[1].name.justifyH=="LEFT"
-    and f.todayPanel.professionRows[1].detail.justifyH=="LEFT",
-    "profession names and ranks start immediately after the icon slot")
+    and f.todayPanel.professionRows[1].detail.justifyH=="LEFT"
+    and not f.todayPanel.professionRows[1].action:IsShown()
+    and not f.todayPanel.professionRows[1].interactive,
+    "profession summaries stay aligned and do not link to the removed detail page")
 assert(f.todayPanel.professionRows[1].divider:IsShown()
     and not f.todayPanel.professionRows[2].divider:IsShown(),
     "only the final visible profession suppresses its redundant row divider")
@@ -393,24 +407,112 @@ assert(f.todayPanel.equipmentPreview.hoverAccent:IsShown(),
 f.todayPanel.equipmentPreview.scripts.OnLeave(f.todayPanel.equipmentPreview)
 assert(not f.todayPanel.equipmentPreview.hoverAccent:IsShown(),
     "leaving the quick preview restores its resting treatment")
-for i=1,4 do f.tabs[i].scripts.OnClick(f.tabs[i]); BG.CharacterDetails.Refresh() end
-assert(f.progressRaidRows[1].status:GetText()=="未开始")
-assert(f.progressRaidRows[2].status:GetText()=="已完成", "partial raid should complete")
-assert(f.progressRaidRows[2].kills:GetText()=="2/4")
-f.progressRaidRows[2].scripts.OnClick(f.progressRaidRows[2])
-assert(f.progressBossPanel:IsShown())
 f.tabs[1].scripts.OnClick(f.tabs[1])
-assert(f.inspectorName:GetText()=="item:1:2:3:0:0:0")
-f.equipmentRows[2].itemButton.scripts.OnClick(f.equipmentRows[2].itemButton)
-assert(f.inspectorName:GetText()=="尚未记录")
+assert(f.paperDoll:IsShown() and not f.tablePanel and not f.equipmentInspector,
+    "equipment remains one continuous surface instead of restoring the legacy card pair")
+assert(f.paperDoll.backdropColor[1]==f.todayPanel.actionColumn.backdropColor[1]
+    and f.paperDoll.backdropColor[2]==f.todayPanel.actionColumn.backdropColor[2]
+    and f.paperDoll.backdropColor[3]==f.todayPanel.actionColumn.backdropColor[3]
+    and f.paperDoll.backdropColor[4]==f.todayPanel.actionColumn.backdropColor[4]
+    and f.paperDoll.backdropBorderColor[1]
+        ==f.todayPanel.actionColumn.backdropBorderColor[1],
+    "equipment inherits the same dark panel and border color roles as Today")
+assert(f.paperDoll.pointCalls[1][1]=="TOPLEFT"
+    and f.paperDoll.pointCalls[1][2]==8 and f.paperDoll.pointCalls[1][3]==-50
+    and f.paperDoll.pointCalls[2][1]=="BOTTOMRIGHT"
+    and f.paperDoll.pointCalls[2][2]==-8 and f.paperDoll.pointCalls[2][3]==8,
+    "paper doll keeps the fixed eight-unit content inset")
+assert(f.equipmentDetail.width==520 and f.equipmentDetailDivider.width==1
+    and f.paperDollStage.pointCalls[3][2]==f.equipmentDetail,
+    "the equipment surface splits into a fixed detail rail and a fluid paper-doll stage")
+assert(f.paperDollSlotGroups[1].width==48 and f.paperDollSlotGroups[1].height==48
+    and f.paperDollSlotGroups[1].itemButton.width==44,
+    "paper-doll icons use the compact size while their slot geometry remains fixed")
+assert(f.paperDollSlotGroups[1].pointCalls[1][1]=="TOPLEFT"
+    and f.paperDollSlotGroups[1].pointCalls[1][2]==0
+    and f.paperDollSlotGroups[10].pointCalls[1][1]=="TOPRIGHT"
+    and f.paperDollSlotGroups[10].pointCalls[1][2]==0,
+    "left and right equipment rails hug opposite panel edges symmetrically")
+assert(not f.paperDollSlotGroups[1].slotLabel:IsShown()
+    and not f.paperDollSlotGroups[1].itemName:IsShown()
+    and not f.paperDollSlotGroups[1].itemLevel:IsShown(),
+    "names and levels are not duplicated beside the paper-doll icons")
+assert(f.paperDollSlotGroups[16].width==104 and f.paperDollSlotGroups[16].height==72
+    and f.paperDollSlotGroups[16].pointCalls[1][1]=="BOTTOM",
+    "the three weapon slots use the dedicated bottom rail geometry")
+assert(f.paperDollWatermark.alpha==0.055 and f.paperDollWatermark.width==240,
+    "the class artwork stays a low-contrast central watermark")
+assert(f.inspectorIcon.width==64 and f.inspectorName:GetText()=="item:1:2:3:0:0:0"
+    and f.inspectorMeta:GetText()=="头部  ·  物品等级 238",
+    "the selected item detail sits directly in the paper-doll center")
+assert(f.inspectorEnhancements[1]:IsShown() and f.inspectorEnhancements[2]:IsShown()
+    and not f.inspectorEnhancements[3]:IsShown(),
+    "central detail renders only the recorded enchantment and gem icons")
+assert(f.equipmentDetailTitle:GetText()=="装备明细"
+    and f.equipmentDetailSummary:GetText()=="装等 239"
+    and #f.equipmentDetailRows==17
+    and f.equipmentDetailRows[1].definition.id==1
+    and f.equipmentDetailRows[6].definition.id==9,
+    "right detail rail lists seventeen functional equipment positions and omits cosmetics")
+assert(f.equipmentDetailRows[1].itemName:GetText()=="item:1:2:3:0:0:0"
+    and f.equipmentDetailRows[1].itemLevel:GetText()==238
+    and f.equipmentDetailRows[1].enhancements[1]:IsShown()
+    and f.equipmentDetailRows[1].enhancements[2]:IsShown()
+    and not f.equipmentDetailRows[1].enhancements[3]:IsShown(),
+    "each detail row exposes the item name, level, enchantment, and gems")
+assert(f.equipmentDetailRows[1].selectedBackground:IsShown()
+    and f.equipmentDetailRows[1].selectedAccent:IsShown(),
+    "the detail rail identifies the slot currently shown in the center")
+assert(not f.paperDollSlotGroups[1].hoverBackground:IsShown())
+f.paperDollSlotGroups[1].scripts.OnEnter(f.paperDollSlotGroups[1])
+assert(f.paperDollSlotGroups[1].hoverBackground:IsShown(),
+    "equipment groups use a fill-only hover without another border")
+f.paperDollSlotGroups[1].scripts.OnLeave(f.paperDollSlotGroups[1])
+assert(not f.paperDollSlotGroups[1].hoverBackground:IsShown())
+assert(f.paperDollSlotGroups[17].itemButton.icon.texture=="empty:SecondaryHandSlot"
+    and f.paperDollSlotGroups[17].itemButton.icon.desaturated
+    and f.paperDollSlotGroups[17].itemButton.icon.alpha==0.38,
+    "empty equipment slots retain their native slot silhouette and subdued treatment")
+f.equipmentDetailRows[2].scripts.OnEnter(f.equipmentDetailRows[2])
+assert(f.equipmentDetailRows[2].hoverBackground:IsShown(),
+    "detail rows use a borderless fill hover")
+f.equipmentDetailRows[2].scripts.OnLeave(f.equipmentDetailRows[2])
+f.equipmentDetailRows[2].scripts.OnClick(f.equipmentDetailRows[2])
+assert(f.inspectorName:GetText()=="尚未记录"
+    and f.equipmentDetailRows[2].selectedBackground:IsShown()
+    and not f.equipmentDetailRows[1].selectedBackground:IsShown(),
+    "clicking the detail rail updates the central selection and selected row")
 f.tabs[2].scripts.OnClick(f.tabs[2])
+assert(f.backpackPanel.backdropColor[1]==f.todayPanel.actionColumn.backdropColor[1]
+    and f.backpackPanel.backdropColor[2]==f.todayPanel.actionColumn.backdropColor[2]
+    and f.backpackPanel.backdropColor[3]==f.todayPanel.actionColumn.backdropColor[3]
+    and f.backpackPanel.backdropColor[4]==f.todayPanel.actionColumn.backdropColor[4]
+    and f.backpackPanel.backdropBorderColor[1]
+        ==f.todayPanel.actionColumn.backdropBorderColor[1],
+    "backpack inherits the same dark panel and border roles as Today")
+assert(not f.backpackHeader._bgforgeKind and f.backpackHeader.height==42
+    and f.backpackHeader.divider,
+    "backpack header keeps its geometry but uses one divider instead of a boxed surface")
+assert(not f.backpackFilters.all._bgforgeKind
+    and f.backpackFilters.all.width==78 and f.backpackFilters.all.height==28
+    and f.backpackFilters.all.line:IsShown()
+    and not f.backpackFilters.consumable.line:IsShown(),
+    "backpack filters preserve their size and use the lightweight detail-tab treatment")
+assert(f.backpackInfoDivider.width==1,
+    "backpack summary is separated from the item grid by one subtle divider")
+assert(not f.backpackGroupHeaders[1]._bgforgeKind
+    and f.backpackGroupHeaders[1].height==26
+    and f.backpackGroupHeaders[1].divider,
+    "backpack group headings use a single divider instead of bordered header bars")
+assert(f.backpackItemButtons[1].width==35,
+    "backpack item geometry remains unchanged during visual-system alignment")
 f.backpackSearch:SetText("Potion")
 f.backpackSearch.scripts.OnTextChanged(f.backpackSearch)
 assert(f.backpackItemButtons[1].link=="item:1:0:0:0:0:0")
 assert(not f.backpackItemButtons[2]:IsShown(), "search must hide nonmatches")
 f.characterRows[2].scripts.OnClick(f.characterRows[2])
 assert(f.backpackEmpty:IsShown())
-for i=1,4 do f.tabs[i].scripts.OnClick(f.tabs[i]) end
+for i=1,2 do f.tabs[i].scripts.OnClick(f.tabs[i]) end
 f.todayTab.scripts.OnClick(f.todayTab)
 assert(f.todayPanel.resourceRows[1].value:GetText()=="—", "unknown currency remains unknown")
 BG.CharacterDetails.Hide(true)

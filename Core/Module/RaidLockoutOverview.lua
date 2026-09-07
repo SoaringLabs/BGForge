@@ -3522,7 +3522,7 @@ local function CreateHoverFrame()
     local pageHeaderEdgeInset = BG.UI.Token("spacing", "hairline")
     local pageHeader = BG.UI.CreatePageHeader(hoverFrame, {
         title = L["全角色总览"],
-        subtitle = L["点击角色名称可查看装备、背包、专业、资源与进度"],
+        subtitle = L["提示：点击角色名称可查看装备和背包"],
         contentRightInset = 16,
     })
     pageHeader:SetPoint("TOPLEFT", hoverFrame, "TOPLEFT", -ui.padding + pageHeaderEdgeInset, 0)
@@ -5028,8 +5028,8 @@ function BG.GetRaidLockoutProfessionTracks(character, now)
     return tracks
 end
 
--- 角色详情“大界面”的“进度”页只消费这一份展示模型。页面严格聚焦
--- Titan 团本与两项周常；专业日常和制造 CD 留在“专业与资源”页。
+-- 角色详情“大界面”的“今日”页只消费这一份展示模型。Titan 团本、
+-- 两项周常、专业日常和制造 CD 均在该页汇总呈现。
 function BG.GetRaidLockoutProgressModel(character, now)
     now = tonumber(now) or GetServerTime()
     character = type(character) == "table" and character or {}
