@@ -105,6 +105,11 @@ assert(title.text == "BGForge", "Title text was not set")
 
 local compactNumber = BG.UI.Create("text", panel, { role = "numberCompact", text = "238" })
 assert(compactNumber.fontSize == 12, "Compact number typography must remain smaller than row text")
+assert(compactNumber.font == BIAOGE_TEXT_FONT, "Numeric typography must use the selected game font")
+local number = BG.UI.Create("text", panel, { role = "number", text = "238" })
+local strongNumber = BG.UI.Create("text", panel, { role = "numberStrong", text = "238" })
+assert(number.font == BIAOGE_TEXT_FONT and strongNumber.font == BIAOGE_TEXT_FONT,
+    "All numeric typography roles must use the selected game font")
 
 local expectedFocus = BG.UI.Token("color", "focus")
 local pageHeader = BG.UI.CreatePageHeader(parent, {

@@ -136,6 +136,9 @@ local function ResetEnvironment()
     local L = setmetatable({
         ["工程学"] = "Engineering",
         ["采矿"] = "Mining",
+        ["烹饪"] = "Cooking",
+        ["钓鱼"] = "Fishing",
+        ["辅助技能"] = "Secondary Skills",
     }, {
         __index = function(_, key)
             return key
@@ -149,6 +152,35 @@ end
 
 local function GetStoredCharacter()
     return BiaoGe.BGForgeRaidLockouts.realms[100].characters.Tester
+end
+
+local function TestSkillLineFallbackCapturesDailyProfessionSkills()
+    local _, events = ResetEnvironment()
+    GetProfessions = nil
+    GetProfessionInfo = nil
+    GetNumSkillLines = function()
+        return 6
+    end
+    GetSkillLineInfo = function(index)
+        local rows = {
+            { "Professions", true, true },
+            { "Engineering", false, nil, 315, 315 },
+            { "Mining", false, nil, 300, 300 },
+            { "Secondary Skills", true, true },
+            { "Cooking", false, nil, 349, 450 },
+            { "Fishing", false, nil, 1, 450 },
+        }
+        local row = rows[index]
+        return row[1], row[2], row[3], row[4], nil, nil, row[5]
+    end
+
+    events.SKILL_LINES_CHANGED()
+
+    local skills = GetStoredCharacter().dailyProfessionSkills
+    assert(skills and skills[185] and skills[185].rank == 349 and skills[185].maxRank == 450,
+        "Cooking rank must be captured for daily eligibility")
+    assert(skills[356] and skills[356].rank == 1 and skills[356].maxRank == 450,
+        "Fishing rank must be captured for daily eligibility")
 end
 
 local function FindUpvalue(callback, targetName)
@@ -2036,6 +2068,7 @@ end
 
 local tests = {
     fallback = TestSkillLineFallbackCapturesPrimaryProfessions,
+    daily_profession_skills = TestSkillLineFallbackCapturesDailyProfessionSkills,
     preserve = TestUnavailableProfessionDataDoesNotEraseSnapshot,
     primary = TestPrimaryProfessionAPICapturesExpectedFields,
     incomplete_primary = TestIncompletePrimaryAPIUsesSkillLineFallback,
@@ -2087,7 +2120,7 @@ if arg[1] then
     assert(tests[arg[1]], "unknown test: " .. tostring(arg[1]))()
 else
     for _, testName in ipairs({
-        "fallback", "preserve", "primary", "incomplete_primary", "raid_width",
+        "fallback", "daily_profession_skills", "preserve", "primary", "incomplete_primary", "raid_width",
         "wide_font_headers", "item_tiles",
         "wide_table_viewport",
         "constrained_columns",

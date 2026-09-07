@@ -283,6 +283,17 @@ for professionName, professionInfo in pairs(TITAN_PRIMARY_PROFESSION_INFO) do
     }
 end
 
+-- “今日”页只需要知道烹饪与钓鱼是否达到日常资格。单独保存这两个
+-- 次级专业的最小快照，避免把它们混进两项主专业轨道。
+local TITAN_DAILY_PROFESSION_SKILL_INFO = {
+    [L["烹饪"]] = { skillLineID = 185 },
+    [L["钓鱼"]] = { skillLineID = 356 },
+}
+local titanDailyProfessionSkillInfoByID = {
+    [185] = TITAN_DAILY_PROFESSION_SKILL_INFO[L["烹饪"]],
+    [356] = TITAN_DAILY_PROFESSION_SKILL_INFO[L["钓鱼"]],
+}
+
 local ITEM_TILE_SIZE = 22
 local ITEM_TILE_GAP = 2
 local ITEM_TILE_PADDING = 4
@@ -714,6 +725,74 @@ end
 
 local function CaptureCurrentProfessions()
     return CaptureProfessionsFromPrimaryAPI() or CaptureProfessionsFromSkillLines()
+end
+
+local function CaptureDailyProfessionSkillsFromPrimaryAPI()
+    if not GetProfessions or not GetProfessionInfo then
+        return
+    end
+
+    local profession1, profession2, archaeology, fishing, cooking = GetProfessions()
+    if not profession1 and not profession2 and not archaeology and not fishing and not cooking then
+        return
+    end
+
+    local skills = {}
+    for skillLineID, professionIndex in pairs({ [185] = cooking, [356] = fishing }) do
+        if professionIndex then
+            local _, _, rank, maxRank, _, _, capturedSkillLineID = GetProfessionInfo(professionIndex)
+            capturedSkillLineID = tonumber(capturedSkillLineID) or skillLineID
+            if titanDailyProfessionSkillInfoByID[capturedSkillLineID] then
+                skills[capturedSkillLineID] = {
+                    rank = tonumber(rank) or 0,
+                    maxRank = tonumber(maxRank) or 0,
+                }
+            end
+        end
+    end
+    return skills
+end
+
+local function CaptureDailyProfessionSkillsFromSkillLines()
+    if not GetNumSkillLines or not GetSkillLineInfo then
+        return
+    end
+
+    local numSkillLines = GetNumSkillLines()
+    if not numSkillLines or numSkillLines <= 0 then
+        return
+    end
+
+    local skills = {}
+    local collapsedSecondaryHeader
+    local secondaryHeaderName = SECONDARY_SKILLS or L["辅助技能"]
+    for index = 1, numSkillLines do
+        local skillName, isHeader, isExpanded, rank, _, _, maxRank = GetSkillLineInfo(index)
+        if isHeader and skillName == secondaryHeaderName and not isExpanded then
+            collapsedSecondaryHeader = index
+        end
+        local skillInfo = not isHeader and TITAN_DAILY_PROFESSION_SKILL_INFO[skillName] or nil
+        if skillInfo then
+            skills[skillInfo.skillLineID] = {
+                rank = tonumber(rank) or 0,
+                maxRank = tonumber(maxRank) or 0,
+            }
+        end
+    end
+
+    if collapsedSecondaryHeader then
+        local skillFrameVisible = SkillFrame and SkillFrame.IsVisible and SkillFrame:IsVisible()
+        if not skillFrameVisible and ExpandSkillHeader then
+            ExpandSkillHeader(collapsedSecondaryHeader)
+        end
+        return
+    end
+    return skills
+end
+
+local function CaptureCurrentDailyProfessionSkills()
+    return CaptureDailyProfessionSkillsFromPrimaryAPI()
+        or CaptureDailyProfessionSkillsFromSkillLines()
 end
 
 local function IsKnownProfessionSpell(spellID)
@@ -1229,6 +1308,22 @@ local function ClearExpiredRaidData()
                     character.lastRecordedAt = tonumber(character.lastRecordedAt)
                     character.isHidden = character.isHidden and true or nil
                     character.professions = type(character.professions) == "table" and character.professions or {}
+                    if type(character.dailyProfessionSkills) == "table" then
+                        local normalizedDailyProfessionSkills = {}
+                        for skillLineID, skill in pairs(character.dailyProfessionSkills) do
+                            skillLineID = tonumber(skillLineID)
+                            if titanDailyProfessionSkillInfoByID[skillLineID] and type(skill) == "table" then
+                                normalizedDailyProfessionSkills[skillLineID] = {
+                                    rank = max(0, tonumber(skill.rank) or 0),
+                                    maxRank = max(0, tonumber(skill.maxRank) or 0),
+                                }
+                            end
+                        end
+                        character.dailyProfessionSkills = normalizedDailyProfessionSkills
+                    else
+                        character.dailyProfessionSkills = nil
+                    end
+                    character.dailyProfessionSkillsUpdatedAt = tonumber(character.dailyProfessionSkillsUpdatedAt)
                     character.legendaryItems = MergeItemSnapshots(
                         type(character.legendaryItems) == "table" and character.legendaryItems or {}
                     )
@@ -1742,6 +1837,11 @@ local function CaptureCurrentResources(scopes)
         if professions then
             stored.professions = professions
         end
+        local dailyProfessionSkills = CaptureCurrentDailyProfessionSkills()
+        if dailyProfessionSkills then
+            stored.dailyProfessionSkills = dailyProfessionSkills
+            stored.dailyProfessionSkillsUpdatedAt = GetServerTime()
+        end
         CaptureCurrentProfessionCooldowns(stored)
     end
     if captureAll or scopes.equipment then
@@ -2096,6 +2196,9 @@ local function BuildCharacterRows(realmID)
                     titanShards = tonumber(stored.titanShards),
                     titanShardIconFileID = stored.titanShardIconFileID,
                     professions = type(stored.professions) == "table" and stored.professions or {},
+                    dailyProfessionSkills = type(stored.dailyProfessionSkills) == "table"
+                        and stored.dailyProfessionSkills or nil,
+                    dailyProfessionSkillsUpdatedAt = tonumber(stored.dailyProfessionSkillsUpdatedAt),
                     legendaryItems = type(stored.legendaryItems) == "table" and stored.legendaryItems or {},
                     legendaryFragmentItems = type(stored.legendaryFragmentItems) == "table"
                         and stored.legendaryFragmentItems or {},
@@ -3419,7 +3522,7 @@ local function CreateHoverFrame()
     local pageHeaderEdgeInset = BG.UI.Token("spacing", "hairline")
     local pageHeader = BG.UI.CreatePageHeader(hoverFrame, {
         title = L["全角色总览"],
-        subtitle = L["点击角色名称可查看装备、背包、专业、资源与进度"],
+        subtitle = L["提示：点击角色名称可查看装备和背包"],
         contentRightInset = 16,
     })
     pageHeader:SetPoint("TOPLEFT", hoverFrame, "TOPLEFT", -ui.padding + pageHeaderEdgeInset, 0)
@@ -4925,8 +5028,8 @@ function BG.GetRaidLockoutProfessionTracks(character, now)
     return tracks
 end
 
--- 角色详情“大界面”的“进度”页只消费这一份展示模型。页面严格聚焦
--- Titan 团本与两项周常；专业日常和制造 CD 留在“专业与资源”页。
+-- 角色详情“大界面”的“今日”页只消费这一份展示模型。Titan 团本、
+-- 两项周常、专业日常和制造 CD 均在该页汇总呈现。
 function BG.GetRaidLockoutProgressModel(character, now)
     now = tonumber(now) or GetServerTime()
     character = type(character) == "table" and character or {}

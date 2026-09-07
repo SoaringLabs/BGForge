@@ -4,6 +4,15 @@ set -euo pipefail
 
 module="Core/UI/DesignSystem.lua"
 overview="Core/Module/RaidLockoutOverview.lua"
+
+if rg -q 'RobotoCondensed-Medium\.ttf|local NUMBER_FONT' "$module" design-system/MASTER.md; then
+    echo "Design-system typography must not depend on the removed bundled number font" >&2
+    exit 1
+fi
+if [[ -e Media/Fonts/RobotoCondensed-Medium.ttf || -e Media/Fonts/OFL.txt ]]; then
+    echo "Removed bundled number-font assets must not remain in the addon" >&2
+    exit 1
+fi
 wishlist="Core/Module/WishlistUI.lua"
 
 if ! rg -q $'^Core\\\\UI\\\\DesignSystem\\.lua\\r?$' BGForge.toc; then

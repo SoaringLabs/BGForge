@@ -10,7 +10,6 @@ local UI = {}
 BG.UI = UI
 
 local WHITE_TEXTURE = "Interface\\Buttons\\WHITE8X8"
-local NUMBER_FONT = "Interface\\AddOns\\BGForge\\Media\\Fonts\\RobotoCondensed-Medium.ttf"
 local BACKDROP = {
     bgFile = WHITE_TEXTURE,
     edgeFile = WHITE_TEXTURE,
@@ -98,9 +97,9 @@ local TEXT_STYLES = {
     body = { size = 14, color = "textPrimary" },
     label = { size = 12, color = "textSecondary" },
     caption = { size = 11, color = "textMuted" },
-    numberCompact = { size = 12, color = "textPrimary", font = NUMBER_FONT },
-    number = { size = 14, color = "textPrimary", font = NUMBER_FONT },
-    numberStrong = { size = 16, color = "forgeGold", font = NUMBER_FONT },
+    numberCompact = { size = 12, color = "textPrimary" },
+    number = { size = 14, color = "textPrimary" },
+    numberStrong = { size = 16, color = "forgeGold" },
 }
 
 local SURFACES = {
