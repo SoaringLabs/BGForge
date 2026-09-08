@@ -9,6 +9,11 @@ local _, ns = ...
 local UI = {}
 BG.UI = UI
 
+-- Structural surfaces on the Character Overview and Wishlist pages opt into
+-- the shared "background material opacity" setting. Keep weak keys so pooled
+-- or discarded frames do not stay alive solely because they were registered.
+local BACKGROUND_ALPHA_BINDINGS = setmetatable({}, { __mode = "k" })
+
 local WHITE_TEXTURE = "Interface\\Buttons\\WHITE8X8"
 local BACKDROP = {
     bgFile = WHITE_TEXTURE,
@@ -173,6 +178,24 @@ local function GetColor(name)
     return color
 end
 
+local function GetBackgroundAlpha()
+    local alpha = BiaoGe and BiaoGe.options and tonumber(BiaoGe.options.alpha)
+    return math.max(0, math.min(1, alpha or 0.8))
+end
+
+local function ResolveBoundColor(color)
+    if type(color) == "string" then
+        return GetColor(color)
+    end
+    assert(type(color) == "table", "BGForge background binding requires a color token or table")
+    return color
+end
+
+local function ApplyBackgroundAlphaBinding(region, binding)
+    local color = ResolveBoundColor(binding.color)
+    region[binding.method](region, color[1], color[2], color[3], GetBackgroundAlpha())
+end
+
 local function SetRegionColor(region, method, colorName, alphaOverride)
     local color = GetColor(colorName)
     region[method](region, color[1], color[2], color[3], alphaOverride or color[4])
@@ -328,6 +351,37 @@ function UI.Token(group, name)
     local value = tokenGroup[name]
     assert(value ~= nil, "Unknown BGForge token: " .. tostring(group) .. "." .. tostring(name))
     return Copy(value)
+end
+
+function UI.GetBackgroundAlpha()
+    return GetBackgroundAlpha()
+end
+
+function UI.BindBackgroundAlpha(region, method, color)
+    assert(region, "BGForge UI.BindBackgroundAlpha requires a region")
+    assert(type(method) == "string" and type(region[method]) == "function",
+        "BGForge UI.BindBackgroundAlpha requires a supported color method")
+    local binding = {
+        method = method,
+        color = color,
+    }
+    BACKGROUND_ALPHA_BINDINGS[region] = binding
+    ApplyBackgroundAlphaBinding(region, binding)
+    return region
+end
+
+function UI.SetBackgroundAlphaColor(region, color)
+    local binding = BACKGROUND_ALPHA_BINDINGS[region]
+    assert(binding, "BGForge UI.SetBackgroundAlphaColor requires a bound region")
+    binding.color = color
+    ApplyBackgroundAlphaBinding(region, binding)
+    return region
+end
+
+function UI.RefreshBackgroundAlpha()
+    for region, binding in pairs(BACKGROUND_ALPHA_BINDINGS) do
+        ApplyBackgroundAlphaBinding(region, binding)
+    end
 end
 
 function UI.Style(widget, kind, options)
@@ -503,6 +557,9 @@ function UI.CreatePageHeader(parent, options)
     background:SetAllPoints(header)
     background:SetTexture(WHITE_TEXTURE)
     SetRegionColor(background, "SetVertexColor", "header")
+    if options.backgroundAlpha then
+        UI.BindBackgroundAlpha(background, "SetVertexColor", "header")
+    end
     header.background = background
 
     local bottomBorder = header:CreateTexture(nil, "BORDER")

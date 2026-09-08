@@ -302,9 +302,15 @@ local CHARACTER_DETAILS_CHEVRON_SIZE = 16
 local CHARACTER_DETAILS_CHEVRON_ALPHA = 0.55
 local PROFESSION_TILE_COLOR = { 0.84, 0.55, 0.18, 1 }
 local RESOURCE_NUMBER_FONT_SIZE = 12
+local CHARACTER_NAME_FONT_SIZE = 12
+local EMBEDDED_CHARACTER_NAME_FONT_SIZE = CHARACTER_NAME_FONT_SIZE + 2
 local HEADER_HORIZONTAL_PADDING = 14
 local HEADER_WIDTH_SAFETY = 4
 local SCREEN_EDGE_MARGIN = 32
+
+local function GetCharacterNameFontSize(isEmbedded)
+    return isEmbedded and EMBEDDED_CHARACTER_NAME_FONT_SIZE or CHARACTER_NAME_FONT_SIZE
+end
 
 local SMALL_UI = {
     padding = 10,
@@ -419,7 +425,7 @@ end
 local function CalculateTypographyMetrics(fontHeight, isEmbedded)
     local measuredHeight = max(0, tonumber(fontHeight) or 0)
     local textHeight = ceil(measuredHeight + 6)
-    local itemTileSize = isEmbedded and 30 or ITEM_TILE_SIZE
+    local itemTileSize = isEmbedded and 28 or ITEM_TILE_SIZE
     local raidRowHeight = max(isEmbedded and 30 or SMALL_UI.rowHeight, textHeight)
     local resourceRowHeight = max(
         isEmbedded and 36 or SMALL_UI.rowHeight,
@@ -3524,6 +3530,7 @@ local function CreateHoverFrame()
         title = L["全角色总览"],
         subtitle = L["提示：点击角色名称可查看装备和背包"],
         contentRightInset = 16,
+        backgroundAlpha = true,
     })
     pageHeader:SetPoint("TOPLEFT", hoverFrame, "TOPLEFT", -ui.padding + pageHeaderEdgeInset, 0)
     pageHeader:Hide()
@@ -3751,7 +3758,13 @@ local function CreateHoverFrame()
 
         row.raidNameCell = CreateTableCell(contentFrame, nil, { left = true })
         row.raidNameCell:SetSize(ui.nameWidth, ui.rowHeight)
-        row.raidName = CreateCellText(row.raidNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
+        row.raidName = CreateCellText(
+            row.raidNameCell,
+            "GameFontHighlightSmall",
+            CHARACTER_NAME_FONT_SIZE,
+            nil,
+            "LEFT"
+        )
         row.raidName:ClearAllPoints()
         row.raidName:SetPoint("LEFT", 11, 0)
         row.raidName:SetPoint("RIGHT", -20, 0)
@@ -3804,7 +3817,13 @@ local function CreateHoverFrame()
 
         row.resourceNameCell = CreateTableCell(contentFrame, nil, { left = true })
         row.resourceNameCell:SetSize(ui.nameWidth, ui.rowHeight)
-        row.resourceName = CreateCellText(row.resourceNameCell, "GameFontHighlightSmall", 12, nil, "LEFT")
+        row.resourceName = CreateCellText(
+            row.resourceNameCell,
+            "GameFontHighlightSmall",
+            CHARACTER_NAME_FONT_SIZE,
+            nil,
+            "LEFT"
+        )
         row.resourceName:ClearAllPoints()
         row.resourceName:SetPoint("LEFT", 11, 0)
         row.resourceName:SetPoint("RIGHT", -20, 0)
@@ -4160,6 +4179,7 @@ local function CreateHoverFrame()
         local raidHeaderSubHeight = typography.headerTierHeight
         local resourceGroupHeight = typography.headerTierHeight
         local resourceSubHeaderHeight = typography.headerTierHeight
+        local characterNameFontSize = GetCharacterNameFontSize(hoverEmbedded)
 
         local resourceConstraints = BuildResourceColumnConstraints(resourceCharacters, hoverEmbedded)
         local raidDefinitions = {
@@ -4408,6 +4428,7 @@ local function CreateHoverFrame()
             row.raidNameCell:ClearAllPoints()
             row.raidNameCell:SetPoint("TOPLEFT", ui.padding, -rowY)
             renderContext.setCellColor(row.raidNameCell, rowColor)
+            row.raidName:SetFont(BIAOGE_TEXT_FONT, characterNameFontSize, "OUTLINE")
             row.raidName:SetText(renderContext.getCharacterDisplayName(character, "itemLevel"))
             if character.isCurrent then
                 row.raidCurrentAccent:Show()
@@ -4482,6 +4503,7 @@ local function CreateHoverFrame()
             row.resourceNameCell:ClearAllPoints()
             row.resourceNameCell:SetPoint("TOPLEFT", ui.padding, -resourceRowY)
             renderContext.setCellColor(row.resourceNameCell, rowColor)
+            row.resourceName:SetFont(BIAOGE_TEXT_FONT, characterNameFontSize, "OUTLINE")
             row.resourceName:SetText(renderContext.getCharacterDisplayName(character, "level"))
             if character.isCurrent then
                 row.resourceCurrentAccent:Show()

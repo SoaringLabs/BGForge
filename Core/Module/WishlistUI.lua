@@ -526,6 +526,7 @@ local function AcquirePanel(parent)
     end
     panel:ClearAllPoints()
     Design.Style(panel, "surface", { role = "panel" })
+    Design.BindBackgroundAlpha(panel, "SetBackdropColor", "panel")
     panel:SetFrameLevel(parent:GetFrameLevel() + 1)
     panel:Show()
     return panel
@@ -578,12 +579,12 @@ local function CreateCollapseHeader(parent)
     end)
     header:SetScript("OnEnter", function(self)
         if self.action and not self.selected then
-            self:SetBackdropColor(unpack(COLOR.hover))
+            Design.SetBackgroundAlphaColor(self, COLOR.hover)
             self:SetBackdropBorderColor(unpack(COLOR.borderStrong))
         end
     end)
     header:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(unpack(self.restingSurfaceColor or COLOR.raised))
+        Design.SetBackgroundAlphaColor(self, self.restingSurfaceColor or COLOR.raised)
         self:SetBackdropBorderColor(unpack(self.restingBorderColor or COLOR.borderStrong))
     end)
     return header
@@ -609,6 +610,7 @@ local function AcquireHeader(parent)
     header.stripe:Hide()
     header:SetFrameLevel(parent:GetFrameLevel() + 3)
     Design.Style(header, "surface", { role = "raised" })
+    Design.BindBackgroundAlpha(header, "SetBackdropColor", "raised")
     header:Show()
     return header
 end
@@ -627,6 +629,7 @@ local function CreateBossRow(parent)
     row.selectedBackground:SetAllPoints()
     row.selectedBackground:SetTexture("Interface/Buttons/WHITE8x8")
     row.selectedBackground:SetVertexColor(unpack(COLOR.selected))
+    Design.BindBackgroundAlpha(row.selectedBackground, "SetVertexColor", COLOR.selected)
     row.selectedBackground:Hide()
 
     row.selectedAccent = row:CreateTexture(nil, "ARTWORK")
@@ -766,6 +769,7 @@ local function CreateItemButton(parent)
     button.selectedBackground:SetAllPoints()
     button.selectedBackground:SetTexture("Interface/Buttons/WHITE8x8")
     button.selectedBackground:SetVertexColor(unpack(COLOR.selected))
+    Design.BindBackgroundAlpha(button.selectedBackground, "SetVertexColor", COLOR.selected)
     button.selectedBackground:Hide()
 
     button.selectedAccent = button:CreateTexture(nil, "ARTWORK")
@@ -780,6 +784,7 @@ local function CreateItemButton(parent)
     button.summaryBackground:SetAllPoints()
     button.summaryBackground:SetTexture("Interface/Buttons/WHITE8x8")
     button.summaryBackground:SetVertexColor(unpack(COLOR.header))
+    Design.BindBackgroundAlpha(button.summaryBackground, "SetVertexColor", COLOR.header)
     button.summaryBackground:Hide()
 
     -- The quality frame sits above the full-row selected surface but below
@@ -1146,7 +1151,7 @@ local function RenderSetGroups(parent, FB, groups, x, y, width)
         header.selected = selected
         header.restingSurfaceColor = selected and COLOR.selected or COLOR.raised
         header.restingBorderColor = COLOR.borderStrong
-        header:SetBackdropColor(unpack(header.restingSurfaceColor))
+        Design.SetBackgroundAlphaColor(header, header.restingSurfaceColor)
         header:SetBackdropBorderColor(unpack(header.restingBorderColor))
         header.stripe:SetShown(selected)
         header.stripe:SetVertexColor(unpack(COLOR.focus))
@@ -1615,6 +1620,7 @@ function Wishlist.CreateUI()
         title = L["个人心愿单"],
         subtitle = L["按职业套装与首领掉落建立心愿；实际掉落会提醒，拍卖时保持展开。"],
         contentRightInset = 180,
+        backgroundAlpha = true,
     })
     headerSurface:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", pageHeaderEdgeInset, headerTop)
     headerSurface:SetPoint(

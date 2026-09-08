@@ -146,6 +146,7 @@ CreateFrame=function(kind,name,parent,template)
     return f
 end
 local L=setmetatable({}, {__index=function(_,key) return key end})
+BiaoGe={options={alpha=0.8}}
 local character={name="Test",classFile="ROGUE",level=80,itemLevel=239,
     professions={{skillLineID=755},{skillLineID=186}},dailyProfessionSkills={},
     dailyProfessionSkillsUpdatedAt=1788739200,money=181340000,resourcesUpdatedAt=1788739200,
@@ -173,6 +174,19 @@ local parent=NewFrame()
 BG.CharacterDetails.Show(parent,1,"Test")
 local f=BGForgeCharacterDetailsFrame
 assert(f.todayPanel:IsShown(), "default page must be today")
+assert(f.backdropColor[4]==0.8 and f.header.backdropColor[4]==0.8
+    and f.todayPanel.actionColumn.backdropColor[4]==0.8
+    and f.todayPanel.dailyRows[1].backdropColor[4]==0.8,
+    "character-detail structural surfaces should use the shared material opacity")
+BiaoGe.options.alpha=0.23
+BG.UI.RefreshBackgroundAlpha()
+assert(f.backdropColor[4]==0.23 and f.header.backdropColor[4]==0.23
+    and f.todayPanel.actionColumn.backdropColor[4]==0.23
+    and f.todayPanel.dailyRows[1].backdropColor[4]==0.23
+    and f.characterTitle.textColor[4]==1,
+    "character-detail opacity refresh should affect backgrounds without dimming content")
+BiaoGe.options.alpha=0.8
+BG.UI.RefreshBackgroundAlpha()
 assert(f.back:GetParent()==f.leftHeader, "back control belongs in the top-left header")
 assert(f.leftHeader.height==54, "back header keeps its own compact height")
 assert(f.header.height==82, "character identity header keeps its independent height")

@@ -384,8 +384,8 @@ local focusText = BG.UI.Token("color", "focusText")
 assert(selectedBrowseItem.selectedBackground.vertexColor[1] == focusSurfaceSubtle[1]
     and selectedBrowseItem.selectedBackground.vertexColor[2] == focusSurfaceSubtle[2]
     and selectedBrowseItem.selectedBackground.vertexColor[3] == focusSurfaceSubtle[3]
-    and selectedBrowseItem.selectedBackground.vertexColor[4] == focusSurfaceSubtle[4],
-    "selected browse items should use the design-system quiet focus surface")
+    and selectedBrowseItem.selectedBackground.vertexColor[4] == 0.8,
+    "selected browse items should use the quiet focus color at the shared material opacity")
 assert(selectedBrowseItem.selectedAccent:IsShown()
     and selectedBrowseItem.selectedAccent:GetWidth() == 2
     and selectedBrowseItem.selectedAccent.vertexColor[1] == focus[1],
@@ -504,6 +504,25 @@ assert(BG.WishlistMainFrame.pageTitle.textColor[1] == BG.UI.Token("color", "text
 assert(BG.WishlistMainFrame.headerSurface._bgforgeKind == "pageHeader"
     and BG.WishlistMainFrame.headerSurface:GetHeight() == 72,
     "the wishlist should use the standard shared page header")
+assert(BG.WishlistMainFrame.headerSurface.background.vertexColor[4] == 0.8
+    and BG.WishlistMainFrame.summaryPanel.backdropColor[4] == 0.8
+    and bossDetailHeader.backdropColor[4] == 0.8
+    and bossRows[1].selectedBackground.vertexColor[4] == 0.8
+    and selectedBrowseItem.selectedBackground.vertexColor[4] == 0.8
+    and summaryItem.summaryBackground.vertexColor[4] == 0.8,
+    "wishlist page and module backgrounds should use the shared material opacity")
+BiaoGe.options.alpha = 0.25
+BG.UI.RefreshBackgroundAlpha()
+assert(BG.WishlistMainFrame.headerSurface.background.vertexColor[4] == 0.25
+    and BG.WishlistMainFrame.summaryPanel.backdropColor[4] == 0.25
+    and bossDetailHeader.backdropColor[4] == 0.25
+    and bossRows[1].selectedBackground.vertexColor[4] == 0.25
+    and selectedBrowseItem.selectedBackground.vertexColor[4] == 0.25
+    and summaryItem.summaryBackground.vertexColor[4] == 0.25
+    and BG.WishlistMainFrame.pageTitle.textColor[4] == 1,
+    "wishlist opacity refresh should update surfaces without dimming text")
+BiaoGe.options.alpha = 0.8
+BG.UI.RefreshBackgroundAlpha()
 assert(BG.WishlistMainFrame.pageDescription:GetText()
     == "按职业套装与首领掉落建立心愿；实际掉落会提醒，拍卖时保持展开。",
     "the shared wishlist header should retain the page description")

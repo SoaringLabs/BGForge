@@ -476,10 +476,10 @@ local function TestIconColumnRequirementsNeverDropTiles()
         assert(visibleCount == count,
             "icon strip silently dropped tiles for count " .. count)
     end
-    assert(requiredWidth(6, 30) == 198,
-        "embedded 30-point icon strips must expand their column hard minimum")
-    local embeddedVisible, _, embeddedSize = calculateStrip(198, 6, 30)
-    assert(embeddedVisible == 6 and embeddedSize == 30,
+    assert(requiredWidth(6, 28) == 186,
+        "embedded 28-point icon strips must expand their column hard minimum")
+    local embeddedVisible, _, embeddedSize = calculateStrip(186, 6, 28)
+    assert(embeddedVisible == 6 and embeddedSize == 28,
         "embedded icon layout must keep every enlarged tile visible")
 end
 
@@ -498,7 +498,7 @@ local function TestTextMetricsGrowRowsAndTooltipsRequireTruncation()
         "normal fonts must preserve the current compact table density")
     local embedded = calculateMetrics(14, true)
     assert(embedded.raidRowHeight == 30 and embedded.resourceRowHeight == 36
-        and embedded.itemTileSize == 30 and embedded.headerTierHeight == 26,
+        and embedded.itemTileSize == 28 and embedded.headerTierHeight == 26,
         "embedded overview must use the approved roomier row and icon sizes")
     local tall = calculateMetrics(30)
     assert(tall.rowHeight >= 36 and tall.headerTierHeight >= 36,
@@ -621,6 +621,18 @@ local function TestHoverFrameUsesDesignSystemPalette()
     BiaoGe.options.alpha = 2
     assert(resolveSurfaceColor(colors.panel)[4] == 1,
         "overview opacity must clamp invalid high saved values")
+end
+
+local function TestEmbeddedCharacterNamesUseLargerFont()
+    local BG = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    assert(createHoverFrame, "CreateHoverFrame upvalue is missing")
+    local getCharacterNameFontSize = FindUpvalue(createHoverFrame, "GetCharacterNameFontSize")
+    assert(getCharacterNameFontSize, "character-name font resolver is missing")
+    assert(getCharacterNameFontSize(false) == 12,
+        "the floating overview must keep its existing character-name font size")
+    assert(getCharacterNameFontSize(true) == 14,
+        "the embedded overview should increase character names and values by two points")
 end
 
 local function TestEquipmentUsesIconTilesWithTopLeftValues()
@@ -2083,6 +2095,7 @@ local tests = {
     hover_upvalues = TestHoverFrameStaysWithinTitanUpvalueLimit,
     ember_weekly = TestPerCharacterEmberWeeklyProgressFormatting,
     hover_design_system = TestHoverFrameUsesDesignSystemPalette,
+    embedded_name_font = TestEmbeddedCharacterNamesUseLargerFont,
     item_tiles = TestEquipmentUsesIconTilesWithTopLeftValues,
     profession_tiles = TestProfessionsUseMatchingIconTilesWithFixedColor,
     collapsed_headers = TestCollapsedSkillHeadersExpandOnceWithoutEventLoop,
@@ -2131,6 +2144,7 @@ else
         "hover_upvalues",
         "ember_weekly",
         "hover_design_system",
+        "embedded_name_font",
         "profession_tiles",
         "collapsed_headers",
         "debounce",

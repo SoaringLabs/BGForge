@@ -231,7 +231,10 @@ local function ShowItemTooltip(owner, link)
 end
 
 local function CreateSurface(parent, role)
-    return UI.Create("surface", parent, { role = role or "panel" })
+    role = role or "panel"
+    local surface = UI.Create("surface", parent, { role = role })
+    UI.BindBackgroundAlpha(surface, "SetBackdropColor", role)
+    return surface
 end
 
 local function CreateText(parent, role, text)
@@ -547,6 +550,7 @@ local function CreatePaperDollSlot(parent, definition, index, orientation)
     group.hoverBackground = group:CreateTexture(nil, "BACKGROUND")
     group.hoverBackground:SetAllPoints()
     group.hoverBackground:SetColorTexture(unpack(Token("hover")))
+    UI.BindBackgroundAlpha(group.hoverBackground, "SetColorTexture", "hover")
     group.hoverBackground:Hide()
 
     group.itemButton = CreateItemButton(group, PAPER_DOLL_SLOT_SIZE)
@@ -672,10 +676,12 @@ local function CreateEquipmentDetailRow(parent, definition, index)
     row.selectedBackground = row:CreateTexture(nil, "BACKGROUND")
     row.selectedBackground:SetAllPoints()
     row.selectedBackground:SetColorTexture(unpack(Token("focusSurfaceSubtle")))
+    UI.BindBackgroundAlpha(row.selectedBackground, "SetColorTexture", "focusSurfaceSubtle")
     row.selectedBackground:Hide()
     row.hoverBackground = row:CreateTexture(nil, "BACKGROUND", nil, 1)
     row.hoverBackground:SetAllPoints()
     row.hoverBackground:SetColorTexture(unpack(Token("hover")))
+    UI.BindBackgroundAlpha(row.hoverBackground, "SetColorTexture", "hover")
     row.hoverBackground:Hide()
     row.selectedAccent = row:CreateTexture(nil, "ARTWORK")
     row.selectedAccent:SetPoint("TOPLEFT", 0, -1)
@@ -783,6 +789,7 @@ end
 local function CreateCharacterRow(parent, index)
     local row = CreateFrame("Button", nil, parent, "BackdropTemplate")
     UI.Style(row, "surface", { role = "row" })
+    UI.BindBackgroundAlpha(row, "SetBackdropColor", "row")
     row:SetHeight(CHARACTER_ROW_HEIGHT)
     -- 列表是一张连续的表，而不是一摞独立卡片。每行只画自己的底部分隔线，
     -- 避免相邻边框叠成粗线；选中态由底色和左侧焦点线表达。
@@ -799,6 +806,7 @@ local function CreateCharacterRow(parent, index)
     row.selectedBackground:SetPoint("BOTTOMRIGHT", -1, 1)
     row.selectedBackground:SetTexture(WHITE_TEXTURE)
     row.selectedBackground:SetVertexColor(unpack(Token("focusSurface")))
+    UI.BindBackgroundAlpha(row.selectedBackground, "SetVertexColor", "focusSurface")
     row.selectedBackground:Hide()
 
     row.selectedAccent = row:CreateTexture(nil, "ARTWORK", nil, 7)
@@ -842,10 +850,10 @@ local function CreateCharacterRow(parent, index)
         end
     end)
     row:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(unpack(Token("hover")))
+        UI.SetBackgroundAlphaColor(self, "hover")
     end)
     row:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(unpack(Token("row")))
+        UI.SetBackgroundAlphaColor(self, "row")
     end)
     row.index = index
     return row
@@ -918,6 +926,7 @@ end
 local function CreateFrameContents(parent)
     frame = CreateFrame("Frame", "BGForgeCharacterDetailsFrame", parent, "BackdropTemplate")
     UI.Style(frame, "surface", { role = "canvas" })
+    UI.BindBackgroundAlpha(frame, "SetBackdropColor", "canvas")
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -58)
     frame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -12, 12)
     frame:SetFrameLevel(parent:GetFrameLevel() + 2)
@@ -1498,6 +1507,7 @@ end
 local function CreateTodayRow(parent)
     local row = CreateFrame("Button", nil, parent, "BackdropTemplate")
     UI.Style(row, "surface", { role = "row" })
+    UI.BindBackgroundAlpha(row, "SetBackdropColor", "row")
     row:SetBackdropBorderColor(0, 0, 0, 0)
     row:SetHeight(TODAY_TASK_ROW_HEIGHT)
     row.divider = UI.Create("divider", row, {
@@ -1524,10 +1534,10 @@ local function CreateTodayRow(parent)
     row.action:SetJustifyH("RIGHT")
     SetTextColor(row.action, "focusText")
     row:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(unpack(Token(self.interactive and "hover" or "panel")))
+        UI.SetBackgroundAlphaColor(self, self.interactive and "hover" or "panel")
     end)
     row:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(unpack(Token("panel")))
+        UI.SetBackgroundAlphaColor(self, "panel")
     end)
     return row
 end
@@ -1563,6 +1573,7 @@ end
 local function CreateTodayRaidRow(parent)
     local row = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     UI.Style(row, "surface", { role = "row" })
+    UI.BindBackgroundAlpha(row, "SetBackdropColor", "row")
     row:SetBackdropBorderColor(0, 0, 0, 0)
     row:SetHeight(TODAY_RAID_ROW_HEIGHT)
     row.divider = UI.Create("divider", row, {
@@ -1665,13 +1676,14 @@ local function CreateTodayResourceRow(parent)
 end
 
 local function SetTodayPreviewHover(group, hovered)
-    group:SetBackdropColor(unpack(Token(hovered and "hover" or "raised")))
+    UI.SetBackgroundAlphaColor(group, hovered and "hover" or "raised")
     group.hoverAccent:SetShown(hovered)
 end
 
 local function CreateTodayPreview(parent, title, view)
     local group = CreateFrame("Button", nil, parent, "BackdropTemplate")
     UI.Style(group, "surface", { role = "raised" })
+    UI.BindBackgroundAlpha(group, "SetBackdropColor", "raised")
     -- 快捷入口用底色区分为两个可点击区域，不额外增加边框。
     -- 悬停时同时抬高底色并显示左侧焦点线，点击范围仍覆盖整块。
     group:SetBackdropBorderColor(0, 0, 0, 0)

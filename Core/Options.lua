@@ -664,6 +664,9 @@ BG.Init(function()
         for _, v in ipairs(BG.tabButtons) do
             v.button.bg:SetAlpha(alpha)
         end
+        if BG.UI and BG.UI.RefreshBackgroundAlpha then
+            BG.UI.RefreshBackgroundAlpha()
+        end
         if BG.RefreshRaidLockoutBackgroundAlpha then
             BG.RefreshRaidLockoutBackgroundAlpha()
         end

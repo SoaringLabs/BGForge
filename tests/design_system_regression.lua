@@ -149,6 +149,22 @@ assert(pageHeader.title.pointCalls[1][1] == "BOTTOMLEFT"
 assert(NearlyEqual(pageHeader.accent.vertexColor[1], expectedFocus[1]),
     "Shared page-header accent should use the focus color")
 
+BiaoGe = { options = { alpha = 0.35 } }
+local alphaHeader = BG.UI.CreatePageHeader(parent, {
+    title = "透明度联动",
+    backgroundAlpha = true,
+})
+local alphaPanel = BG.UI.Create("surface", parent, { role = "panel" })
+BG.UI.BindBackgroundAlpha(alphaPanel, "SetBackdropColor", "panel")
+assert(NearlyEqual(alphaHeader.background.vertexColor[4], 0.35)
+    and NearlyEqual(alphaPanel.backdropColor[4], 0.35),
+    "Opted-in page and module backgrounds should use the shared material opacity")
+BiaoGe.options.alpha = 0
+BG.UI.RefreshBackgroundAlpha()
+assert(alphaHeader.background.vertexColor[4] == 0 and alphaPanel.backdropColor[4] == 0,
+    "Background opacity refresh must preserve an explicit zero value")
+BiaoGe.options.alpha = 0.8
+
 local tab = BG.UI.Create("tab", panel, {
     text = "纳克萨玛斯",
     state = "selected",

@@ -5,8 +5,8 @@ set -euo pipefail
 module="Core/Module/CharacterDetails.lua"
 overview="Core/Module/RaidLockoutOverview.lua"
 
-rg -Fq '## Version: 1.4.0' BGForge.toc
-rg -Fq '当前版本：`1.4.0`' README.md
+rg -Fq '## Version: 1.4.1' BGForge.toc
+rg -Fq '当前版本：`1.4.1`' README.md
 rg -Fq 'Core\Module\CharacterDetails.lua' BGForge.toc
 rg -Fq 'function M.Show(parent, realmID, characterName, onBack)' "$module"
 rg -Fq 'function M.Refresh()' "$module"
@@ -282,8 +282,10 @@ rg -Fq 'local CHARACTER_ROW_STRIDE = CHARACTER_ROW_HEIGHT' "$module"
 rg -Fq 'local MAX_CHARACTER_ROWS = 10' "$module"
 rg -Fq 'row:SetBackdropBorderColor(0, 0, 0, 0)' "$module"
 rg -Fq 'row.divider:SetPoint("BOTTOMRIGHT", 0, 0)' "$module"
-rg -Fq 'self:SetBackdropColor(unpack(Token("hover")))' "$module"
-rg -Fq 'self:SetBackdropColor(unpack(Token("row")))' "$module"
+rg -Fq 'UI.SetBackgroundAlphaColor(self, "hover")' "$module"
+rg -Fq 'UI.SetBackgroundAlphaColor(self, "row")' "$module"
+rg -Fq 'UI.BindBackgroundAlpha(surface, "SetBackdropColor", role)' "$module"
+rg -Fq 'UI.BindBackgroundAlpha(frame, "SetBackdropColor", "canvas")' "$module"
 if rg -Uq 'local function CreateCharacterRow.*UI\.Create\("button"' "$module"; then
     echo "Character rows must not inherit the bordered button hover treatment" >&2
     exit 1
