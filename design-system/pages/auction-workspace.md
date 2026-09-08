@@ -196,7 +196,9 @@ capacity summary, and hovered item link. It reuses the same continuous `panel` s
 as Today and Equipment; do not introduce a brighter page-specific canvas.
 
 The 42px Backpack header is a raw frame with one inset bottom divider. Search remains in
-the header and keeps its existing 180 × 24px input geometry. The summary remains right
+the header and uses the shared wishlist-style search input at 180 × 28px, including its
+standard input surface, Rune Blue focus state, muted placeholder, clear affordance, and
+keyboard behavior. The summary remains right
 aligned. Category filters keep their existing 78 × 28px hit areas and positions, but use
 the shared character-detail text-navigation treatment: secondary text at rest, Rune Blue
 text plus a 2px underline when selected, and no filled tab background or outline.

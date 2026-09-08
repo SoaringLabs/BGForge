@@ -33,10 +33,15 @@ function Region:SetWidth(width) self.width = width end
 function Region:SetHeight(height) self.height = height end
 function Region:SetSize(width, height) self.width, self.height = width, height end
 function Region:SetTexture(texture) self.texture = texture end
+function Region:SetBlendMode(blendMode) self.blendMode = blendMode end
 function Region:SetVertexColor(r, g, b, a) self.vertexColor = { r, g, b, a } end
 function Region:SetTextColor(r, g, b, a) self.textColor = { r, g, b, a } end
+function Region:SetBackdropColor(r, g, b, a) self.backdropColor = { r, g, b, a } end
+function Region:SetBackdropBorderColor(r, g, b, a) self.backdropBorderColor = { r, g, b, a } end
 function Region:SetAlpha(alpha) self.alpha = alpha end
+function Region:SetDesaturated(desaturated) self.desaturated = desaturated end
 function Region:SetWordWrap(enabled) self.wordWrap = enabled end
+function Region:SetJustifyH(justify) self.justifyH = justify end
 function Region:SetHighlightTexture(texture) self.highlightTexture = texture end
 function Region:GetWidth() return rawget(self, "width") or 1275 end
 function Region:GetHeight() return rawget(self, "height") or 800 end
@@ -184,9 +189,11 @@ BG.SpecGearFilter = {
         controls.isWishlistFilterControls = true
         return controls
     end,
-    ApplyToCell = function(button, link)
+    ApplyToCell = function(button, link, onApplied)
         button.appliedFilterLink = link
-        button:SetAlpha(link == "item:100" and 0.4 or 1)
+        local filtered = link == "item:100"
+        button:SetAlpha(filtered and 0.6 or 1)
+        if onApplied then onApplied(filtered) end
     end,
 }
 
@@ -204,9 +211,10 @@ local uiChunk = assert(loadfile("Core/Module/WishlistUI.lua"))
 uiChunk("BGForge", namespace)
 
 local buildBrowseModel = BG.Wishlist.BuildBrowseModel
+local setGroupsReady = false
 BG.Wishlist.BuildBrowseModel = function(FB)
     local model = buildBrowseModel(FB, function() end)
-    model.setGroups = {
+    model.setGroups = setGroupsReady and {
         {
             key = "MAGE,ROGUE,PALADIN",
             classes = { "MAGE", "ROGUE", "PALADIN" },
@@ -225,13 +233,19 @@ BG.Wishlist.BuildBrowseModel = function(FB)
             isCurrent = false,
             items = { { itemID = 303, sourceBosses = { 1 } } },
         },
-    }
+    } or {}
     return model
 end
 
 assert(BG.Wishlist.Add(100, "RAID_A", 1), "test wishlist item should be selectable")
 BG.Wishlist.CreateUI()
 BG.WishlistMainFrame:Show()
+-- Reproduce the live metadata transition: the first render has no resolved
+-- set groups, then their async item metadata arrives before the next render.
+-- Pooled FontStrings must not carry the empty-state width/alignment into the
+-- boss section heading.
+setGroupsReady = true
+BG.Wishlist.Refresh()
 
 local visibleItems = 0
 local selectedBrowseItem
@@ -242,11 +256,14 @@ local bossDetailHeader
 local bossRows = {}
 local setHeaders = {}
 local summaryTitle
+local bossSectionTitle
 for _, region in ipairs(regions) do
     if rawget(region, "regionType") == "FontString"
         and rawget(region, "text") == "本阶段心愿（1）" then
         summaryTitle = region
-        break
+    elseif rawget(region, "regionType") == "FontString"
+        and rawget(region, "text") == "首领掉落" then
+        bossSectionTitle = region
     end
 end
 for _, frame in ipairs(frames) do
@@ -309,12 +326,22 @@ assert(scrollBarPoints and scrollBarPoints[1][1] == "TOPRIGHT"
     and scrollBarPoints[1][4] == -2,
     "the boss-directory scrollbar should be anchored inside the directory's right edge")
 assert(visibleItems > 0, "wishlist should render at least one visible item card")
-assert(selectedBrowseItem.appliedFilterLink == "item:100" and selectedBrowseItem.alpha == 0.4,
-    "boss-detail items that do not match the selected filter should be dimmed")
-assert(summaryItem.appliedFilterLink == "item:100" and summaryItem.alpha == 0.4,
-    "current wishlist items that do not match the selected filter should be dimmed")
+assert(selectedBrowseItem.appliedFilterLink == "item:100" and selectedBrowseItem.alpha == 1,
+    "filtered boss-detail items should keep an opaque frame to prevent quality-color bleed")
+assert(summaryItem.appliedFilterLink == "item:100" and summaryItem.alpha == 1,
+    "filtered wishlist-summary items should keep an opaque frame to prevent quality-color bleed")
+assert(selectedBrowseItem.icon.desaturated == true
+    and selectedBrowseItem.icon.vertexColor[1] == 0.55
+    and selectedBrowseItem.icon.vertexColor[2] == 0.55
+    and selectedBrowseItem.icon.vertexColor[3] == 0.55
+    and selectedBrowseItem.icon.vertexColor[4] == 1,
+    "filtered item art should use a neutral opaque darkening tint instead of translucent quality color")
+assert(selectedBrowseItem.name.alpha == 0.72 and selectedBrowseItem.meta.alpha == 0.72,
+    "filtered item copy should remain readable at reduced emphasis")
 assert(setBrowseItem.appliedFilterLink == "item:301" and setBrowseItem.alpha == 1,
     "wishlist items that match the selected filter should remain fully visible")
+assert(setBrowseItem.icon.desaturated == false and setBrowseItem.icon.vertexColor[1] == 1,
+    "allowed wishlist items should restore full-color item art")
 assert(summaryTitle, "wishlist summary should render its title")
 assert(summaryTitle:GetWidth() > 0 and summaryTitle:GetWidth() < 250,
     "wishlist summary title should be constrained to the narrow right column")
@@ -322,6 +349,9 @@ assert(summaryTitle.wordWrap == false,
     "wishlist summary title should stay on one line inside its column")
 assert(summaryTitle:GetParent() ~= BG.WishlistMainFrame.summaryChild,
     "the wishlist summary title should remain outside the scrolling item list")
+assert(bossSectionTitle and bossSectionTitle.justifyH == "LEFT"
+    and bossSectionTitle.wordWrap == false and bossSectionTitle:GetWidth() > 0,
+    "the boss section heading should reset pooled text state and remain left-aligned")
 assert(selectedBrowseItem:GetHeight() == 42,
     "boss-detail item rows should make room for one compact metadata line")
 assert(selectedBrowseItem:GetParent() == BG.WishlistMainFrame.bossDetailChild,
@@ -336,8 +366,8 @@ assert(rawget(selectedBrowseItem, "qualityBorder"), "item quality color should f
 assert(selectedBrowseItem.qualityBorder:GetWidth() == 32,
     "item quality frame should leave only a one-pixel border around the icon")
 assert(selectedBrowseItem.icon:GetWidth() == 30, "item icon should be smaller than its quality frame")
-assert(rawget(selectedBrowseItem.qualityBorder, "drawLayer") == "BACKGROUND",
-    "the quality frame must render behind the item icon")
+assert(rawget(selectedBrowseItem.qualityBorder, "drawLayer") == "BORDER",
+    "the quality frame must render above the selected background and behind the item icon")
 assert(rawget(selectedBrowseItem.icon, "drawLayer") == "ARTWORK", "the item icon must render above its quality frame")
 assert(rawget(selectedBrowseItem.icon, "texture") == "Interface\\Icons\\Resolved100",
     "partially cached items should resolve their icon through C_Item; got " ..
@@ -347,19 +377,19 @@ assert(selectedBrowseItem.level:GetText() == "245", "item level should be embedd
 assert(not rawget(selectedBrowseItem, "check"), "selected items should not render a glyph over the item icon")
 assert(selectedBrowseItem.selectedBackground:IsShown(),
     "selected browse items should keep a persistent row highlight")
-local focusSurface = BG.UI.Token("color", "focusSurface")
+local focusSurfaceSubtle = BG.UI.Token("color", "focusSurfaceSubtle")
 local rowHoverWash = BG.UI.Token("color", "rowHoverWash")
 local focus = BG.UI.Token("color", "focus")
 local focusText = BG.UI.Token("color", "focusText")
-local textMuted = BG.UI.Token("color", "textMuted")
-assert(selectedBrowseItem.selectedBackground.vertexColor[1] == focusSurface[1]
-    and selectedBrowseItem.selectedBackground.vertexColor[2] == focusSurface[2]
-    and selectedBrowseItem.selectedBackground.vertexColor[3] == focusSurface[3]
-    and selectedBrowseItem.selectedBackground.vertexColor[4] == focusSurface[4],
-    "selected browse items should use the design-system focus surface")
+assert(selectedBrowseItem.selectedBackground.vertexColor[1] == focusSurfaceSubtle[1]
+    and selectedBrowseItem.selectedBackground.vertexColor[2] == focusSurfaceSubtle[2]
+    and selectedBrowseItem.selectedBackground.vertexColor[3] == focusSurfaceSubtle[3]
+    and selectedBrowseItem.selectedBackground.vertexColor[4] == focusSurfaceSubtle[4],
+    "selected browse items should use the design-system quiet focus surface")
 assert(selectedBrowseItem.selectedAccent:IsShown()
+    and selectedBrowseItem.selectedAccent:GetWidth() == 2
     and selectedBrowseItem.selectedAccent.vertexColor[1] == focus[1],
-    "selected browse items should include the Rune Blue focus line")
+    "selected browse items should include the shared Rune Blue leading marker")
 assert(rawget(selectedBrowseItem, "highlightTexture") == nil,
     "wishlist hover washes should avoid WoW's native highlight-texture alpha path")
 assert(selectedBrowseItem.hoverBackground.vertexColor[1] == rowHoverWash[1]
@@ -427,14 +457,17 @@ assert(bossRows[1].title:GetText() == "1号 · Test Boss"
     and bossRows[2].title:GetText() == "限时宝箱"
     and bossRows[3].title:GetText() == "3号 · Second Boss",
     "boss directory rows should number bosses but not auxiliary drop sources")
-assert(bossRows[1].count:GetText() == "1" and bossRows[2].count:GetText() == "0"
-    and bossRows[3].count:GetText() == "0",
-    "boss directory trailing numbers should count wishes attributed to each boss")
+assert(bossRows[1].count:GetText() == "1" and bossRows[2].count:GetText() == ""
+    and bossRows[3].count:GetText() == "",
+    "boss directory should show non-zero wish counts and hide zero-value noise")
 assert(bossRows[1].selectedBackground:IsShown() and not bossRows[2].selectedBackground:IsShown()
     and not bossRows[3].selectedBackground:IsShown(),
     "the active boss should use the persistent selected-row background")
 assert(bossRows[1].selectedAccent:IsShown() and not bossRows[2].selectedAccent:IsShown(),
     "the active boss should include the Rune Blue leading marker")
+assert(bossRows[1].selectedBackground.vertexColor[1] == focusSurfaceSubtle[1]
+    and bossRows[1].selectedAccent:GetWidth() == 2,
+    "boss selection should share the quiet focus surface and 2px leading marker")
 assert(rawget(bossRows[1], "highlightTexture") == nil
     and rawget(bossRows[2], "highlightTexture") == nil,
     "boss rows should avoid WoW's native highlight-texture alpha path")
@@ -452,13 +485,20 @@ assert(not bossRows[2].hoverBackground:IsShown(),
 assert(bossRows[1].count.textColor[1] == focusText[1]
     and bossRows[1].count.textColor[2] == focusText[2],
     "non-zero boss wish counts should use focus-text emphasis")
-assert(bossRows[2].count.textColor[1] == textMuted[1]
-    and bossRows[2].count.textColor[2] == textMuted[2],
-    "zero boss wish counts should stay muted")
+assert(bossRows[2].count:GetWidth() == 0,
+    "zero boss wish counts should not reserve a trailing number column")
 
 assert(BG.WishlistMainFrame.clearButton._bgforgeVariant == "danger"
-    and BG.WishlistMainFrame.clearButton:GetHeight() == 28,
-    "the clear action should use the standard danger-button treatment")
+    and BG.WishlistMainFrame.clearButton:GetHeight() == 28
+    and BG.WishlistMainFrame.clearButton:GetWidth() == 96,
+    "the summary-heading clear action should use the compact danger-button treatment")
+local borderSubtle = BG.UI.Token("color", "borderSubtle")
+local textSecondary = BG.UI.Token("color", "textSecondary")
+assert(BG.WishlistMainFrame.clearButton.backdropBorderColor[1] == borderSubtle[1]
+    and BG.WishlistMainFrame.clearButton._bgforgeText.textColor[1] == textSecondary[1],
+    "the clear action should rest as a quiet toolbar control instead of a permanent red alert")
+assert(BG.WishlistMainFrame.summaryPanel:GetWidth() == 240,
+    "the wishlist summary should keep one stable narrow width in every content state")
 assert(BG.WishlistMainFrame.pageTitle.textColor[1] == BG.UI.Token("color", "textPrimary")[1],
     "the wishlist page title should use primary text rather than Forge Gold")
 assert(BG.WishlistMainFrame.headerSurface._bgforgeKind == "pageHeader"
@@ -494,7 +534,37 @@ assert(outerScrollPoints and outerScrollPoints[1][1] == "TOPLEFT"
 assert(BG.WishlistMainFrame.child:GetWidth() == BG.WishlistMainFrame.scroll:GetWidth(),
     "wishlist columns should fill the usable page width without a second scrollbar reserve")
 
+assert(BG.WishlistMainFrame.bossSearch
+    and BG.WishlistMainFrame.bossSearch._bgforgeKind == "input"
+    and BG.WishlistMainFrame.bossSearch._bgforgeSearchInput
+    and BG.WishlistMainFrame.bossSearch:GetWidth() == 220
+    and BG.WishlistMainFrame.bossSearch:GetHeight() == 28,
+    "boss drops should expose a design-system search input")
+BG.WishlistMainFrame.bossSearch:SetText("Item 120")
+BG.WishlistMainFrame.bossSearch.scripts.OnTextChanged(BG.WishlistMainFrame.bossSearch)
+local searchHeader
+local searchResult120
+local searchResult100
+for _, frame in ipairs(frames) do
+    if rawget(frame, "isBossSearchHeader") and frame:IsShown() then
+        searchHeader = frame
+    elseif rawget(frame, "itemID") and frame:IsShown() and not rawget(frame, "isSummary") then
+        if rawget(frame, "itemID") == 120 then searchResult120 = frame end
+        if rawget(frame, "itemID") == 100 then searchResult100 = frame end
+    end
+end
+assert(searchHeader and searchHeader.title:GetText() == "搜索结果（1）",
+    "boss-drop search should replace the detail heading with its result count")
+assert(searchResult120 and not searchResult100,
+    "boss-drop search should match item names across every boss")
+assert(searchResult120.sourceBosses[1] == 3,
+    "boss-drop search results should retain their source boss for tooltips and selection")
+assert(searchResult120.meta:GetText():find("Second Boss", 1, true),
+    "boss-drop search results should show the matching item's boss source without requiring a tooltip")
+
 bossRows[3].action()
+assert(BG.WishlistMainFrame.bossSearch:GetText() == "",
+    "choosing a boss should clear the active drop search")
 local refreshedBossRows = {}
 local refreshedBossHeader
 local bossOneBrowseVisible = false
@@ -541,6 +611,15 @@ end
 assert(setHeaders[1].checkmark:IsShown(), "the active set category should use a real checkmark texture")
 assert(not setHeaders[2].checkmark:IsShown() and not setHeaders[3].checkmark:IsShown(),
     "inactive set categories should not look selected")
+assert(setHeaders[1].backdropColor[1] == focusSurfaceSubtle[1]
+    and setHeaders[1].stripe:IsShown()
+    and setHeaders[1].stripe:GetWidth() == 2
+    and setHeaders[1].checkmark.desaturated == true
+    and setHeaders[1].checkmark.blendMode == "ADD"
+    and setHeaders[1].checkmark.vertexColor[1] == focusText[1],
+    "set selection should use a desaturated texture tinted with the brighter Rune Blue")
+assert(not setHeaders[2].stripe:IsShown(),
+    "inactive set categories should not keep a structural selection stripe")
 assert(setHeaders[1].arrow:GetText() == "" and setHeaders[2].arrow:GetText() == "",
     "set categories should not use expand or collapse symbols")
 local activeSetTitle = setHeaders[1].title:GetText()
@@ -678,6 +757,18 @@ assert(BG.WishlistMainFrame.summaryScroll:GetVerticalScroll() > oldSummaryOffset
 
 assert(BG.Wishlist.Clear("RAID_A"),
     "the resize regression should start from an empty wishlist")
+local emptyInstruction
+for _, region in ipairs(regions) do
+    if rawget(region, "regionType") == "FontString"
+        and rawget(region, "text") == "点击左侧套装兑换物或中间首领掉落加入心愿；再次点击即可移除。"
+        and region:IsShown()
+    then
+        emptyInstruction = region
+        break
+    end
+end
+assert(emptyInstruction,
+    "the empty summary should explain how to add and remove a wish")
 local outerScroll = BG.WishlistMainFrame.scroll
 outerScroll:SetHeight(800)
 BG.Wishlist.Refresh()

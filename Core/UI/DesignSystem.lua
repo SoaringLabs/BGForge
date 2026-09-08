@@ -143,9 +143,9 @@ local INTERACTIONS = {
         disabled = { background = "panel", border = "borderSubtle", text = "textDisabled" },
     },
     danger = {
-        default = { background = "panel", border = "danger", text = "danger" },
-        hover = { background = "raised", border = "danger", text = "textPrimary", washColor = "danger", wash = 0.10 },
-        pressed = { background = "pressed", border = "danger", text = "textPrimary", washColor = "danger", wash = 0.16 },
+        default = { background = "panel", border = "borderSubtle", text = "textSecondary" },
+        hover = { background = "raised", border = "danger", text = "danger", washColor = "danger", wash = 0.06 },
+        pressed = { background = "dangerSurface", border = "danger", text = "textPrimary", washColor = "danger", wash = 0.10 },
         disabled = { background = "panel", border = "borderSubtle", text = "textDisabled" },
     },
     input = {
@@ -405,6 +405,90 @@ function UI.Create(kind, parent, options)
         error("Unknown BGForge widget kind: " .. tostring(kind))
     end
     return UI.Style(widget, kind, options)
+end
+
+function UI.CreateSearchInput(parent, options)
+    assert(parent, "BGForge UI.CreateSearchInput requires a parent")
+    options = options or {}
+
+    local input = UI.Create("input", parent, {
+        width = options.width or 180,
+        height = options.height or TOKENS.size.control,
+        textRole = options.textRole or "label",
+    })
+    input._bgforgeSearchInput = true
+    input:SetAutoFocus(false)
+    input:SetMaxLetters(options.maxLetters or 64)
+    input:SetTextInsets(8, 30, 0, 0)
+
+    local placeholder = input:CreateFontString(nil, "OVERLAY")
+    placeholder:SetPoint("LEFT", 8, 0)
+    placeholder:SetPoint("RIGHT", -30, 0)
+    placeholder:SetJustifyH("LEFT")
+    placeholder:SetWordWrap(false)
+    ApplyText(placeholder, options.placeholderRole or "label", options.placeholderColor or "textMuted")
+    placeholder:SetText(options.placeholder or "")
+    input.placeholder = placeholder
+
+    local clearButton = CreateFrame("Button", nil, input)
+    clearButton:SetPoint("RIGHT", -2, 0)
+    clearButton:SetSize(24, 24)
+    local clearIcon = clearButton:CreateTexture(nil, "ARTWORK")
+    clearIcon:SetPoint("CENTER")
+    clearIcon:SetSize(14, 14)
+    clearIcon:SetTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Up")
+    clearIcon:SetTexCoord(0.20, 0.80, 0.20, 0.80)
+    clearIcon:SetDesaturated(true)
+    SetRegionColor(clearIcon, "SetVertexColor", "textSecondary")
+    clearButton.icon = clearIcon
+    input.clearButton = clearButton
+
+    local function UpdateAffordances(self)
+        local hasText = tostring(self:GetText() or ""):find("%S") ~= nil
+        self.placeholder:SetShown(not hasText and not self._bgforgeSearchFocused)
+        self.clearButton:SetShown(hasText)
+    end
+    input._bgforgeUpdateSearchAffordances = UpdateAffordances
+
+    input:SetScript("OnTextChanged", function(self)
+        UpdateAffordances(self)
+        if options.onTextChanged then
+            options.onTextChanged(self, self:GetText() or "")
+        end
+    end)
+    input:SetScript("OnEditFocusGained", function(self)
+        self._bgforgeSearchFocused = true
+        UpdateAffordances(self)
+    end)
+    input:SetScript("OnEditFocusLost", function(self)
+        self._bgforgeSearchFocused = nil
+        UpdateAffordances(self)
+    end)
+    input:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    input:SetScript("OnEscapePressed", function(self)
+        if tostring(self:GetText() or ""):find("%S") then
+            self:SetText("")
+            UpdateAffordances(self)
+        else
+            self:ClearFocus()
+        end
+    end)
+    clearButton:SetScript("OnClick", function()
+        input:SetText("")
+        input:ClearFocus()
+        input._bgforgeSearchFocused = nil
+        UpdateAffordances(input)
+    end)
+    if options.clearTooltip and GameTooltip then
+        clearButton:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(options.clearTooltip)
+            GameTooltip:Show()
+        end)
+        clearButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    UpdateAffordances(input)
+    return input
 end
 
 function UI.CreatePageHeader(parent, options)

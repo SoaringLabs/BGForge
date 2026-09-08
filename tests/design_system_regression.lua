@@ -4,7 +4,7 @@ local Region = {}
 Region.__index = Region
 
 local function NewRegion(parent)
-    return setmetatable({ parent = parent, hooks = {}, textures = {} }, Region)
+    return setmetatable({ parent = parent, hooks = {}, scripts = {}, textures = {}, shown = true }, Region)
 end
 
 function Region:SetBackdrop(backdrop) self.backdrop = backdrop end
@@ -32,15 +32,27 @@ function Region:SetTextColor(...) self.textColor = { ... } end
 function Region:SetShadowColor(...) self.shadowColor = { ... } end
 function Region:SetShadowOffset(...) self.shadowOffset = { ... } end
 function Region:SetText(text) self.text = text end
+function Region:GetText() return self.text or "" end
 function Region:SetAutoFocus(value) self.autoFocus = value end
+function Region:SetTextInsets(left, right, top, bottom) self.textInsets = { left, right, top, bottom } end
+function Region:SetMaxLetters(value) self.maxLetters = value end
+function Region:SetDesaturated(value) self.desaturated = value end
+function Region:SetTexCoord(...) self.texCoord = { ... } end
+function Region:SetShown(value) self.shown = value end
+function Region:Show() self.shown = true end
+function Region:Hide() self.shown = false end
+function Region:IsShown() return self.shown end
+function Region:ClearFocus() self.hasFocus = false end
 function Region:SetFontString(fontString) self.fontString = fontString end
 function Region:GetFontString() return self.fontString end
 function Region:IsMouseOver() return self.mouseOver end
+function Region:SetScript(name, callback) self.scripts[name] = callback end
 function Region:HookScript(name, callback)
     self.hooks[name] = self.hooks[name] or {}
     table.insert(self.hooks[name], callback)
 end
 function Region:Fire(name, ...)
+    if self.scripts[name] then self.scripts[name](self, ...) end
     for _, callback in ipairs(self.hooks[name] or {}) do
         callback(self, ...)
     end
@@ -159,6 +171,18 @@ assert(button._bgforgeRenderedState == "pressed", "Primary button press state wa
 button:Fire("OnDisable")
 assert(button._bgforgeRenderedState == "disabled", "Disabled button state was not applied")
 
+local dangerButton = BG.UI.Create("button", panel, { variant = "danger", text = "清空当前副本" })
+local borderSubtle = BG.UI.Token("color", "borderSubtle")
+local textSecondary = BG.UI.Token("color", "textSecondary")
+local danger = BG.UI.Token("color", "danger")
+assert(NearlyEqual(dangerButton.backdropBorderColor[1], borderSubtle[1])
+    and NearlyEqual(dangerButton.fontString.textColor[1], textSecondary[1]),
+    "Destructive tools should rest quietly instead of showing a permanent red outline")
+dangerButton:Fire("OnEnter")
+assert(NearlyEqual(dangerButton.backdropBorderColor[1], danger[1])
+    and NearlyEqual(dangerButton.fontString.textColor[1], danger[1]),
+    "Destructive tools should reveal danger emphasis on hover")
+
 local input = BG.UI.Create("input", panel, { width = 180, height = 28 })
 assert(input.autoFocus == false, "Design-system input should not steal focus")
 input:Fire("OnEditFocusGained")
@@ -166,5 +190,29 @@ assert(input._bgforgeRenderedState == "focus", "Input focus state was not applie
 BG.UI.SetState(input, "error")
 input:Fire("OnEditFocusLost")
 assert(input._bgforgeRenderedState == "error", "Input error state was not persistent")
+
+local searchText
+local search = BG.UI.CreateSearchInput(panel, {
+    width = 220,
+    placeholder = "搜索装备名称",
+    onTextChanged = function(_, text) searchText = text end,
+})
+assert(search._bgforgeKind == "input" and search._bgforgeSearchInput
+    and search.width == 220 and search.height == 28,
+    "Shared search inputs should use the standard design-system input geometry")
+assert(search.placeholder.text == "搜索装备名称" and search.placeholder:IsShown()
+    and not search.clearButton:IsShown()
+    and search.clearButton.width == 24 and search.clearButton.height == 24
+    and search.clearButton.icon.width == 14 and search.clearButton.icon.height == 14,
+    "Shared search inputs should expose one consistent placeholder and clear affordance")
+search:SetText("Needle")
+search:Fire("OnTextChanged")
+assert(searchText == "Needle" and not search.placeholder:IsShown()
+    and search.clearButton:IsShown(),
+    "Shared search affordances should react to entered text")
+search.clearButton:Fire("OnClick")
+assert(search:GetText() == "" and search.placeholder:IsShown()
+    and not search.clearButton:IsShown(),
+    "Shared search clear buttons should reset the field and its affordances")
 
 print("BGForge design-system regression tests passed")

@@ -178,6 +178,7 @@ Variants: primary, secondary, quiet, danger.
 - Error uses a danger border and adjacent recovery text.
 - Read-only values look different from disabled controls.
 - Numeric inputs use the number typography role and right alignment.
+- Search fields use the shared `CreateSearchInput` wrapper: the standard input surface and focus state, muted placeholder copy, a right-side clear affordance, Enter to release focus, and Escape to clear before releasing focus.
 
 ### Data table
 

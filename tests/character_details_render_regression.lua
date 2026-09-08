@@ -53,6 +53,8 @@ function Region:SetFrameLevel(level) self.frameLevel = level end
 function Region:SetParent(parent) self.parent = parent end
 function Region:GetParent() return rawget(self, "parent") end
 function Region:SetShown(shown) self.shown = shown end
+function Region:SetTextInsets(left, right, top, bottom) self.textInsets = { left, right, top, bottom } end
+function Region:SetMaxLetters(value) self.maxLetters = value end
 function Region:SetEnabled(enabled) self.enabled = enabled end
 function Region:EnableMouseWheel(enabled) self.mouseWheelEnabled = enabled end
 function Region:ClearAllPoints() self.pointCalls = {} end
@@ -493,6 +495,11 @@ assert(f.backpackPanel.backdropColor[1]==f.todayPanel.actionColumn.backdropColor
 assert(not f.backpackHeader._bgforgeKind and f.backpackHeader.height==42
     and f.backpackHeader.divider,
     "backpack header keeps its geometry but uses one divider instead of a boxed surface")
+assert(f.backpackSearch._bgforgeKind=="input" and f.backpackSearch._bgforgeSearchInput
+    and f.backpackSearch.width==180 and f.backpackSearch.height==28
+    and f.backpackSearch.placeholder:GetText()=="搜索背包物品"
+    and f.backpackSearch.clearButton,
+    "backpack search should reuse the shared wishlist-style search input")
 assert(not f.backpackFilters.all._bgforgeKind
     and f.backpackFilters.all.width==78 and f.backpackFilters.all.height==28
     and f.backpackFilters.all.line:IsShown()

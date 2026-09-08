@@ -26,15 +26,13 @@ local COLOR = {
     header = DesignColor("header"),
     hover = DesignColor("hover"),
     rowHoverWash = DesignColor("rowHoverWash"),
-    selected = DesignColor("focusSurface"),
+    selected = DesignColor("focusSurfaceSubtle"),
     border = DesignColor("borderSubtle"),
     borderStrong = DesignColor("borderStrong"),
     focus = DesignColor("focus"),
     focusText = DesignColor("focusText"),
     textPrimary = DesignColor("textPrimary"),
     textSecondary = DesignColor("textSecondary"),
-    textMuted = DesignColor("textMuted"),
-    success = DesignColor("success"),
     danger = DesignColor("danger"),
 }
 
@@ -48,6 +46,12 @@ local BOSS_DIRECTORY_GAP = 8
 local BOSS_WORKBENCH_MIN_HEIGHT = 520
 local PAGE_CONTENT_GUTTER = 18
 local OUTER_SCROLLBAR_GUTTER = 20
+local SUMMARY_COLUMN_WIDTH = 240
+local SUMMARY_CLEAR_BUTTON_WIDTH = 96
+local BOSS_SEARCH_WIDTH = 220
+local BOSS_SEARCH_HEIGHT = 28
+local FILTERED_ICON_TINT = 0.55
+local FILTERED_TEXT_ALPHA = 0.72
 
 local tokenMetadata = {}
 local pendingItemLoads = {}
@@ -151,6 +155,22 @@ local function QueueMetadataLoad(FB, sourceItemID, targetItemID)
         if tokenMetadata[FB] then
             tokenMetadata[FB][sourceItemID] = nil
         end
+        ScheduleRefresh()
+    end)
+end
+
+local function QueueBossSearchItemLoad(FB, itemID)
+    if not BG.OnItemLoad then return end
+    local key = "boss-search:" .. FB .. ":" .. itemID
+    if pendingItemLoads[key] then return end
+    pendingItemLoads[key] = true
+    local item = BG.OnItemLoad(itemID)
+    if not item or not item.ContinueOnItemLoad then
+        pendingItemLoads[key] = nil
+        return
+    end
+    item:ContinueOnItemLoad(function()
+        pendingItemLoads[key] = nil
         ScheduleRefresh()
     end)
 end
@@ -461,6 +481,7 @@ local ui = {
     itemButtons = {}, panels = {}, headers = {}, labels = {}, bossRows = {},
     itemIndex = 0, panelIndex = 0, headerIndex = 0, labelIndex = 0, bossRowIndex = 0,
     activeSetGroup = {}, activeBoss = {},
+    bossSearchText = "",
 }
 
 local function BeginRender()
@@ -485,6 +506,8 @@ local function AcquireLabel(parent)
     -- Callers override this default with their section-specific size/color.
     label:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
     label:SetText("")
+    label:SetJustifyH("LEFT")
+    label:SetWordWrap(false)
     label:Show()
     return label
 end
@@ -521,7 +544,7 @@ local function CreateCollapseHeader(parent)
     header.stripe:SetTexture("Interface/Buttons/WHITE8x8")
     header.stripe:SetPoint("TOPLEFT", 0, -1)
     header.stripe:SetPoint("BOTTOMLEFT", 0, 1)
-    header.stripe:SetWidth(3)
+    header.stripe:SetWidth(2)
 
     header.portrait = header:CreateTexture(nil, "ARTWORK")
     header.portrait:SetSize(42, 42)
@@ -545,7 +568,9 @@ local function CreateCollapseHeader(parent)
     header.checkmark:SetPoint("RIGHT", -13, 0)
     header.checkmark:SetSize(18, 18)
     header.checkmark:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
-    header.checkmark:SetVertexColor(unpack(COLOR.success))
+    header.checkmark:SetDesaturated(true)
+    header.checkmark:SetBlendMode("ADD")
+    header.checkmark:SetVertexColor(unpack(COLOR.focusText))
     header.checkmark:Hide()
 
     header:SetScript("OnClick", function(self)
@@ -576,10 +601,12 @@ local function AcquireHeader(parent)
     header.selected = false
     header.isSetGroupHeader = nil
     header.isBossDetailHeader = nil
+    header.isBossSearchHeader = nil
     header.arrow:SetText("")
     header.checkmark:Hide()
     header.restingSurfaceColor = COLOR.raised
     header.restingBorderColor = COLOR.borderStrong
+    header.stripe:Hide()
     header:SetFrameLevel(parent:GetFrameLevel() + 3)
     Design.Style(header, "surface", { role = "raised" })
     header:Show()
@@ -679,8 +706,9 @@ local function SetBossRow(row, FB, bossModel, wishCount, selected)
     row.portrait:SetVertexColor(1, 1, 1, 1)
     row.title:SetText(GetBossDisplayName(FB, bossIndex, boss))
     row.title:SetTextColor(unpack(selected and COLOR.focusText or COLOR.textPrimary))
-    row.count:SetText(tostring(wishCount))
-    row.count:SetTextColor(unpack(wishCount > 0 and COLOR.focusText or COLOR.textMuted))
+    row.count:SetWidth(wishCount > 0 and 24 or 0)
+    row.count:SetText(wishCount > 0 and tostring(wishCount) or "")
+    row.count:SetTextColor(unpack(COLOR.focusText))
     row.selectedBackground:SetShown(selected)
     row.selectedAccent:SetShown(selected)
     row.hoverBackground:Hide()
@@ -697,6 +725,20 @@ local function ApplyItemVisual(button)
     button.summaryBackground:SetShown(button.isSummary)
     button.divider:SetShown(button.isSummary)
     button.removeIcon:SetShown(button.isSummary)
+end
+
+local function ApplyItemFilterVisual(button, filtered)
+    -- Keep the icon fully opaque so the quality-colored frame behind it cannot
+    -- bleed through and tint the item art. Reduced emphasis is expressed with
+    -- a neutral multiplicative tint instead of whole-button transparency.
+    button:SetAlpha(1)
+    button.icon:SetDesaturated(filtered)
+    local iconTint = filtered and FILTERED_ICON_TINT or 1
+    button.icon:SetVertexColor(iconTint, iconTint, iconTint, 1)
+    button.qualityBorder:SetAlpha(filtered and 0.65 or 1)
+    button.name:SetAlpha(filtered and FILTERED_TEXT_ALPHA or 1)
+    button.level:SetAlpha(filtered and FILTERED_TEXT_ALPHA or 1)
+    button.meta:SetAlpha(filtered and FILTERED_TEXT_ALPHA or 1)
 end
 
 local function ResolveItemTexture(itemID, texture)
@@ -727,9 +769,9 @@ local function CreateItemButton(parent)
     button.selectedBackground:Hide()
 
     button.selectedAccent = button:CreateTexture(nil, "ARTWORK")
-    button.selectedAccent:SetPoint("BOTTOMLEFT", 1, 1)
-    button.selectedAccent:SetPoint("BOTTOMRIGHT", -1, 1)
-    button.selectedAccent:SetHeight(2)
+    button.selectedAccent:SetPoint("TOPLEFT", 0, -1)
+    button.selectedAccent:SetPoint("BOTTOMLEFT", 0, 1)
+    button.selectedAccent:SetWidth(2)
     button.selectedAccent:SetTexture("Interface/Buttons/WHITE8x8")
     button.selectedAccent:SetVertexColor(unpack(COLOR.focus))
     button.selectedAccent:Hide()
@@ -740,7 +782,9 @@ local function CreateItemButton(parent)
     button.summaryBackground:SetVertexColor(unpack(COLOR.header))
     button.summaryBackground:Hide()
 
-    button.qualityBorder = button:CreateTexture(nil, "BACKGROUND")
+    -- The quality frame sits above the full-row selected surface but below
+    -- the ARTWORK item icon, so selection cannot cover the 1px quality edge.
+    button.qualityBorder = button:CreateTexture(nil, "BORDER")
     button.qualityBorder:SetTexture("Interface/Buttons/WHITE8x8")
     button.qualityBorder:SetPoint("LEFT", 3, 0)
     button.qualityBorder:SetSize(32, 32)
@@ -883,6 +927,7 @@ local function SetItemButton(button, entry, FB, selected)
     button.FB = FB
     button.selected = selected and true or false
     button.sourceBosses = entry.sourceBosses
+    button.showBossSource = entry.showBossSource and true or false
 
     local waitingForItem
     local function Update()
@@ -894,14 +939,23 @@ local function SetItemButton(button, entry, FB, selected)
         button.qualityR, button.qualityG, button.qualityB = r, g, b
         button.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
         button.name:SetText((name or ("#" .. itemID)))
-        button.meta:SetText(FormatItemMetadata(itemType, itemSubType, equipLoc))
+        local metadata = FormatItemMetadata(itemType, itemSubType, equipLoc)
+        if button.showBossSource and button.sourceBosses and #button.sourceBosses > 0 then
+            local sources = FormatBossNames(FB, button.sourceBosses)
+            metadata = sources .. (metadata ~= "" and (" · " .. metadata) or "")
+        end
+        button.meta:SetText(metadata)
         button.level:SetText(itemLevel and tostring(itemLevel) or "")
         button.level:SetTextColor(r, g, b)
         ApplyItemVisual(button)
+        ApplyItemFilterVisual(button, false)
         if BG.SpecGearFilter and BG.SpecGearFilter.ApplyToCell then
-            BG.SpecGearFilter.ApplyToCell(button, "item:" .. itemID)
+            BG.SpecGearFilter.ApplyToCell(button, "item:" .. itemID, function(filtered)
+                if button.itemID ~= itemID then return end
+                ApplyItemFilterVisual(button, filtered)
+            end)
         else
-            button:SetAlpha(1)
+            ApplyItemFilterVisual(button, false)
         end
     end
     Update()
@@ -934,12 +988,15 @@ local function ToggleWish(FB, entry, bossIndex)
     end
 end
 
-local function AddSectionTitle(parent, x, y, titleText)
+local function AddSectionTitle(parent, x, y, width, titleText)
     local title = AcquireLabel(parent)
     title:SetPoint("TOPLEFT", x, y)
+    title:SetWidth(math.max(1, width))
+    title:SetJustifyH("LEFT")
+    title:SetWordWrap(false)
     Design.Style(title, "text", { role = "heading", color = "focusText" })
     title:SetText(titleText)
-    return y - 30
+    return y - 30, title
 end
 
 local function RenderItemGrid(parent, FB, entries, x, y, width, columns, actionFactory, style)
@@ -974,7 +1031,7 @@ local function RenderSummary(parent, FB, entries, x, y, width, height)
     y = y - 12
     local title = AcquireLabel(parent)
     title:SetPoint("TOPLEFT", x + 12, y)
-    title:SetWidth(math.max(1, width - 24))
+    title:SetWidth(math.max(1, width - 24 - (#entries > 0 and SUMMARY_CLEAR_BUTTON_WIDTH + 4 or 0)))
     title:SetJustifyH("LEFT")
     title:SetWordWrap(false)
     Design.Style(title, "text", { role = "heading", color = "focusText" })
@@ -994,13 +1051,13 @@ local function RenderSummary(parent, FB, entries, x, y, width, height)
         empty:SetWidth(width - 24)
         empty:SetJustifyH("LEFT")
         empty:SetWordWrap(true)
-        Design.Style(empty, "text", { role = "label", color = "textMuted" })
-        empty:SetText(L["当前阶段尚无心愿；可以从职业套装或首领掉落中选择。"])
+        Design.Style(empty, "text", { role = "label", color = "textSecondary" })
+        empty:SetText(L["点击左侧套装兑换物或中间首领掉落加入心愿；再次点击即可移除。"])
     else
         local scroll = ui.summaryScroll
         local child = ui.summaryChild
         local viewportWidth = math.max(1, width - 16)
-        local viewportHeight = math.max(1, height - 89)
+        local viewportHeight = math.max(1, height - 52)
         local itemsHeight = #entries * SUMMARY_ITEM_HEIGHT
         local hasOverflow = itemsHeight > viewportHeight
         local contentWidth = math.max(1, viewportWidth - (hasOverflow and 22 or 0))
@@ -1031,13 +1088,13 @@ local function RenderSetGroups(parent, FB, groups, x, y, width)
     local panel = AcquirePanel(parent)
     panel:SetPoint("TOPLEFT", x, top)
     panel:SetWidth(width)
-    y = AddSectionTitle(parent, x + 12, y - 12, L["职业套装"])
+    y = AddSectionTitle(parent, x + 12, y - 12, width - 24, L["职业套装"])
 
     if #groups == 0 then
         local empty = AcquireLabel(parent)
         empty:SetPoint("TOPLEFT", x + 12, y)
         empty:SetWidth(width - 24)
-        Design.Style(empty, "text", { role = "caption" })
+        Design.Style(empty, "text", { role = "label", color = "textSecondary" })
         empty:SetText(L["当前阶段没有可用的职业套装兑换物。"])
         y = y - 36
         panel:SetHeight(top - y)
@@ -1088,10 +1145,11 @@ local function RenderSetGroups(parent, FB, groups, x, y, width)
         header.checkmark:SetShown(selected)
         header.selected = selected
         header.restingSurfaceColor = selected and COLOR.selected or COLOR.raised
-        header.restingBorderColor = selected and COLOR.focus or COLOR.borderStrong
+        header.restingBorderColor = COLOR.borderStrong
         header:SetBackdropColor(unpack(header.restingSurfaceColor))
         header:SetBackdropBorderColor(unpack(header.restingBorderColor))
-        header.stripe:SetVertexColor(unpack(selected and COLOR.focus or COLOR.borderStrong))
+        header.stripe:SetShown(selected)
+        header.stripe:SetVertexColor(unpack(COLOR.focus))
         header.action = function()
             ui.activeSetGroup[FB] = currentGroup.key
             Wishlist.Refresh()
@@ -1100,11 +1158,6 @@ local function RenderSetGroups(parent, FB, groups, x, y, width)
     end
 
     y = y - 2
-    local count = AcquireLabel(parent)
-    count:SetPoint("TOPLEFT", x + 12, y)
-    Design.Style(count, "text", { role = "caption" })
-    count:SetText(string.format(L["%d 件套装兑换物"], #activeGroup.items))
-    y = y - 26
 
     local displayItems = {}
     for _, token in ipairs(activeGroup.items) do
@@ -1118,6 +1171,138 @@ local function RenderSetGroups(parent, FB, groups, x, y, width)
     y = y - 10
     panel:SetHeight(top - y)
     return top - y, panel
+end
+
+local function NormalizeBossSearchText(text)
+    return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+end
+
+local function ClearBossSearch()
+    ui.bossSearchText = ""
+    local input = ui.bossSearchInput
+    if not input then return end
+    ui.suppressBossSearchRefresh = true
+    input:SetText("")
+    ui.suppressBossSearchRefresh = nil
+    input:ClearFocus()
+    if input._bgforgeUpdateSearchAffordances then
+        input:_bgforgeUpdateSearchAffordances()
+    end
+end
+
+local function EnsureBossSearchInput(parent)
+    if ui.bossSearchInput then
+        ui.bossSearchInput:Show()
+        return ui.bossSearchInput
+    end
+
+    local input = Design.CreateSearchInput(parent, {
+        width = BOSS_SEARCH_WIDTH,
+        height = BOSS_SEARCH_HEIGHT,
+        textRole = "label",
+        maxLetters = 64,
+        placeholder = L["搜索装备名称"],
+        clearTooltip = L["清除搜索"],
+        onTextChanged = function(self, text)
+            local query = NormalizeBossSearchText(text)
+            if ui.suppressBossSearchRefresh or query == ui.bossSearchText then return end
+            ui.bossSearchText = query
+            ui.bossDetailKey = nil
+            ScheduleRefresh()
+        end,
+    })
+    input:SetFrameLevel(parent:GetFrameLevel() + 8)
+
+    ui.bossSearchInput = input
+    BG.WishlistMainFrame.bossSearch = input
+    return input
+end
+
+local function BuildBossSearchResults(FB, bosses, query)
+    local results = {}
+    local byItemID = {}
+    query = NormalizeBossSearchText(query)
+    if query == "" then return results end
+
+    local function AddSource(result, bossIndex)
+        if not bossIndex then return end
+        result._sourceSeen = result._sourceSeen or {}
+        if result._sourceSeen[bossIndex] then return end
+        result._sourceSeen[bossIndex] = true
+        table.insert(result.sourceBosses, bossIndex)
+    end
+
+    for _, bossModel in ipairs(bosses or {}) do
+        for _, entry in ipairs(bossModel.items or {}) do
+            local itemID = entry.itemID
+            local name = GetItemInfo(itemID)
+            if not name then
+                QueueBossSearchItemLoad(FB, itemID)
+            end
+            local nameMatches = name and name:lower():find(query, 1, true)
+            local idMatches = tostring(itemID):find(query, 1, true)
+            if nameMatches or idMatches then
+                local result = byItemID[itemID]
+                if not result then
+                    result = {
+                        itemID = itemID,
+                        bossIndex = entry.bossIndex or bossModel.bossIndex,
+                        sourceBosses = {},
+                        showBossSource = true,
+                    }
+                    byItemID[itemID] = result
+                    table.insert(results, result)
+                end
+                if entry.sourceBosses and #entry.sourceBosses > 0 then
+                    for _, bossIndex in ipairs(entry.sourceBosses) do AddSource(result, bossIndex) end
+                else
+                    AddSource(result, entry.bossIndex or bossModel.bossIndex)
+                end
+            end
+        end
+    end
+    for _, result in ipairs(results) do result._sourceSeen = nil end
+    return results
+end
+
+local function HideBossDetailScroll()
+    if not ui.bossDetailScroll then return end
+    ui.bossDetailScroll:Hide()
+    ui.bossDetailScroll.ScrollBar:Hide()
+    ui.bossDetailScroll:EnableMouseWheel(false)
+    ui.bossDetailScroll:SetVerticalScroll(0)
+    ui.bossDetailKey = nil
+end
+
+local function RenderBossItemScroller(FB, items, x, y, width, height, detailKey, actionFactory)
+    if #items == 0 then
+        HideBossDetailScroll()
+        return false
+    end
+    local scroll = ui.bossDetailScroll
+    local child = ui.bossDetailChild
+    local viewportWidth = math.max(1, width - 16)
+    local viewportHeight = math.max(1, height - 58)
+    local rowCount = math.ceil(#items / 2)
+    local itemsHeight = rowCount * BOSS_ITEM_HEIGHT + math.max(0, rowCount - 1) * ITEM_GAP
+    local hasOverflow = itemsHeight > viewportHeight
+    local contentWidth = math.max(1, viewportWidth - (hasOverflow and 22 or 0))
+    local contentHeight = math.max(viewportHeight, itemsHeight)
+    local oldOffset = ui.bossDetailKey == detailKey and scroll:GetVerticalScroll() or 0
+
+    scroll:ClearAllPoints()
+    scroll:SetPoint("TOPLEFT", x + 8, y)
+    scroll:SetSize(viewportWidth, viewportHeight)
+    scroll:Show()
+    child:SetSize(contentWidth, contentHeight)
+    RenderItemGrid(child, FB, items, 0, 0, contentWidth, 2, actionFactory, "bossDetail")
+    scroll:UpdateScrollChildRect()
+    local maxOffset = math.max(0, contentHeight - viewportHeight)
+    scroll:SetVerticalScroll(hasOverflow and math.min(oldOffset, maxOffset) or 0)
+    scroll.ScrollBar:SetShown(hasOverflow)
+    scroll:EnableMouseWheel(hasOverflow)
+    ui.bossDetailKey = detailKey
+    return true
 end
 
 local function RenderBossDetail(parent, FB, bossModel, x, y, width, height)
@@ -1145,54 +1330,69 @@ local function RenderBossDetail(parent, FB, bossModel, x, y, width, height)
     header.title:ClearAllPoints()
     header.title:SetPoint("LEFT", header.portrait, "RIGHT", 10, 0)
     header.title:SetPoint("RIGHT", header, "RIGHT", -12, 0)
+    header.title:SetJustifyH("LEFT")
+    header.title:SetWordWrap(false)
     Design.Style(header.title, "text", { role = "heading", color = "textPrimary" })
     header.title:SetText(GetBossDisplayName(FB, bossIndex, boss))
     header.subtitle:Hide()
     header.arrow:SetText("")
     header.checkmark:Hide()
+    header.stripe:Show()
     header.stripe:SetVertexColor(unpack(COLOR.focus))
     y = y - 52
 
-    if #bossModel.items > 0 then
-        local scroll = ui.bossDetailScroll
-        local child = ui.bossDetailChild
-        local viewportWidth = math.max(1, width - 16)
-        local viewportHeight = math.max(1, height - 58)
-        local rowCount = math.ceil(#bossModel.items / 2)
-        local itemsHeight = rowCount * BOSS_ITEM_HEIGHT + math.max(0, rowCount - 1) * ITEM_GAP
-        local hasOverflow = itemsHeight > viewportHeight
-        local contentWidth = math.max(1, viewportWidth - (hasOverflow and 22 or 0))
-        local contentHeight = math.max(viewportHeight, itemsHeight)
-        local detailKey = FB .. ":" .. bossIndex
-        local oldOffset = ui.bossDetailKey == detailKey and scroll:GetVerticalScroll() or 0
-
-        scroll:ClearAllPoints()
-        scroll:SetPoint("TOPLEFT", x + 8, y)
-        scroll:SetSize(viewportWidth, viewportHeight)
-        scroll:Show()
-        child:SetSize(contentWidth, contentHeight)
-        RenderItemGrid(child, FB, bossModel.items, 0, 0, contentWidth, 2, function(item)
+    local hasItems = RenderBossItemScroller(FB, bossModel.items, x, y, width, height,
+        FB .. ":" .. bossIndex, function(item)
             return function() ToggleWish(FB, item, bossIndex) end
-        end, "bossDetail")
-        scroll:UpdateScrollChildRect()
-        local maxOffset = math.max(0, contentHeight - viewportHeight)
-        scroll:SetVerticalScroll(hasOverflow and math.min(oldOffset, maxOffset) or 0)
-        scroll.ScrollBar:SetShown(hasOverflow)
-        scroll:EnableMouseWheel(hasOverflow)
-        ui.bossDetailKey = detailKey
-    else
-        if ui.bossDetailScroll then
-            ui.bossDetailScroll:Hide()
-            ui.bossDetailScroll.ScrollBar:Hide()
-            ui.bossDetailScroll:EnableMouseWheel(false)
-            ui.bossDetailScroll:SetVerticalScroll(0)
-        end
-        ui.bossDetailKey = nil
+        end)
+    if not hasItems then
         local note = AcquireLabel(parent)
         note:SetPoint("TOPLEFT", x + 12, y)
         note:SetWidth(width - 24)
-        Design.Style(note, "text", { role = "caption" })
+        Design.Style(note, "text", { role = "label", color = "textSecondary" })
         note:SetText(L["此首领的可选物品均已归入上方职业套装模块。"])
+    end
+    return height, panel
+end
+
+local function RenderBossSearchResults(parent, FB, results, query, x, y, width, height)
+    local top = y
+    local panel = AcquirePanel(parent)
+    panel:SetPoint("TOPLEFT", x, top)
+    panel:SetSize(width, height)
+
+    local header = AcquireHeader(parent)
+    header.isBossSearchHeader = true
+    header:SetPoint("TOPLEFT", x, y)
+    header:SetSize(width, 44)
+    header.portrait:Hide()
+    header.title:ClearAllPoints()
+    header.title:SetPoint("LEFT", 12, 0)
+    header.title:SetPoint("RIGHT", header, "RIGHT", -12, 0)
+    header.title:SetJustifyH("LEFT")
+    header.title:SetWordWrap(false)
+    Design.Style(header.title, "text", { role = "heading", color = "textPrimary" })
+    header.title:SetText(string.format(L["搜索结果（%d）"], #results))
+    header.subtitle:Hide()
+    header.arrow:SetText("")
+    header.checkmark:Hide()
+    header.stripe:Show()
+    header.stripe:SetVertexColor(unpack(COLOR.focus))
+    y = y - 52
+
+    local hasResults = RenderBossItemScroller(FB, results, x, y, width, height,
+        FB .. ":search:" .. query, function(item)
+            local firstBoss = item.sourceBosses[1] or item.bossIndex
+            return function() ToggleWish(FB, item, firstBoss) end
+        end)
+    if not hasResults then
+        local note = AcquireLabel(parent)
+        note:SetPoint("TOPLEFT", x + 12, y)
+        note:SetWidth(width - 24)
+        note:SetJustifyH("LEFT")
+        note:SetWordWrap(true)
+        Design.Style(note, "text", { role = "label", color = "textSecondary" })
+        note:SetText(L["没有找到匹配的首领掉落。"])
     end
     return height, panel
 end
@@ -1252,6 +1452,7 @@ local function RenderBossDirectory(FB, bosses, counts, activeBoss, x, y, width, 
         SetBossRow(row, FB, bossModel, counts[bossIndex] or 0,
             activeBoss and activeBoss.bossIndex == bossIndex)
         row.action = function()
+            ClearBossSearch()
             ui.activeBoss[FB] = bossIndex
             Wishlist.Refresh()
         end
@@ -1268,7 +1469,15 @@ local function RenderBosses(parent, FB, bosses, entries, x, y, width, minimumHei
     local panel = AcquirePanel(parent)
     panel:SetPoint("TOPLEFT", x, top)
     panel:SetWidth(width)
-    y = AddSectionTitle(parent, x + 12, y - 12, L["首领掉落"])
+
+    local search = EnsureBossSearchInput(parent)
+    search:ClearAllPoints()
+    search:SetPoint("TOPRIGHT", parent, "TOPLEFT", x + width - 12, y - 7)
+    search:SetSize(BOSS_SEARCH_WIDTH, BOSS_SEARCH_HEIGHT)
+    local titleWidth = width - 24 - BOSS_SEARCH_WIDTH - 12
+    local title
+    y, title = AddSectionTitle(parent, x + 12, y - 12, titleWidth, L["首领掉落"])
+    BG.WishlistMainFrame.bossSectionTitle = title
 
     local orderedBosses = OrderBossDropSources(FB, bosses)
     local counts = CountBossWishes(entries, orderedBosses)
@@ -1286,16 +1495,21 @@ local function RenderBosses(parent, FB, bosses, entries, x, y, width, minimumHei
     directoryPanel:SetPoint("TOPLEFT", innerX, bodyTop)
     directoryPanel:SetWidth(directoryWidth)
 
-    if not activeBoss then
+    local searchQuery = NormalizeBossSearchText(ui.bossSearchText)
+    if searchQuery ~= "" then
+        local results = BuildBossSearchResults(FB, orderedBosses, searchQuery)
+        RenderBossSearchResults(parent, FB, results, searchQuery,
+            detailX, bodyTop, detailWidth, bodyHeight)
+    elseif not activeBoss then
         if ui.bossDirectoryScroll then ui.bossDirectoryScroll:Hide() end
-        if ui.bossDetailScroll then ui.bossDetailScroll:Hide() end
+        HideBossDetailScroll()
         local detailPanel = AcquirePanel(parent)
         detailPanel:SetPoint("TOPLEFT", detailX, bodyTop)
         detailPanel:SetSize(detailWidth, bodyHeight)
         local empty = AcquireLabel(parent)
         empty:SetPoint("TOPLEFT", detailX + 12, bodyTop - 14)
         empty:SetWidth(detailWidth - 24)
-        Design.Style(empty, "text", { role = "caption" })
+        Design.Style(empty, "text", { role = "label", color = "textSecondary" })
         empty:SetText(L["当前副本没有可供选择的首领掉落。"])
     else
         RenderBossDetail(parent, FB, activeBoss, detailX, bodyTop, detailWidth, bodyHeight)
@@ -1313,12 +1527,10 @@ end
 
 local function GetWorkbenchColumns(width)
     local left = math.max(250, math.floor(width * 0.22))
-    local right = math.max(250, math.floor(width * 0.21))
+    local right = SUMMARY_COLUMN_WIDTH
     local center = width - left - right - COLUMN_GAP * 2
     if center < 520 then
-        local deficit = 520 - center
-        left = math.max(220, left - math.ceil(deficit / 2))
-        right = math.max(220, right - math.floor(deficit / 2))
+        left = math.max(220, width - right - COLUMN_GAP * 2 - 520)
         center = width - left - right - COLUMN_GAP * 2
     end
     return left, center, right
@@ -1333,6 +1545,7 @@ function Wishlist.Refresh()
     local raidChanged = outerScrollKey ~= FB
     local oldOffset = raidChanged and 0 or scroll:GetVerticalScroll()
     if raidChanged then
+        ClearBossSearch()
         scroll:SetVerticalScroll(0)
         if ui.bossDirectoryScroll then ui.bossDirectoryScroll:SetVerticalScroll(0) end
         if ui.bossDetailScroll then ui.bossDetailScroll:SetVerticalScroll(0) end
@@ -1362,14 +1575,21 @@ function Wishlist.Refresh()
     local centerHeight, centerPanel = RenderBosses(child, FB, model.bosses, entries,
         centerX, top, centerWidth, workbenchHeight)
     local rightHeight, rightPanel = RenderSummary(child, FB, entries, rightX, top, rightWidth, workbenchHeight)
+    frame.summaryPanel = rightPanel
     local contentHeight = math.max(leftHeight, centerHeight, rightHeight)
     leftPanel:SetHeight(contentHeight)
     centerPanel:SetHeight(contentHeight)
     rightPanel:SetHeight(contentHeight)
 
     frame.clearButton:ClearAllPoints()
-    frame.clearButton:SetPoint("TOPLEFT", child, "TOPLEFT", rightX + 10, -rightHeight + 37)
-    frame.clearButton:SetSize(rightWidth - 20, Design.Token("size", "control"))
+    frame.clearButton:SetPoint(
+        "TOPLEFT",
+        child,
+        "TOPLEFT",
+        rightX + rightWidth - SUMMARY_CLEAR_BUTTON_WIDTH - 8,
+        -8
+    )
+    frame.clearButton:SetSize(SUMMARY_CLEAR_BUTTON_WIDTH, Design.Token("size", "control"))
 
     child:SetHeight(math.max(1, contentHeight + 14))
     scroll:UpdateScrollChildRect()

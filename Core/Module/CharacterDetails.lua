@@ -1276,21 +1276,23 @@ local function EnsureBackpackView()
     frame.backpackEmpty:SetJustifyH("CENTER")
     frame.backpackItemButtons = {}
     frame.backpackGroupHeaders = {}
-    local search = CreateFrame("EditBox", nil, header, "InputBoxTemplate")
-    search:SetSize(180, 24)
+    local search = UI.CreateSearchInput(header, {
+        width = 180,
+        height = UI.Token("size", "control"),
+        placeholder = Text("搜索背包物品"),
+        clearTooltip = Text("清除搜索"),
+        onTextChanged = function(_, text)
+            backpackSearch = text
+            M.Refresh()
+        end,
+    })
     search:SetPoint("LEFT", 64, 0)
-    search:SetAutoFocus(false)
     search:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(Text("搜索背包物品"))
         GameTooltip:Show()
     end)
     search:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    search:SetScript("OnTextChanged", function(self)
-        backpackSearch = self:GetText() or ""
-        M.Refresh()
-    end)
-    search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     frame.backpackSearch = search
     local filters = { {"all", "全部"}, {"consumable", "消耗品"},
         {"miscellaneous", "杂货"}, {"equipment", "装备"} }

@@ -7,7 +7,7 @@ local SpecGearFilter = {}
 BG.SpecGearFilter = SpecGearFilter
 
 local ALPHA_ALLOWED = 1
-local ALPHA_FILTERED = 0.4
+local ALPHA_FILTERED = 0.6
 local CLEANUP_VERSION = 1
 
 local metadataCache = {}
@@ -410,10 +410,20 @@ end
 
 local function UpdateButtons()
     local selected = SelectedKey()
+    local classFile = CurrentClass()
+    local selectedScheme = FindScheme(classFile, selected)
+    local updatedControls = {}
     for _, button in ipairs(buttons) do
         local active = button.scheme.key == selected
         button.icon:SetDesaturated(not active)
         button.highlight:SetShown(active)
+        local controls = button.controls
+        if controls and not updatedControls[controls] then
+            controls.label:SetText(
+                selectedScheme and (L["装备过滤："] .. selectedScheme.name) or L["装备过滤："]
+            )
+            updatedControls[controls] = true
+        end
     end
 end
 
@@ -439,6 +449,7 @@ local function CreateControls(parent)
         button:SetSize(25, 25)
         button:SetPoint("LEFT", (index - 1) * 35, 0)
         button.scheme = scheme
+        button.controls = frame
 
         local icon = button:CreateTexture(nil, "ARTWORK")
         icon:SetAllPoints()

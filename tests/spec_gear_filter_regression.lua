@@ -300,7 +300,7 @@ local function TestRulesAndExemption()
     local env = ResetEnvironment("WARRIOR", "arms_fury")
     local cell = NewCell(ItemLink(100))
     env.module.ApplyToCell(cell)
-    AssertEqual(cell.alpha, 0.4, "arms/fury should dim daggers")
+    AssertEqual(cell.alpha, 0.6, "arms/fury should keep filtered daggers readable at reduced emphasis")
 
     cell:SetText(ItemLink(101))
     env.module.ApplyToCell(cell)
@@ -308,19 +308,19 @@ local function TestRulesAndExemption()
 
     cell:SetText(ItemLink(102))
     env.module.ApplyToCell(cell)
-    AssertEqual(cell.alpha, 0.4, "arms/fury should dim shields")
+    AssertEqual(cell.alpha, 0.6, "arms/fury should keep filtered shields readable at reduced emphasis")
 
     cell:SetText(ItemLink(103))
     env.module.ApplyToCell(cell)
-    AssertEqual(cell.alpha, 0.4, "cloak should bypass armor type but still use stat rules")
+    AssertEqual(cell.alpha, 0.6, "cloak should bypass armor type but still use stat rules")
 
     cell:SetText(ItemLink(108))
     env.module.ApplyToCell(cell)
-    AssertEqual(cell.alpha, 0.4, "blocked offhands should dim only holdable offhands")
+    AssertEqual(cell.alpha, 0.6, "blocked offhands should dim only holdable offhands")
 
     cell:SetText(ItemLink(109))
     env.module.ApplyToCell(cell)
-    AssertEqual(cell.alpha, 0.4, "physical scheme should dim spell-power trinkets")
+    AssertEqual(cell.alpha, 0.6, "physical scheme should dim spell-power trinkets")
 
     cell:SetText(ItemLink(110))
     env.module.ApplyToCell(cell)
@@ -332,7 +332,7 @@ local function TestRulesAndExemption()
 
     cell:SetText(ItemLink(112))
     env.module.ApplyToCell(cell)
-    AssertEqual(cell.alpha, 0.4, "another class restriction should dim")
+    AssertEqual(cell.alpha, 0.6, "another class restriction should dim")
 
     cell:SetText(ItemLink(113))
     env.module.ApplyToCell(cell)
@@ -344,7 +344,7 @@ local function TestRulesAndExemption()
 
     cell:SetText(ItemLink(114))
     env.module.ApplyToCell(cell)
-    AssertEqual(cell.alpha, 0.4, "another class's relic should dim")
+    AssertEqual(cell.alpha, 0.6, "another class's relic should dim")
 
     local paladinEnv = ResetEnvironment("PALADIN", "class")
     local libramCell = NewCell(ItemLink(114))
@@ -354,14 +354,14 @@ local function TestRulesAndExemption()
     local missingConstantEnv = ResetEnvironment("WARRIOR", "arms_fury", false, true)
     local missingConstantCell = NewCell(ItemLink(111))
     missingConstantEnv.module.ApplyToCell(missingConstantCell)
-    AssertEqual(missingConstantCell.alpha, 0.4, "missing account-bound constant should safely skip the exemption")
+    AssertEqual(missingConstantCell.alpha, 0.6, "missing account-bound constant should safely skip the exemption")
 end
 
 local function TestTankRules()
     local env = ResetEnvironment("WARRIOR", "protection")
     local cell = NewCell(ItemLink(104))
     env.module.ApplyToCell(cell)
-    AssertEqual(cell.alpha, 0.4, "tank armor without tank stats should dim")
+    AssertEqual(cell.alpha, 0.6, "tank armor without tank stats should dim")
 
     cell:SetText(ItemLink(105))
     env.module.ApplyToCell(cell)
@@ -419,8 +419,12 @@ local function TestSchemeButtonsAndPersistence()
     AssertEqual(env.labels[1].text, "装备过滤：", "filter controls should have a visible label")
     env.buttons[3].scripts.OnClick(env.buttons[3])
     AssertEqual(BiaoGe.options.specGearFilterByClass.WARRIOR, "arms_fury", "button should store stable scheme key")
+    AssertEqual(env.labels[1].text, "装备过滤：战士-武器/狂怒",
+        "filter controls should keep the active scheme name visible")
     env.buttons[3].scripts.OnClick(env.buttons[3])
     AssertEqual(BiaoGe.options.specGearFilterByClass.WARRIOR, nil, "clicking selected scheme should disable")
+    AssertEqual(env.labels[1].text, "装备过滤：",
+        "filter controls should clear the active scheme name when filtering is disabled")
 
     BiaoGe.options.specGearFilterByClass.MAGE = "class"
     AssertEqual(BiaoGe.options.specGearFilterByClass.WARRIOR, nil, "class selections should remain independent")
@@ -439,6 +443,10 @@ local function TestSynchronizedControlGroups()
         "table controls should update the shared selected scheme")
     AssertEqual(env.buttons[3].highlight.shown, true, "table control should show the selected scheme")
     AssertEqual(env.buttons[6].highlight.shown, true, "wishlist control should mirror the selected scheme")
+    AssertEqual(env.labels[1].text, "装备过滤：战士-武器/狂怒",
+        "table filter label should mirror the selected scheme")
+    AssertEqual(env.labels[2].text, "装备过滤：战士-武器/狂怒",
+        "wishlist filter label should mirror the selected scheme")
     AssertEqual(env.buttons[3].icon.desaturated, false, "selected table icon should stay saturated")
     AssertEqual(env.buttons[6].icon.desaturated, false, "selected wishlist icon should stay saturated")
 
@@ -497,9 +505,9 @@ local function TestCurrentTableScope()
         Refresh = function() wishlistRefreshCount = wishlistRefreshCount + 1 end,
     }
     env.module.RefreshCurrentTable()
-    AssertEqual(env.currentCell.alpha, 0.4, "current table cell should refresh")
-    AssertEqual(auctionLogCell.alpha, 0.4, "automatic auction log item should refresh")
-    AssertEqual(auctioningItemFrame.alpha, 0.4, "active auction item should refresh")
+    AssertEqual(env.currentCell.alpha, 0.6, "current table cell should refresh")
+    AssertEqual(auctionLogCell.alpha, 0.6, "automatic auction log item should refresh")
+    AssertEqual(auctioningItemFrame.alpha, 0.6, "active auction item should refresh")
     AssertEqual(unrelatedCell.alpha, nil, "unrelated frames should remain untouched")
     AssertEqual(wishlistRefreshCount, 1, "filter changes should refresh the wishlist view")
 
