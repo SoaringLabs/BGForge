@@ -53,6 +53,7 @@ Core\Module\SendMail.lua
 Core\Module\QuickAccounting.lua
 Core\Module\ItemTooltip.lua
 Core\Module\ItemLib.lua
+Core\Module\ChatYYLink.lua
 Core\Module\hooks.lua
 
 Core\Module\minimap.lua

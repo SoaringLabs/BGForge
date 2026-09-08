@@ -14,4 +14,5 @@ No previous sessions found.
   3. Verify the release changes, then commit and push them. When the release commit is not on `main`, open a pull request to `main` and merge it after required checks pass.
   4. Confirm the merged release commit is on `main`, then create the `vX.Y.Z` tag from that commit.
   5. Run `scripts/build-release.sh vX.Y.Z`, then publish the GitHub Release using the matching changelog entry as its notes and upload only the generated `dist/BGForge-vX.Y.Z.zip`. For any release-asset rebuild, use the same script and asset. GitHub source archives and direct `git archive` output are not addon release packages.
-- The release is complete only when the target GitHub Release is published from `main` with its changelog and generated addon zip attached.
+  6. After confirming that the GitHub Release is published and `dist/BGForge-vX.Y.Z.zip` is attached successfully, delete that matching local zip. Keep it when publishing or uploading fails so the release can be retried.
+- The release is complete only when the target GitHub Release is published from `main` with its changelog and generated addon zip attached, and the matching local zip has been deleted.
