@@ -11,7 +11,7 @@ auction_log="Core/Module/AuctionLog.lua"
 history_store="Core/Module/HistoryStore.lua"
 utf8_data="Libs/UTF8/utf8data.lua"
 
-rg -q $'^## Version: 1\\.4\\.1\\r?$' "$toc"
+rg -q $'^## Version: 1\\.4\\.2\\r?$' "$toc"
 rg -q $'^## X-Upstream-Version: 2\\.4\\.2\\r?$' "$toc"
 rg -q $'^Core\\\\Module\\\\CharacterDetails\\.lua\\r?$' "$toc"
 [[ ! -e addon_version.txt ]]
