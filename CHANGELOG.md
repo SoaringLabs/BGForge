@@ -5,6 +5,21 @@
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)，日志格式参考
 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## v1.4.3 - 2026-09-09
+
+### 修复
+
+- 修复 RurutiaSuite 3.7.2 更新后，聊天条“金”按钮因只检测 BGLite 和 BGNext 而无法打开 BGForge 的问题。
+
+### 兼容性
+
+- BGForge 现在仅在检测到受影响的 RurutiaSuite 3.7.2 时接管“金”按钮；RurutiaSuite 3.7.1 及更早版本、未知版本和未来版本继续保留原点击行为。
+- BGForge 主界面切换统一使用稳定入口，原有 `/biaoge`、`/gbg`、`/bglite` 和 `/bgf` 命令行为保持不变。
+
+### 隐私
+
+- 本次兼容修复只在本地调整插件按钮点击路由，不收集、保存、同步或传输任何玩家数据。
+
 ## v1.4.2 - 2026-09-09
 
 ### 新增

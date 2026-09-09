@@ -2173,13 +2173,16 @@ do
 end
 
 -- 插件命令
-BG.Init2(function()
-    SlashCmdList["BIAOGE"] = function()
-        if not BG.MainFrame then
-            return
-        end
-        BG.MainFrame:SetShown(not BG.MainFrame:IsVisible())
+function BG.ToggleMainFrame()
+    if not BG.MainFrame then
+        return false
     end
+    BG.MainFrame:SetShown(not BG.MainFrame:IsVisible())
+    return true
+end
+
+BG.Init2(function()
+    SlashCmdList["BIAOGE"] = BG.ToggleMainFrame
     SLASH_BIAOGE1 = "/biaoge"
     SLASH_BIAOGE2 = "/gbg"
     SLASH_BIAOGE3 = "/bglite"

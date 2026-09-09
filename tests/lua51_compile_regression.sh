@@ -35,6 +35,7 @@ files=(
     Core/Module/Wishlist.lua
     Core/Module/WishlistUI.lua
     Core/Module/ChatYYLink.lua
+    Core/Module/RurutiaSuiteCompat.lua
     Core/BiaoGe.lua
     Core/Module/Auction.lua
     Core/Module/AuctionWA.lua
