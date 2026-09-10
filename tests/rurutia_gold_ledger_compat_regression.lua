@@ -1,4 +1,5 @@
 local sourcePath = "Core/Module/RurutiaSuiteCompat.lua"
+local rurutiaVersion = "3.7.2"
 
 local visible = false
 local toggleCount = 0
@@ -14,7 +15,7 @@ C_AddOns = {
     GetAddOnMetadata = function(addonName, field)
         assert(addonName == "RurutiaSuite")
         assert(field == "Version")
-        return "3.7.2"
+        return rurutiaVersion
     end,
 }
 
@@ -24,6 +25,7 @@ function chatBar:HandleButtonClick(info, mouseButton)
     originalCalls[#originalCalls + 1] = { info = info, mouseButton = mouseButton }
     return "original-result"
 end
+local originalHandleButtonClick = chatBar.HandleButtonClick
 
 local rurutiaLoaded = false
 local rurutia = {}
@@ -104,5 +106,25 @@ assert(BG.InstallRurutiaSuiteGoldLedgerCompat() == true,
     "reinstalling an existing compatibility wrapper must report success")
 assert(chatBar.HandleButtonClick == wrapped,
     "compatibility installation must be idempotent")
+
+local function AssertVersionIsIntercepted(version)
+    rurutiaVersion = version
+    chatBar.HandleButtonClick = originalHandleButtonClick
+    chatBar.__BGForgeGoldLedgerCompat = nil
+
+    local previousToggleCount = toggleCount
+    assert(BG.InstallRurutiaSuiteGoldLedgerCompat() == true,
+        "compatible RurutiaSuite version must install successfully: " .. version)
+    assert(chatBar.__BGForgeGoldLedgerCompat == true,
+        "compatible RurutiaSuite version must install the wrapper: " .. version)
+
+    chatBar:HandleButtonClick({ key = "goldLedger", type = "addon" }, "LeftButton")
+    assert(toggleCount == previousToggleCount + 1,
+        "compatible RurutiaSuite gold click must open BGForge: " .. version)
+end
+
+for _, version in ipairs({ "3.7.3", "3.7.10", "3.8.0", "4.0.0" }) do
+    AssertVersionIsIntercepted(version)
+end
 
 print("RurutiaSuite gold-ledger compatibility regression tests passed")

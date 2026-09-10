@@ -5,8 +5,8 @@ set -euo pipefail
 module="Core/Module/CharacterDetails.lua"
 overview="Core/Module/RaidLockoutOverview.lua"
 
-rg -Fq '## Version: 1.4.2' BGForge.toc
-rg -Fq '当前版本：`1.4.2`' README.md
+rg -Fq '## Version: 1.4.4' BGForge.toc
+rg -Fq '当前版本：`1.4.4`' README.md
 rg -Fq 'Core\Module\CharacterDetails.lua' BGForge.toc
 rg -Fq 'function M.Show(parent, realmID, characterName, onBack)' "$module"
 rg -Fq 'function M.Refresh()' "$module"

@@ -1,12 +1,12 @@
 -- RurutiaSuite compatibility.
--- Its v3.7.2 chat-bar gold button only recognizes BGLite/BGNext by addon name,
+-- Its v3.7.2+ chat-bar gold button does not recognize BGForge by addon name,
 -- so route that one button to BGForge without changing the third-party addon.
 
 local _, ns = ...
 local BG = _G.BG
 if not BG then return end
 
-local AFFECTED_RURUTIA_VERSION = "3.7.2"
+local MIN_COMPATIBLE_RURUTIA_VERSION = { 3, 7, 2 }
 
 local function GetRurutiaVersion()
     local getMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
@@ -14,12 +14,21 @@ local function GetRurutiaVersion()
     return getMetadata("RurutiaSuite", "Version")
 end
 
-local function IsAffectedRurutiaVersion()
+local function IsCompatibleRurutiaVersion()
     local version = GetRurutiaVersion()
     if type(version) ~= "string" then return false end
+
     local major, minor, patch = version:match("(%d+)%.(%d+)%.(%d+)")
-    if not major then return false end
-    return table.concat({ major, minor, patch }, ".") == AFFECTED_RURUTIA_VERSION
+    local current = { tonumber(major), tonumber(minor), tonumber(patch) }
+    if not current[1] or not current[2] or not current[3] then return false end
+
+    for i = 1, 3 do
+        if current[i] ~= MIN_COMPATIBLE_RURUTIA_VERSION[i] then
+            return current[i] > MIN_COMPATIBLE_RURUTIA_VERSION[i]
+        end
+    end
+
+    return true
 end
 
 local function GetRurutiaChatBar()
@@ -51,7 +60,7 @@ end
 function BG.InstallRurutiaSuiteGoldLedgerCompat()
     local chatBar = GetRurutiaChatBar()
     if not chatBar then return false end
-    if not IsAffectedRurutiaVersion() then return true end
+    if not IsCompatibleRurutiaVersion() then return true end
     if chatBar.__BGForgeGoldLedgerCompat then return true end
 
     local original = chatBar.HandleButtonClick
