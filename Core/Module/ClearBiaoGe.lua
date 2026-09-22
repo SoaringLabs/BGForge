@@ -15,15 +15,54 @@ local player = BG.playerName
 local IsAddOnLoaded = IsAddOnLoaded or C_AddOns.IsAddOnLoaded
 local GetLootMethod = GetLootMethod or C_PartyInfo.GetLootMethod
 
--- A "new CD" is evaluated at the shared ledger level. Titan phases can map
--- several instance IDs to one FB, so any locked sibling must preserve the table.
--- When the stage is unlocked, only stale rows belonging to the current instance
--- are destructive enough to justify an automatic clear. Sibling-only data is
--- preserved for manual review rather than inferred from raid-member identities.
-local function GetAutoClearDecision(instanceID, savedInstanceCount, getSavedInstanceInfo, hasLedgerItem)
+-- Keep one check per character and stage for each weekly reset. A character can
+-- enter another instance in the same shared table before either raid is locked.
+local function GetStageCycleEnd()
+    local now = GetServerTime()
+    if C_DateAndTime and C_DateAndTime.GetSecondsUntilWeeklyReset then
+        local seconds = tonumber(C_DateAndTime.GetSecondsUntilWeeklyReset())
+        if seconds and seconds > 0 then
+            return now + seconds
+        end
+    end
+    if BG.GetNextWeekTime then
+        local _, resetAt = BG.GetNextWeekTime()
+        if type(resetAt) == "number" and resetAt > now then
+            return resetAt
+        end
+    end
+end
+
+local function GetCheckedStageCycleEnd(FB)
+    local byRealm = BiaoGe.autoClearStageCycle and BiaoGe.autoClearStageCycle[realmID]
+    local byPlayer = byRealm and byRealm[player]
+    return byPlayer and byPlayer[FB]
+end
+
+local function MarkStageChecked(FB, cycleEnd)
+    if not cycleEnd then return end
+    BiaoGe.autoClearStageCycle = BiaoGe.autoClearStageCycle or {}
+    local byRealm = BiaoGe.autoClearStageCycle
+    byRealm[realmID] = byRealm[realmID] or {}
+    local byPlayer = byRealm[realmID]
+    byPlayer[player] = byPlayer[player] or {}
+    byPlayer[player][FB] = cycleEnd
+end
+
+local function GetAutoClearDecision(instanceID, savedInstanceCount, getSavedInstanceInfo, hasLedgerItem,
+                                    cycleEnd, checkedCycleEnd)
     local FB = BG.FBIDtable[instanceID]
     if not FB then
         return { shouldClear = false, reason = "unknown-instance" }
+    end
+
+    local range = BG.bossPositionStartEnd[instanceID]
+    if type(range) ~= "table" then
+        return { shouldClear = false, FB = FB, reason = "unknown-boss-range" }
+    end
+
+    if cycleEnd and type(checkedCycleEnd) == "number" and math.abs(cycleEnd - checkedCycleEnd) <= 120 then
+        return { shouldClear = false, FB = FB, reason = "stage-already-checked" }
     end
 
     savedInstanceCount = savedInstanceCount or GetNumSavedInstances()
@@ -35,23 +74,18 @@ local function GetAutoClearDecision(instanceID, savedInstanceCount, getSavedInst
         end
     end
 
-    local range = BG.bossPositionStartEnd[instanceID]
-    if type(range) ~= "table" then
-        return { shouldClear = false, FB = FB, reason = "unknown-boss-range" }
-    end
-
     hasLedgerItem = hasLedgerItem or BG.BiaoGeHavedItem
-    if hasLedgerItem(FB, "autoQingKong", instanceID) then
+    if hasLedgerItem(FB, "onlyboss") then
         return {
             shouldClear = true,
             FB = FB,
-            reason = "current-instance-has-old-data",
-            startBoss = range[1],
-            endBoss = range[2],
+            reason = "stage-has-old-data",
+            startBoss = 1,
+            endBoss = Maxb[FB] - 2,
         }
     end
 
-    return { shouldClear = false, FB = FB, reason = "current-instance-empty" }
+    return { shouldClear = false, FB = FB, reason = "stage-empty" }
 end
 
 local function ClearCurrentStage(decision)
@@ -59,12 +93,27 @@ local function ClearCurrentStage(decision)
     BG.ClickFBbutton(FB)
     local num = BG.ClearBiaoGe("biaoge", FB)
     BG.SendSystemMessage(format(L["已自动清空表格< %s >，分钱人数已改为%s人。"], BG.GetFBinfo(FB, "shortName"), num))
-    if decision.reason == "current-instance-has-old-data" then
+    if decision.reason == "stage-has-old-data" then
         BG.SendSystemMessage(L['自动清空表格的原因：1.当前副本你是新CD；2.%s']:format(
             L['当前副本所在的表格BOSS编号（%s-%s）格子中存在旧记录。']:format(
                 decision.startBoss, decision.endBoss)))
     end
     BG.PlaySound("qingkong")
+end
+
+local function CheckAutoClearForInstance(instanceID)
+    local FB = BG.FBIDtable[instanceID]
+    if not FB then return end
+    local cycleEnd = GetStageCycleEnd()
+    local decision = GetAutoClearDecision(instanceID, nil, nil, nil,
+        cycleEnd, GetCheckedStageCycleEnd(FB))
+    if decision.shouldClear then
+        ClearCurrentStage(decision)
+    end
+    if decision.reason == "stage-has-old-data" or decision.reason == "stage-empty" then
+        MarkStageChecked(FB, cycleEnd)
+    end
+    return decision
 end
 
 function BG.ClearBiaoGeUI()
@@ -258,10 +307,7 @@ function BG.ClearBiaoGeUI()
                 SendTips(FB)
                 if BG.IsTBCFB(FB) and not ns.canShowTBC then return end
                 if not (FB and IsInInstance()) then return end
-                local decision = GetAutoClearDecision(instanceID)
-                if decision.shouldClear then
-                    ClearCurrentStage(decision)
-                end
+                CheckAutoClearForInstance(instanceID)
             end)
         end
         BG.RegisterEvent("RAID_INSTANCE_WELCOME", function(self, event, ...)
