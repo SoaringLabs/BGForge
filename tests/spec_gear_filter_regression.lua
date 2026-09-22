@@ -41,6 +41,10 @@ local ITEM_DATA = {
     [112] = { equipLoc = "INVTYPE_2HWEAPON", typeID = 2, subclassID = 8, tooltip = "Attack Power\nClasses: Mage" },
     [113] = { equipLoc = "INVTYPE_2HWEAPON", typeID = 2, subclassID = 8, tooltip = "Attack Power\nClasses: Warrior" },
     [114] = { equipLoc = "INVTYPE_RELIC", typeID = 4, subclassID = 7, tooltip = "Spell Power" },
+    [115] = { equipLoc = "", typeID = 4, subclassID = 0, tooltip = "Classes: Mage" },
+    [116] = { equipLoc = "", typeID = 4, subclassID = 0, tooltip = "Classes: Warrior" },
+    [117] = { equipLoc = "INVTYPE_TRINKET", typeID = 4, subclassID = 0, tooltip = "Critical Strike\nSpell Power" },
+    [118] = { equipLoc = "", typeID = 4, subclassID = 0, tooltip = "Warrior's emblem\nClasses: Mage" },
 }
 
 local function ItemLink(itemID)
@@ -57,7 +61,7 @@ local function NewCell(text)
     }
 end
 
-local function ResetEnvironment(classFile, selectedKey, asyncLoads, missingAccountBoundConstant)
+local function ResetEnvironment(classFile, selectedKey, asyncLoads, missingAccountBoundConstant, delayedTooltip, locale)
     BGA = nil
     BiaoGe = {
         options = {
@@ -67,7 +71,7 @@ local function ResetEnvironment(classFile, selectedKey, asyncLoads, missingAccou
         filterClassNum = { private = "legacy" },
     }
 
-    CLASS = "Classes:"
+    CLASS = locale == "zhCN" and "职业：" or "Classes:"
     if missingAccountBoundConstant then
         ITEM_BIND_TO_BNETACCOUNT = nil
     else
@@ -91,13 +95,15 @@ local function ResetEnvironment(classFile, selectedKey, asyncLoads, missingAccou
     STAT_EXPERTISE = "Expertise"
     ITEM_MOD_ARMOR_PENETRATION_RATING = "Armor Penetration"
     ITEM_SPELL_TRIGGER_ONPROC = "Chance on hit"
-    ITEM_MOD_SPELL_POWER_SHORT = "Spell Power"
+    ITEM_MOD_SPELL_POWER_SHORT = locale == "zhCN" and "法术强度" or "Spell Power"
     ITEM_MOD_SPELL_DAMAGE_DONE = "Spell damage by up to %s"
     ITEM_MOD_SPELL_HEALING_DONE = "Healing by up to %s"
 
     local createdButtons = {}
     local createdLabels = {}
     local pendingLoads = {}
+    local pendingTooltipReads = {}
+    local primedItems = {}
     local frameMethods = {}
     function frameMethods:SetSize(width, height) self.width, self.height = width, height end
     function frameMethods:SetPoint(...) self.point = { ... } end
@@ -137,7 +143,8 @@ local function ResetEnvironment(classFile, selectedKey, asyncLoads, missingAccou
     }
 
     UnitClass = function()
-        return CLASS_NAMES[classFile], classFile
+        return locale == "zhCN" and ({ WARRIOR = "战士", MAGE = "法师" })[classFile]
+            or CLASS_NAMES[classFile], classFile
     end
 
     GetItemInfoInstant = function(item)
@@ -173,6 +180,16 @@ local function ResetEnvironment(classFile, selectedKey, asyncLoads, missingAccou
         end,
         PlaySound = function() end,
         Init = function(callback) callback() end,
+        After = function(_, callback)
+            if delayedTooltip then
+                table.insert(pendingTooltipReads, callback)
+            else
+                callback()
+            end
+        end,
+        Tooltip_SetItemByID = function(item)
+            table.insert(primedItems, item)
+        end,
     }
     _G.BG = BG
 
@@ -186,6 +203,8 @@ local function ResetEnvironment(classFile, selectedKey, asyncLoads, missingAccou
         buttons = createdButtons,
         labels = createdLabels,
         pendingLoads = pendingLoads,
+        pendingTooltipReads = pendingTooltipReads,
+        primedItems = primedItems,
         currentCell = currentCell,
     }
 end
@@ -346,6 +365,22 @@ local function TestRulesAndExemption()
     env.module.ApplyToCell(cell)
     AssertEqual(cell.alpha, 0.6, "another class's relic should dim")
 
+    cell:SetText(ItemLink(115))
+    env.module.ApplyToCell(cell)
+    AssertEqual(cell.alpha, 0.6, "another class's tier token should dim")
+
+    cell:SetText(ItemLink(116))
+    env.module.ApplyToCell(cell)
+    AssertEqual(cell.alpha, 1, "warrior tier token should stay bright")
+
+    cell:SetText(ItemLink(117))
+    env.module.ApplyToCell(cell)
+    AssertEqual(cell.alpha, 0.6, "critical strike does not make spell-power gear suitable")
+
+    cell:SetText(ItemLink(118))
+    env.module.ApplyToCell(cell)
+    AssertEqual(cell.alpha, 0.6, "class restriction should be checked on its own tooltip line")
+
     local paladinEnv = ResetEnvironment("PALADIN", "class")
     local libramCell = NewCell(ItemLink(114))
     paladinEnv.module.ApplyToCell(libramCell)
@@ -355,6 +390,87 @@ local function TestRulesAndExemption()
     local missingConstantCell = NewCell(ItemLink(111))
     missingConstantEnv.module.ApplyToCell(missingConstantCell)
     AssertEqual(missingConstantCell.alpha, 0.6, "missing account-bound constant should safely skip the exemption")
+end
+
+local function TestTooltipPrimingBeforeClassification()
+    local env = ResetEnvironment("WARRIOR", "arms_fury", false, false, true)
+    local tooltipReady = false
+    env.BG.GetTooltipTextLeftAll = function(item)
+        if tonumber(tostring(item):match("item:(%d+)")) == 115 then
+            return tooltipReady and "Classes: Mage" or ""
+        end
+        return tooltipReady and "Critical Strike\nSpell Power" or "Critical Strike"
+    end
+
+    local tierToken = NewCell(ItemLink(115))
+    local casterGear = NewCell(ItemLink(117))
+    env.module.ApplyToCell(tierToken)
+    env.module.ApplyToCell(casterGear)
+    AssertEqual(#env.primedItems, 2, "uncached item tooltips should be primed")
+    AssertEqual(#env.pendingTooltipReads, 2, "classification should wait for primed tooltip text")
+    AssertEqual(tierToken.alpha, 1, "pending tier token should start bright")
+    AssertEqual(casterGear.alpha, 1, "pending caster gear should start bright")
+
+    tooltipReady = true
+    env.pendingTooltipReads[1]()
+    env.pendingTooltipReads[2]()
+    AssertEqual(#env.pendingTooltipReads, 4, "first read should be checked again before caching")
+    env.pendingTooltipReads[3]()
+    env.pendingTooltipReads[4]()
+    AssertEqual(tierToken.alpha, 0.6, "other-class tier token should dim when tooltip is ready")
+    AssertEqual(casterGear.alpha, 0.6, "critical-strike spell-power gear should dim when tooltip is ready")
+end
+
+local function TestChineseCasterAndTierTooltip()
+    ITEM_DATA[19905] = {
+        equipLoc = "INVTYPE_FINGER", typeID = 4, subclassID = 0,
+        tooltip = "+52 智力\n装备：爆击等级提高36点。\n装备：法术强度提高70点。",
+    }
+    ITEM_DATA[19906] = { equipLoc = "", typeID = 4, subclassID = 0, tooltip = "职业：法师" }
+    local env = ResetEnvironment("WARRIOR", "arms_fury", false, false, false, "zhCN")
+    local casterItem = NewCell(ItemLink(19905))
+    env.module.ApplyToCell(casterItem)
+    AssertEqual(casterItem.alpha, 0.6, "Chinese critical-strike spell-power item should dim")
+    local tierToken = NewCell(ItemLink(19906))
+    env.module.ApplyToCell(tierToken)
+    AssertEqual(tierToken.alpha, 0.6, "Chinese class-restricted tier token should dim")
+end
+
+local function TestEmptyTooltipRetryAndStaleItem()
+    local env = ResetEnvironment("WARRIOR", "arms_fury", false, false, true)
+    local tooltipReady = false
+    env.BG.GetTooltipTextLeftAll = function()
+        return tooltipReady and "Spell Power" or ""
+    end
+    local cell = NewCell(ItemLink(109))
+    env.module.ApplyToCell(cell)
+    env.pendingTooltipReads[1]()
+    AssertEqual(#env.pendingTooltipReads, 2, "empty tooltip should be retried")
+    tooltipReady = true
+    env.pendingTooltipReads[2]()
+    AssertEqual(cell.alpha, 0.6, "retry should classify newly populated tooltip")
+
+    local stale = NewCell(ItemLink(115))
+    env.module.ApplyToCell(stale)
+    stale:SetText(ItemLink(110))
+    env.module.ApplyToCell(stale)
+    env.pendingTooltipReads[3]()
+    AssertEqual(stale.alpha, 1, "stale tooltip callback should not dim replacement item")
+end
+
+local function TestPartialTooltipRetry()
+    local env = ResetEnvironment("WARRIOR", "arms_fury", false, false, true)
+    local complete = false
+    env.BG.GetTooltipTextLeftAll = function()
+        return complete and "Critical Strike\nSpell Power" or "Critical Strike"
+    end
+    local cell = NewCell(ItemLink(117))
+    env.module.ApplyToCell(cell)
+    env.pendingTooltipReads[1]()
+    AssertEqual(#env.pendingTooltipReads, 2, "initial allowed result should wait for complete tooltip")
+    complete = true
+    env.pendingTooltipReads[2]()
+    AssertEqual(cell.alpha, 0.6, "late spell-power line should still dim item")
 end
 
 local function TestTankRules()
@@ -416,15 +532,15 @@ local function TestSchemeButtonsAndPersistence()
 
     local env = ResetEnvironment("WARRIOR", nil)
     env.module.CreateUI()
-    AssertEqual(env.labels[1].text, "装备过滤：", "filter controls should have a visible label")
+    AssertEqual(env.labels[1].text, "装备过滤", "filter controls should have a short visible label")
     env.buttons[3].scripts.OnClick(env.buttons[3])
     AssertEqual(BiaoGe.options.specGearFilterByClass.WARRIOR, "arms_fury", "button should store stable scheme key")
-    AssertEqual(env.labels[1].text, "装备过滤：战士-武器/狂怒",
-        "filter controls should keep the active scheme name visible")
+    AssertEqual(env.labels[1].text, "装备过滤",
+        "filter label should stay short when a scheme is selected")
     env.buttons[3].scripts.OnClick(env.buttons[3])
     AssertEqual(BiaoGe.options.specGearFilterByClass.WARRIOR, nil, "clicking selected scheme should disable")
-    AssertEqual(env.labels[1].text, "装备过滤：",
-        "filter controls should clear the active scheme name when filtering is disabled")
+    AssertEqual(env.labels[1].text, "装备过滤",
+        "filter label should stay unchanged when filtering is disabled")
 
     BiaoGe.options.specGearFilterByClass.MAGE = "class"
     AssertEqual(BiaoGe.options.specGearFilterByClass.WARRIOR, nil, "class selections should remain independent")
@@ -443,10 +559,10 @@ local function TestSynchronizedControlGroups()
         "table controls should update the shared selected scheme")
     AssertEqual(env.buttons[3].highlight.shown, true, "table control should show the selected scheme")
     AssertEqual(env.buttons[6].highlight.shown, true, "wishlist control should mirror the selected scheme")
-    AssertEqual(env.labels[1].text, "装备过滤：战士-武器/狂怒",
-        "table filter label should mirror the selected scheme")
-    AssertEqual(env.labels[2].text, "装备过滤：战士-武器/狂怒",
-        "wishlist filter label should mirror the selected scheme")
+    AssertEqual(env.labels[1].text, "装备过滤",
+        "table filter label should stay short")
+    AssertEqual(env.labels[2].text, "装备过滤",
+        "wishlist filter label should stay short")
     AssertEqual(env.buttons[3].icon.desaturated, false, "selected table icon should stay saturated")
     AssertEqual(env.buttons[6].icon.desaturated, false, "selected wishlist icon should stay saturated")
 
@@ -523,6 +639,10 @@ TestFilterResultCallback()
 TestAuctionAutoCollapse()
 TestAsyncAuctionAutoCollapse()
 TestRulesAndExemption()
+TestTooltipPrimingBeforeClassification()
+TestChineseCasterAndTierTooltip()
+TestEmptyTooltipRetryAndStaleItem()
+TestPartialTooltipRetry()
 TestTankRules()
 TestDisabledAndInvalidSchemes()
 TestSchemeButtonsAndPersistence()

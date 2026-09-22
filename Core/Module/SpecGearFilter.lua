@@ -361,7 +361,6 @@ local function ReadMetadata(itemLink)
         subclassID = subclassID,
         tooltipText = BG.GetTooltipTextLeftAll(itemString) or "",
     }
-    metadataCache[itemString] = metadata
     return metadata
 end
 
@@ -389,10 +388,11 @@ local function ShouldFilter(metadata, scheme, className)
         end
     end
 
-    if CLASS_PATTERN and tooltipText:find(CLASS_PATTERN) then
-        local classPattern = PlainPattern(className)
-        if classPattern and not tooltipText:find(classPattern) then
-            return true
+    if CLASS_PATTERN and className then
+        for line in tooltipText:gmatch("[^\n]+") do
+            if line:find(CLASS_PATTERN) and not line:find(className, 1, true) then
+                return true
+            end
         end
     end
 
@@ -410,20 +410,10 @@ end
 
 local function UpdateButtons()
     local selected = SelectedKey()
-    local classFile = CurrentClass()
-    local selectedScheme = FindScheme(classFile, selected)
-    local updatedControls = {}
     for _, button in ipairs(buttons) do
         local active = button.scheme.key == selected
         button.icon:SetDesaturated(not active)
         button.highlight:SetShown(active)
-        local controls = button.controls
-        if controls and not updatedControls[controls] then
-            controls.label:SetText(
-                selectedScheme and (L["装备过滤："] .. selectedScheme.name) or L["装备过滤："]
-            )
-            updatedControls[controls] = true
-        end
     end
 end
 
@@ -441,7 +431,7 @@ local function CreateControls(parent)
     label:SetPoint("RIGHT", frame, "LEFT", -10, 0)
     label:SetFont(BIAOGE_TEXT_FONT, 14, "OUTLINE")
     label:SetTextColor(1, 0.82, 0)
-    label:SetText(L["装备过滤："])
+    label:SetText(L["装备过滤"])
     frame.label = label
 
     for index, scheme in ipairs(classSchemes) do
@@ -449,7 +439,6 @@ local function CreateControls(parent)
         button:SetSize(25, 25)
         button:SetPoint("LEFT", (index - 1) * 35, 0)
         button.scheme = scheme
-        button.controls = frame
 
         local icon = button:CreateTexture(nil, "ARTWORK")
         icon:SetAllPoints()
@@ -526,21 +515,40 @@ function SpecGearFilter.ApplyToCell(cell, explicitLink, onApplied)
     end
     cell:SetAlpha(ALPHA_ALLOWED)
 
-    local function ApplyLoadedItem()
+    local function ApplyLoadedItem(attempt)
         if cell._bgForgeSpecGearFilterRequest ~= request then return end
         if BG.FB1 ~= tableKey then return end
         local currentLink = explicitLink or (cell.GetText and cell:GetText()) or ""
         if currentLink ~= link or SelectedKey() ~= key then return end
 
         local metadata = ReadMetadata(link)
+        if metadata and BG.After and not metadataCache[itemString]
+            and (attempt < 2 or (metadata.tooltipText == "" and attempt < 3)) then
+            BG.After(0.05, function() ApplyLoadedItem(attempt + 1) end)
+            return
+        end
         local filtered = ShouldFilter(metadata, scheme, className)
+        if metadata and metadata.tooltipText ~= "" then
+            metadataCache[itemString] = metadata
+        end
         cell:SetAlpha(filtered and ALPHA_FILTERED or ALPHA_ALLOWED)
         if onApplied then onApplied(filtered) end
     end
 
     if metadataCache[itemString] then
-        ApplyLoadedItem()
+        ApplyLoadedItem(1)
         return
+    end
+
+    local function ApplyAfterItemLoad()
+        if BG.Tooltip_SetItemByID then
+            BG.Tooltip_SetItemByID(itemString)
+        end
+        if BG.After then
+            BG.After(0.01, function() ApplyLoadedItem(1) end)
+        else
+            ApplyLoadedItem(1)
+        end
     end
 
     local item
@@ -550,9 +558,9 @@ function SpecGearFilter.ApplyToCell(cell, explicitLink, onApplied)
         item = Item:CreateFromItemID(itemID)
     end
     if item and item.ContinueOnItemLoad then
-        item:ContinueOnItemLoad(ApplyLoadedItem)
+        item:ContinueOnItemLoad(ApplyAfterItemLoad)
     else
-        ApplyLoadedItem()
+        ApplyAfterItemLoad()
     end
 end
 

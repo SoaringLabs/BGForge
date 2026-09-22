@@ -590,6 +590,7 @@ do
     L["角色自定义排序"] = "Custom Character Sorting"
     L["如果你想删除这些角色，点击按钮后会在可删除角色后面显示一个删除按钮。"] = "Click this button to show a delete button beside characters that can be removed."
     L["商品总览"] = "Merchant Overview"
+    L["装备过滤"] = "Gear Filter"
     L["装备过滤："] = "Gear Filter:"
     L["把商品按装备部位进行排列，并且可以自定义过滤。"] = "Arrange merchant items by equipment slot and apply custom filters."
     L["该功能仅对销售装备的商人生效。"] = "This feature only applies to merchants that sell equipment."
