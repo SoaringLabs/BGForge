@@ -5,6 +5,18 @@
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)，日志格式参考
 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## v1.4.6 - 2026-10-09
+
+### 修复
+
+- 修复升级新版 RurutiaSuite 后，聊天条“金”按钮无法打开或关闭 BGForge 的问题。
+
+### 兼容性
+
+- 同时支持新版 RurutiaSuite 的 Runtime 入口和旧版 AceAddon 入口，保留 3.7.2 及以上旧版的“金”按钮兼容逻辑。
+- “金”按钮继续支持左键和右键切换 BGForge 主界面，其他聊天条按钮保持原行为。
+- RurutiaSuite 3.7.1 及更早版本和无法解析的版本继续保留原点击行为。
+
 ## v1.4.5 - 2026-09-22
 
 ### 修复

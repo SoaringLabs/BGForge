@@ -32,13 +32,24 @@ local function IsCompatibleRurutiaVersion()
 end
 
 local function GetRurutiaChatBar()
+    -- Newer releases publish their own Runtime instead of an AceAddon instance.
+    local rurutia = _G.RurutiaSuite
+    if type(rurutia) == "table" then
+        if type(rurutia.ChatBar) == "table" then return rurutia.ChatBar end
+        local runtime = rurutia.Runtime
+        if type(runtime) == "table" and type(runtime.GetModule) == "function" then
+            local chatBar = runtime:GetModule("ChatBar")
+            if chatBar then return chatBar end
+        end
+    end
+
     local libStub = _G.LibStub
     if not libStub or type(libStub.GetLibrary) ~= "function" then return end
 
     local aceAddon = libStub:GetLibrary("AceAddon-3.0", true)
     if not aceAddon or type(aceAddon.GetAddon) ~= "function" then return end
 
-    local rurutia = aceAddon:GetAddon("RurutiaSuite", true)
+    rurutia = aceAddon:GetAddon("RurutiaSuite", true)
     if not rurutia or type(rurutia.GetModule) ~= "function" then return end
 
     return rurutia:GetModule("ChatBar", true)
@@ -67,7 +78,7 @@ function BG.InstallRurutiaSuiteGoldLedgerCompat()
     if type(original) ~= "function" then return false end
 
     chatBar.HandleButtonClick = function(self, info, ...)
-        if info and info.key == "goldLedger" and info.type == "addon" then
+        if info and info.key == "goldLedger" and (info.action or info.type) == "addon" then
             return ToggleBGForgeMainFrame()
         end
         return original(self, info, ...)
