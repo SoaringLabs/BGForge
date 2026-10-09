@@ -2425,7 +2425,7 @@ do
         L["拆解者"] = "Disconstructor"
         L["钢铁议会"] = "Iron Council"
         L["科隆加恩"] = "Kologarn"
-        L["欧尔利亚"] = "Algalon"
+        L["欧尔莉亚"] = "Auriaya"
         L["霍迪尔"] = "Hodir"
         L["托里姆"] = "Thorim"
         L["弗蕾亚"] = "Freya"

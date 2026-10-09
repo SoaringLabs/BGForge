@@ -134,7 +134,8 @@ function BG.ClearBiaoGeUI()
                 end
             end
         elseif b <= Maxb[FB] then
-            for i = 1, BG.Maxi + 10 do
+            -- Keep clearing legacy hidden rows as well as expanded raid layouts.
+            for i = 1, math.max(BG.Maxi + 10, BG.GetMaxi(FB, b)) do
                 -- 表格
                 if BG.Frame[FB]["boss" .. b]["zhuangbei" .. i] then
                     BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]:SetText("")

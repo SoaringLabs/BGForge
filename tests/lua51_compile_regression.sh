@@ -24,6 +24,13 @@ if [[ "$version" != *"Lua 5.1"* ]]; then
 fi
 
 files=(
+    Core/DB/DB.lua
+    Core/DB/DB_BossName.lua
+    Core/DB/DB_Loot_Titan.lua
+    Core/DB/DB_Loot_BlackWhiteList.lua
+    Locales/zhCN.lua
+    Locales/zhTW.lua
+    Locales/enUS.lua
     Core/UI/DesignSystem.lua
     Core/Module/HistoryStore.lua
     Core/Module/History.lua

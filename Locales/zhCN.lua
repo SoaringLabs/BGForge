@@ -2495,7 +2495,7 @@ do
         L["拆解者"] = true
         L["钢铁议会"] = true
         L["科隆加恩"] = true
-        L["欧尔利亚"] = true
+        L["欧尔莉亚"] = true
         L["霍迪尔"] = true
         L["托里姆"] = true
         L["弗蕾亚"] = true
