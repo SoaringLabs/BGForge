@@ -5,6 +5,7 @@ local L = ns.L
 -- 隐私边界：只保存本机实际登录过的角色及其本周 CD、资源快照。
 -- 不发送插件消息，也不读取战网账号、GUID、好友、公会或其他设备的数据。
 local RAIDS = {
+    { id = 603, name = L["奥杜尔"], compactWidth = 50, bossSource = "ULDtitan", bossStart = 1, bossEnd = 14 },
     { id = 580, name = L["太阳井"], compactWidth = 50, bossSource = "SWtitan", bossStart = 8, bossEnd = 13 },
     { id = 568, name = L["祖阿曼"], compactWidth = 50, bossSource = "SWtitan", bossStart = 1, bossEnd = 6 },
     { id = 649, name = L["十字军"], compactWidth = 50, bossSource = "TOCtitan", bossStart = 11, bossEnd = 15 },

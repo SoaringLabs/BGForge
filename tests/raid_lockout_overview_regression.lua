@@ -1179,6 +1179,7 @@ end
 local function TestCharacterProgressModelOnlyIncludesRaidsAndWeeklies()
     local BG = ResetEnvironment()
     BG.Boss = {
+        ULDtitan = {},
         SWtitan = {},
         TOCtitan = {},
         NAXXtitan = {},
@@ -1186,6 +1187,7 @@ local function TestCharacterProgressModelOnlyIncludesRaidsAndWeeklies()
         MCtitan = {},
     }
     local sourceCounts = {
+        ULDtitan = 14,
         SWtitan = 13,
         TOCtitan = 15,
         NAXXtitan = 17,
@@ -1265,25 +1267,29 @@ local function TestCharacterProgressModelOnlyIncludesRaidsAndWeeklies()
     }
 
     local model = BG.GetRaidLockoutProgressModel(character, 1700000000)
-    assert(#model.raids == 11 and model.raidCount == 2,
+    assert(#model.raids == 12 and model.raidCount == 2,
         "progress model did not preserve all Titan raids in their configured order")
-    assert(model.raids[1].id == 580 and model.raids[2].id == 568
-        and model.raids[11].id == 624,
+    assert(model.raids[1].id == 603 and model.raids[2].id == 580 and model.raids[3].id == 568
+        and model.raids[12].id == 624,
         "progress model changed the authoritative Titan raid order")
-    assert(#model.raids[1].bosses == 6
-        and model.raids[1].bosses[1].name == "SWtitan source 8"
-        and model.raids[1].bosses[6].name == "SWtitan source 13",
+    assert(#model.raids[1].bosses == 14
+        and model.raids[1].bosses[1].name == "ULDtitan source 1"
+        and model.raids[1].bosses[14].name == "ULDtitan source 14",
+        "Ulduar must expose all fourteen bosses without ledger-only rows")
+    assert(#model.raids[2].bosses == 6
+        and model.raids[2].bosses[1].name == "SWtitan source 8"
+        and model.raids[2].bosses[6].name == "SWtitan source 13",
         "progress model did not expose the configured Titan boss range")
-    assert(#model.raids[11].bosses == 2
-        and model.raids[11].bosses[1].name == "Archavon"
-        and model.raids[11].bosses[2].name == "Emalon",
+    assert(#model.raids[12].bosses == 2
+        and model.raids[12].bosses[1].name == "Archavon"
+        and model.raids[12].bosses[2].name == "Emalon",
         "progress model did not fall back to the client encounter journal")
     for _, raid in ipairs(model.raids) do
         assert(#raid.bosses > 0,
             "every Titan raid must expose a boss roster for the expandable progress row")
     end
-    assert(model.raids[1].lockouts[1].bosses[1].name == "Kalecgos"
-        and model.raids[1].lockouts[1].bosses[2].name == "Brutallus",
+    assert(model.raids[2].lockouts[1].bosses[1].name == "Kalecgos"
+        and model.raids[2].lockouts[1].bosses[2].name == "Brutallus",
         "progress model did not preserve encounter order")
     assert(#model.weeklies == 2 and model.weeklyCompleted == 1 and model.weeklyTotal == 2,
         "progress model did not summarize weekly quest cooldowns")
@@ -1711,6 +1717,62 @@ local function TestItemTilesUseNativeGameTooltip()
         "legendary-fragment tooltips must expose the configured completion target")
 end
 
+local function TestUlduarCaptureAndDisplayToggle()
+    local BG, events = ResetEnvironment()
+    local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
+    local getColumns = FindUpvalue(createHoverFrame, "GetVisibleLockoutColumns")
+    local choices = BG.GetRaidLockoutDisplayChoices()
+    assert(choices[1].id == 603 and choices[1].name == "奥杜尔"
+        and choices[1].optionKey == "raidLockoutShow_603",
+        "Ulduar must have an independent settings checkbox")
+
+    BiaoGe = { options = { raidLockoutShow_615 = 0 } }
+    local columns = getColumns()
+    assert(columns[1].id == 603, "Ulduar must be visible by default as the newest raid")
+    BiaoGe.options.raidLockoutShow_603 = 0
+    columns = getColumns()
+    assert(columns[1].id == 580, "hiding Ulduar must retain the existing raid order")
+    for _, column in ipairs(columns) do
+        assert(column.id ~= 603 and column.id ~= 615,
+            "display choices must honor both new and existing hidden raid settings")
+    end
+
+    GetNumSavedInstances = function() return 1 end
+    GetSavedInstanceInfo = function()
+        return "奥杜尔", 987654, 3600, 4, true, false, 12345, true, 25,
+            "25 Player", 14, 2, false, 603
+    end
+    GetSavedInstanceEncounterInfo = function(_, index)
+        return "Ulduar boss " .. index, 999, index <= 2
+    end
+    local previousDate = date
+    date = function() return "12:00:00" end
+    events.UPDATE_INSTANCE_INFO()
+    date = previousDate
+
+    local character = GetStoredCharacter()
+    local lockouts = character.instances[603]
+    assert(lockouts and #lockouts == 1,
+        "Ulduar's saved instance must be captured even while its display is hidden")
+    local lockout = lockouts[1]
+    assert(lockout.killedCount == 2 and lockout.numEncounters == 14
+        and lockout.resetAt == 1700003600 and lockout.difficultyName == "25 Player",
+        "Ulduar progress and reset must come from the saved-instance API")
+    assert(#lockout.bosses == 14 and lockout.bosses[2].killed
+        and not lockout.bosses[3].killed,
+        "Ulduar must preserve individual boss kill states")
+    assert(lockout.instanceID == nil and lockout.instanceLink == nil,
+        "Ulduar tracking must not persist the saved instance's identifying fields")
+
+    BiaoGe.options.raidLockoutShow_603 = 1
+    assert(getColumns()[1].id == 603 and character.instances[603] == lockouts,
+        "re-enabling Ulduar must restore the column without losing its snapshot")
+    local model = BG.GetRaidLockoutProgressModel(character, 1700000000)
+    assert(model.raids[1].id == 603 and model.raids[1].lockouts == lockouts
+        and model.raidCount == 1,
+        "character details must consume the same Ulduar snapshot")
+end
+
 local function TestQuestColumnsFollowVaultInTwoGroups()
     local BG = ResetEnvironment()
     local createHoverFrame = FindUpvalue(BG.ShowRaidLockoutHover, "CreateHoverFrame")
@@ -1754,7 +1816,7 @@ local function TestQuestColumnsFollowVaultInTwoGroups()
         "profession-crafting two-level header group is incorrect")
 
     local choices = BG.GetRaidLockoutDisplayChoices()
-    assert(#choices == 14, "settings should expose eleven raids and exactly three grouped status choices")
+    assert(#choices == 15, "settings should expose twelve raids and exactly three grouped status choices")
     local weeklyChoice = choices[#choices - 2]
     local professionDailyChoice = choices[#choices - 1]
     local professionCooldownChoice = choices[#choices]
@@ -2119,6 +2181,7 @@ local tests = {
     item_quality = TestItemTileDisplayUsesRequestedQualitySemantics,
     character_visibility = TestCharacterVisibilityCanBeRestored,
     native_tooltip = TestItemTilesUseNativeGameTooltip,
+    ulduar = TestUlduarCaptureAndDisplayToggle,
     quest_columns = TestQuestColumnsFollowVaultInTwoGroups,
     quest_turnin = TestQuestTurnInsStoreSeparateMinimalSnapshots,
     quest_backfill = TestQuestLoginBackfillAndIndependentExpiry,
@@ -2167,6 +2230,7 @@ else
         "item_quality",
         "character_visibility",
         "native_tooltip",
+        "ulduar",
         "quest_columns",
         "quest_turnin",
         "quest_backfill",

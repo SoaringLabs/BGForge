@@ -4,6 +4,16 @@
 
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。新增更新日志与 GitHub Release 说明的格式规范见 [仓库格式规范](https://github.com/SoaringLabs/BGForge/blob/main/AGENTS.md#changelog-format)。
 
+## v1.5.1 - 2026-10-10
+
+1.【修复】角色总览大界面和小界面补充奥杜尔 CD 显示，支持查看首领击杀进度与重置时间
+
+2.【新增】CD展示设置加入奥杜尔独立开关，默认显示，隐藏后仍保留 CD 记录
+
+修复前（v1.5.0，团本 CD 列表缺少奥杜尔）：
+
+![奥杜尔 CD 修复前截图](https://raw.githubusercontent.com/SoaringLabs/BGForge/v1.5.1/docs/images/v1.5.1-ulduar-cd-before.png)
+
 ## v1.5.0 - 2026-10-09
 
 1.【新增】同步官方 BGLite v1.5，补全奥杜尔 14 个首领掉落及杂项数据
