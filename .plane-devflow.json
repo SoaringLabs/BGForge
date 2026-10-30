@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "states": {},
+  "status_sync": {
+    "enabled": false
+  },
+  "plane": {
+    "api_url": "https://api.plane.so",
+    "app_url": "https://app.plane.so",
+    "workspace": "soaring-labs",
+    "project_id": "24f57293-c603-4cae-b791-e4ca99e6193f",
+    "project_identifier": "BGFORGE"
+  },
+  "github": {
+    "repository": "SoaringLabs/BGForge",
+    "base_branch": "main"
+  },
+  "completion": {
+    "policy": "manual",
+    "manual_label": "manual-acceptance"
+  }
+}
