@@ -2,6 +2,8 @@ local AddonName, ns = ...
 
 local L = ns.L
 
+local C = ns.Protocol
+local SendGateway = ns.SendGateway
 local NN = ns.NN
 local RN = ns.RN
 local RGB_16 = ns.RGB_16
@@ -28,31 +30,36 @@ updateFrame:SetScript("OnEvent", function(self, event, msg)
     end
 end)
 
-function BG.SendMsgToRaid(tbl, dalay, callback)
+local function ChunkReportRows(rows)
+    local chunks = {}
+    for _, row in ipairs(rows) do
+        for i = 1, #row, step do
+            local chunk = {}
+            for groupIdx = i, i + step - 1 do
+                if not row[groupIdx] then break end
+                tinsert(chunk, row[groupIdx])
+            end
+            tinsert(chunks, chunk)
+        end
+    end
+    return chunks
+end
+
+function BG.SendMsgToRaid(rows, delay, callback)
     if BG.InBoss() then return end
     if updateFrame.callback then
         updateFrame.callback()
         updateFrame.callback = nil
     end
-    dalay = dalay or 0
-    local channel = BiaoGe.NotifyChannel
-    local db = {}
-    for _, texts in ipairs(tbl) do
-        for i = 1, #texts, step do
-            local one = {}
-            for ii = i, i + step - 1 do
-                if not texts[ii] then break end
-                tinsert(one, texts[ii])
-            end
-            tinsert(db, one)
-        end
-    end
-    BG.After(dalay, function()
-        local index = 1
+    delay = delay or 0
+    local channelName = BiaoGe.NotifyChannel
+    local tmpValue = ChunkReportRows(rows)
+    BG.After(delay, function()
+        local cursor = 1
         updateFrame.t = BG.tongBaoSendCD
         updateFrame.callback = callback
         updateFrame:SetScript("OnUpdate", function(self, t)
-            if not db[index] then
+            if not tmpValue[cursor] then
                 self:SetScript("OnUpdate", nil)
                 if self.callback then
                     self.callback()
@@ -63,10 +70,10 @@ function BG.SendMsgToRaid(tbl, dalay, callback)
             self.t = self.t + t
             if self.t >= BG.tongBaoSendCD then
                 self.t = 0
-                for _, msg in ipairs(db[index]) do
-                    SendChatMessage(msg, channel)
+                for _, msg in ipairs(tmpValue[cursor]) do
+                    SendGateway.Chat(msg, channelName)
                 end
-                index = index + 1
+                cursor = cursor + 1
             end
         end)
         updateFrame.errorCount = 0
@@ -74,223 +81,233 @@ function BG.SendMsgToRaid(tbl, dalay, callback)
     end)
 end
 
+local CHANNEL_RULES = {
+    { channel = "RAID", ready = function() return IsInRaid(1) end, message = L["不在团队，无法通报。"] },
+    { channel = "GUILD", ready = function() return IsInGuild() end, message = L["没有公会，无法通报。"] },
+}
+
+local function ReportChannelError(text)
+    BG.SendSystemMessage(text)
+    BG.PlaySound(1)
+end
+
 function BG.IsErrorSendChannel()
-    local channel = BiaoGe.NotifyChannel
-    if channel == "RAID" and not IsInRaid(1) then
-        BG.SendSystemMessage(L["不在团队，无法通报。"])
-        BG.PlaySound(1)
+    local channelName = BiaoGe.NotifyChannel
+    for _, rule in ipairs(CHANNEL_RULES) do
+        if channelName == rule.channel and not rule.ready() then
+            ReportChannelError(rule.message)
+            return true
+        end
+    end
+    if (channelName == "SAY" or channelName == "YELL") and not IsInInstance() then
+        ReportChannelError(L["该频道需在副本内才能通报。"])
         return true
     end
-    if channel == "GUILD" and not IsInGuild() then
-        BG.SendSystemMessage(L["没有公会，无法通报。"])
-        BG.PlaySound(1)
-        return true
+end
+
+local function AddReportLine(flatRows, groupedRows, text)
+    table.insert(flatRows, text)
+    table.insert(groupedRows, { text })
+end
+
+local function CopyTextRows(rows)
+    local copy = {}
+    for i, entry in ipairs(rows) do
+        copy[i] = entry
     end
-    if (channel == "SAY" or channel == "YELL") and not IsInInstance() then
-        BG.SendSystemMessage(L["该频道需在副本内才能通报。"])
-        BG.PlaySound(1)
-        return true
+    return copy
+end
+
+local function SectionLine(preview, text, icon, colorPrefix)
+    local title = format(text, BG.SetRaidTargetingIcons(preview, icon))
+    if preview then
+        return title
+    end
+    return colorPrefix .. title .. RN
+end
+
+local function BossHeader(raidKey, bossIdx)
+    if bossIdx == Maxb[raidKey] - 1 or bossIdx == Maxb[raidKey] then
+        return L["项目："]
+    end
+    return L["Boss："]
+end
+
+local function BossTitle(preview, raidKey, bossIdx, suffix)
+    local header = BossHeader(raidKey, bossIdx)
+    local bossLabel = BG.Boss[raidKey]["boss" .. bossIdx].name2
+    local bossColor = BG.Boss[raidKey]["boss" .. bossIdx].color
+    if preview then
+        return header .. bossLabel .. suffix
+    end
+    return "|cff" .. bossColor .. header .. bossLabel .. suffix .. "|r"
+end
+
+local function AppendBossSection(flatRows, groupedRows, title, bossRows)
+    table.insert(groupedRows, { title })
+    table.insert(groupedRows, CopyTextRows(bossRows))
+    table.insert(flatRows, title)
+    for _, entry in ipairs(bossRows) do
+        table.insert(flatRows, entry)
     end
 end
 
 -- 总览和工资
-local function ZongLan(onClick, tbl1, tbl2)
+local function ZongLan(preview, flatRows, groupedRows)
     local FB = BG.FB1
-    local tbl1 = tbl1 or {}
-    local tbl2 = tbl2 or {}
-    local text
-    if onClick then
-        text = format(L["< 总 %s 览 >"], BG.SetRaidTargetingIcons(onClick, "ziling"))
-    else
-        text = "|cffffffff" .. format(L["< 总 %s 览 >"], BG.SetRaidTargetingIcons(onClick, "ziling")) .. RN
-    end
-    table.insert(tbl1, text)
-    table.insert(tbl2, { text })
+    local flatRows = flatRows or {}
+    local groupedRows = groupedRows or {}
+    AddReportLine(flatRows, groupedRows, SectionLine(preview, L["< 总 %s 览 >"], "ziling", "|cffffffff"))
 
     local b = Maxb[FB] + 2
-    local sum
+    local runningTotal
     for i = 1, 3, 1 do
-        if BG.Frame[FB]["boss" .. b]["zhuangbei" .. i] then
-            local text
-            local item = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]:GetText()
-            local money = BG.Frame[FB]["boss" .. b]["jine" .. i]:GetText()
-            local moneyNum = tonumber(money) or 0
-            if moneyNum > 0 then
-                money = BG.FormatNumber(money, 5)
+        local equipment = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
+        if equipment then
+            local itemLink = equipment:GetText()
+            local moneyText = BG.Frame[FB]["boss" .. b]["jine" .. i]:GetText()
+            local moneyValue = tonumber(moneyText) or 0
+            if moneyValue > 0 then
+                moneyText = BG.FormatNumber(moneyText, 5)
             end
-            local perText = ""
+            local shareText = ""
             if i == 1 then
-                sum = moneyNum
-            elseif i == 2 and sum and sum ~= 0 then
-                perText = L["（占比%s%%）"]:format(format("%.0f", moneyNum / sum * 100))
+                runningTotal = moneyValue
+            elseif i == 2 and runningTotal and runningTotal ~= 0 then
+                shareText = L["（占比%s%%）"]:format(format("%.0f", moneyValue / runningTotal * 100))
             end
-            if onClick then
-                text = item .. L["："] .. money .. perText
+            local line
+            if preview then
+                line = itemLink .. L["："] .. moneyText .. shareText
             else
-                text = "|cffEE82EE" .. item .. L["："] .. money .. perText .. RN
+                line = "|cffEE82EE" .. itemLink .. L["："] .. moneyText .. shareText .. RN
             end
-            table.insert(tbl1, text)
-            table.insert(tbl2, { text })
+            AddReportLine(flatRows, groupedRows, line)
         end
     end
 
-    local text
-    if onClick then
-        text = format(L["< 工 %s 资 >"], BG.SetRaidTargetingIcons(onClick, "fangkuai"))
+    AddReportLine(flatRows, groupedRows, SectionLine(preview, L["< 工 %s 资 >"], "fangkuai", "|cffffffff"))
+
+    local countLabel = BG.Frame[FB]["boss" .. b]["zhuangbei4"]:GetText()
+    local countText = BG.Frame[FB]["boss" .. b]["jine4"]:GetText()
+    local countLine
+    if preview then
+        countLine = countLabel .. L["："] .. countText .. L["人"]
     else
-        text = "|cffffffff" .. format(L["< 工 %s 资 >"], BG.SetRaidTargetingIcons(onClick, "fangkuai")) .. RN
+        countLine = "|cff00BFFF" .. countLabel .. L["："] .. countText .. L["人"] .. RN
     end
-    table.insert(tbl1, text)
-    table.insert(tbl2, { text })
+    AddReportLine(flatRows, groupedRows, countLine)
 
-
-    local text
-    if onClick then
-        text = BG.Frame[FB]["boss" .. b]["zhuangbei4"]:GetText() .. L["："] ..
-            BG.Frame[FB]["boss" .. b]["jine4"]:GetText() .. L["人"]
+    local wageLabel = BG.Frame[FB]["boss" .. b]["zhuangbei5"]:GetText()
+    local wage = BG.Frame[FB]["boss" .. b]["jine5"]:GetText()
+    local wageLine
+    if preview then
+        wageLine = wageLabel .. L["："] .. wage
     else
-        text = "|cff00BFFF" .. BG.Frame[FB]["boss" .. b]["zhuangbei4"]:GetText() .. L["："] ..
-            BG.Frame[FB]["boss" .. b]["jine4"]:GetText() .. L["人"] .. RN
+        wageLine = "|cff00BFFF" .. wageLabel .. L["："] .. BG.FormatNumber(wage, 5) .. RN
     end
-    table.insert(tbl1, text)
-    table.insert(tbl2, { text })
+    AddReportLine(flatRows, groupedRows, wageLine)
 
-
-    local text
-    local name = BG.Frame[FB]["boss" .. b]["zhuangbei5"]:GetText()
-    local gz = BG.Frame[FB]["boss" .. b]["jine5"]:GetText()
-    if onClick then
-        text = name .. L["："] .. gz
+    wage = tonumber(wage)
+    local teamWage = BG.FormatNumber(wage * 5, 5)
+    wage = BG.FormatNumber(wage, 5)
+    local teamLabel = L["小队工资"] .. L["："]
+    local teamLine
+    if preview then
+        teamLine = teamLabel .. teamWage
     else
-        text = "|cff00BFFF" .. name .. L["："] .. BG.FormatNumber(gz, 5) .. RN
+        teamLine = "|cff00BFFF" .. teamLabel .. teamWage .. RN
     end
-    table.insert(tbl1, text)
-    table.insert(tbl2, { text })
+    AddReportLine(flatRows, groupedRows, teamLine)
 
-    gz = tonumber(gz)
-    local gzTeam = BG.FormatNumber(gz * 5, 5)
-    gz = BG.FormatNumber(gz, 5)
-    local text
-    local name = L["小队工资"] .. L["："]
-    if onClick then
-        text = name .. gzTeam
-        -- text = gz .. " x 5 = " .. gzTeam
-    else
-        text = "|cff00BFFF" .. name .. gzTeam .. RN
-        -- text = "|cff00BFFF" .. gz .. " x 5 = " .. gzTeam .. RN
-    end
-    table.insert(tbl1, text)
-    table.insert(tbl2, { text })
-
-    return tbl1, tbl2
+    return flatRows, groupedRows
 end
 
 local function GetFaKuanSumMoney()
-    local sum = 0
-    BG.PairFBItem(function(item, buyer, money, b, i)
-        sum = sum + (tonumber(money:GetText()) or 0)
+    local runningTotal = 0
+    BG.PairFBItem(function(itemLink, tmpValue4, moneyText, b, i)
+        runningTotal = runningTotal + (tonumber(moneyText:GetText()) or 0)
     end, Maxb[BG.FB1])
-    return sum
+    return runningTotal
 end
 
-local function FaKuan(onClick, tbl1, tbl2)
+local function ScanSpecialRows(FB, b, makeLine)
+    local rows = {}
+    local counter = 1
+    local limit = BG.GetMaxi(FB, b)
+    for i = 1, limit do
+        local equipment = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
+        local amount = BG.Frame[FB]["boss" .. b]["jine" .. i]
+        if equipment then
+            local amountText = amount:GetText()
+            if tonumber(amountText) and tonumber(amountText) ~= 0 then
+                tinsert(rows, makeLine(i, counter, equipment, amountText))
+                counter = counter + 1
+            end
+        end
+    end
+    return rows
+end
+
+local function FaKuan(preview, flatRows, groupedRows)
     local FB = BG.FB1
-    local tbl1 = tbl1 or {}
-    local tbl2 = tbl2 or {}
-    local num = 1
-    local yes
-    local tbl_boss = {}
+    local flatRows = flatRows or {}
+    local groupedRows = groupedRows or {}
     local b = Maxb[FB]
-    for i = 1, BG.GetMaxi(FB, b) do
-        local zhuangbei = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
-        local maijia = BG.Frame[FB]["boss" .. b]["maijia" .. i]
-        local jine = BG.Frame[FB]["boss" .. b]["jine" .. i]
-        if zhuangbei then
-            if tonumber(jine:GetText()) and tonumber(jine:GetText()) ~= 0 then
-                local text
-                local fakuan = zhuangbei:GetText()
-                if fakuan == "" then
-                    fakuan = L["罚款"]
-                end
-                if onClick then
-                    text = fakuan .. " " .. maijia:GetText() .. " " ..
-                        jine:GetText()
-                else
-                    text = num .. ". " .. fakuan .. " " ..
-                        RGB_16(maijia:GetText(), unpack({ maijia:GetTextColor() })) .. " " ..
-                        jine:GetText()
-                end
-                table.insert(tbl1, text)
-                table.insert(tbl_boss, text)
-                num = num + 1
-                yes = true
-            end
+    local bossRows = ScanSpecialRows(FB, b, function(i, counter, equipment, amountText)
+        local fineName = equipment:GetText()
+        if fineName == "" then
+            fineName = L["罚款"]
         end
-    end
-    if #tbl_boss ~= 0 then
-        local tbl = {}
-        for i, v in ipairs(tbl_boss) do
-            tbl[i] = v
+        local buyerField = BG.Frame[FB]["boss" .. b]["maijia" .. i]
+        if preview then
+            return fineName .. " " .. buyerField:GetText() .. " " ..
+                amountText
         end
-        table.insert(tbl2, tbl)
-        local sumText = format(L["罚款合计：%s"], GetFaKuanSumMoney())
-        table.insert(tbl1, sumText)
-        table.insert(tbl2, { sumText })
+        return counter .. ". " .. fineName .. " " ..
+            RGB_16(buyerField:GetText(), unpack({ buyerField:GetTextColor() })) .. " " ..
+            amountText
+    end)
+    if #bossRows ~= 0 then
+        table.insert(groupedRows, CopyTextRows(bossRows))
+        for _, entry in ipairs(bossRows) do
+            table.insert(flatRows, entry)
+        end
+        local totalText = format(L["罚款合计：%s"], GetFaKuanSumMoney())
+        AddReportLine(flatRows, groupedRows, totalText)
     end
-    if not yes then
-        local text = L["没有罚款"]
-        table.insert(tbl1, text)
-        table.insert(tbl2, { text })
+    if #bossRows == 0 then
+        AddReportLine(flatRows, groupedRows, L["没有罚款"])
     end
-    return tbl1, tbl2
+    return flatRows, groupedRows
 end
 
-local function ZhiChu(onClick, tbl1, tbl2)
+local function ZhiChu(preview, flatRows, groupedRows)
     local FB = BG.FB1
-    local tbl1 = tbl1 or {}
-    local tbl2 = tbl2 or {}
-    local num = 1
-    local yes
-    local tbl_boss = {}
+    local flatRows = flatRows or {}
+    local groupedRows = groupedRows or {}
     local b = Maxb[FB] + 1
-    for i = 1, BG.GetMaxi(FB, b) do
-        local zhuangbei = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
-        local jine = BG.Frame[FB]["boss" .. b]["jine" .. i]
-        if zhuangbei then
-            if tonumber(jine:GetText()) and tonumber(jine:GetText()) ~= 0 then
-                local text
-                if onClick then
-                    text = zhuangbei:GetText() .. " " .. jine:GetText()
-                else
-                    text = num .. ". " .. "|cff00FF00" .. zhuangbei:GetText() .. " " .. jine:GetText() .. "|r"
-                end
-                table.insert(tbl1, text)
-                table.insert(tbl_boss, text)
-                num = num + 1
-                yes = true
-            end
+    local bossRows = ScanSpecialRows(FB, b, function(_, counter, equipment, amountText)
+        if preview then
+            return equipment:GetText() .. " " .. amountText
         end
-    end
-    if #tbl_boss ~= 0 then
-        local tbl = {}
-        for i, v in ipairs(tbl_boss) do
-            tbl[i] = v
+        return counter .. ". " .. "|cff00FF00" .. equipment:GetText() .. " " .. amountText .. "|r"
+    end)
+    if #bossRows ~= 0 then
+        table.insert(groupedRows, CopyTextRows(bossRows))
+        for _, entry in ipairs(bossRows) do
+            table.insert(flatRows, entry)
         end
-        table.insert(tbl2, tbl)
+    else
+        AddReportLine(flatRows, groupedRows, L["没有支出"])
     end
-    if not yes then
-        local text = L["没有支出"]
-        table.insert(tbl1, text)
-        table.insert(tbl2, { text })
-    end
-    return tbl1, tbl2
+    return flatRows, groupedRows
 end
 
 local function HasQianKuan()
     local FB = BG.FB1
     for b = 1, Maxb[FB] do
         for i = 1, BG.GetMaxi(FB, b) do
-            local bt = BG.Frame[FB]["boss" .. b]["qiankuan" .. i]
             if BG.Frame[FB]["boss" .. b]["qiankuan" .. i] and BiaoGe[FB]["boss" .. b]["qiankuan" .. i] then
                 return true
             end
@@ -298,192 +315,141 @@ local function HasQianKuan()
     end
 end
 
-local function CreateListTable(onClick, tbl1)
-    local FB = BG.FB1
-    local tbl1 = tbl1 or {}
-    local tbl2 = {}
-    -- 收入
-    do
-        local text
-        if onClick then
-            text = format(L["< 收 %s 入 >"], BG.SetRaidTargetingIcons(onClick, "xingxing"))
-        else
-            text = "|cffffffff" .. format(L["< 收 %s 入 >"], BG.SetRaidTargetingIcons(onClick, "xingxing")) .. RN
-        end
-        table.insert(tbl1, text)
-        table.insert(tbl2, { text })
-        local yes
-        for b = 1, Maxb[FB] do
-            local tbl_boss = {}
-            for i = 1, BG.GetMaxi(FB, b) do
-                local zhuangbei = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
-                local maijia = BG.Frame[FB]["boss" .. b]["maijia" .. i]
-                local jine = BG.Frame[FB]["boss" .. b]["jine" .. i]
-                if zhuangbei then
-                    if (tonumber(jine:GetText()) and tonumber(jine:GetText()) ~= 0)
-                        or (zhuangbei:GetText() ~= "" and (maijia:GetText() ~= "" or jine:GetText() ~= "")) then
-                        local text
-                        local jineText = jine:GetText()
-                        if jineText:gsub(" ", "") == "" then
-                            jineText = 0
-                        end
-                        local maijiaText = maijia:GetText()
-                        local _r, _g, _b = maijia:GetTextColor()
-                        if maijiaText:gsub(" ", "") == "" or tonumber(maijiaText) then
-                            maijiaText = L["未知买家"]
-                            _r, _g, _b = .5, .5, .5
-                        end
-                        local zhuangbeiText = zhuangbei:GetText()
-                        if zhuangbeiText:gsub(" ", "") == "" then
-                            if b == Maxb[FB] then
-                                zhuangbeiText = L["罚款"]
-                            else
-                                zhuangbeiText = L["未知装备"]
-                            end
-                        end
-                        if onClick then
-                            text = zhuangbeiText .. " " .. maijiaText .. " " .. jineText
-                        else
-                            text = zhuangbeiText .. " " .. RGB_16(maijiaText, _r, _g, _b) .. " " .. jineText
-                        end
-                        table.insert(tbl_boss, text)
-                    end
+local function CollectIncomeRows(preview, FB, b)
+    local rows = {}
+    local limit = BG.GetMaxi(FB, b)
+    for i = 1, limit do
+        local equipment = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
+        local buyerField = BG.Frame[FB]["boss" .. b]["maijia" .. i]
+        local amount = BG.Frame[FB]["boss" .. b]["jine" .. i]
+        if equipment then
+            local amountText = amount:GetText()
+            local buyerName = buyerField:GetText()
+            if (tonumber(amountText) and tonumber(amountText) ~= 0)
+                or (equipment:GetText() ~= "" and (buyerName ~= "" or amountText ~= "")) then
+                if amountText:gsub(" ", "") == "" then
+                    amountText = 0
                 end
-            end
-            if #tbl_boss ~= 0 then
-                yes = true
-                local b_tx
-                if b == Maxb[FB] - 1 or b == Maxb[FB] then
-                    b_tx = L["项目："]
-                else
-                    b_tx = L["Boss："]
+                local red, green, blue = buyerField:GetTextColor()
+                if buyerName:gsub(" ", "") == "" or tonumber(buyerName) then
+                    buyerName = L["未知买家"]
+                    red, green, blue = .5, .5, .5
                 end
-
-                local bossname2 = BG.Boss[FB]["boss" .. b].name2
-                local bosscolor = BG.Boss[FB]["boss" .. b].color
-                local text
-                local faKuanSumText = ""
-                if b == Maxb[FB] then
-                    faKuanSumText = format(L["（合计%s）"], GetFaKuanSumMoney())
-                end
-                if onClick then
-                    text = b_tx .. bossname2 .. faKuanSumText
-                else
-                    text = "|cff" .. bosscolor .. b_tx .. bossname2 .. faKuanSumText .. "|r"
-                end
-
-                table.insert(tbl2, { text })
-                local tbl = {}
-                for i, v in ipairs(tbl_boss) do
-                    tbl[i] = v
-                end
-                table.insert(tbl2, tbl)
-
-                table.insert(tbl_boss, 1, text)
-                for index, value in ipairs(tbl_boss) do
-                    table.insert(tbl1, value)
-                end
-            end
-        end
-        if not yes then
-            local text = L["没有收入"] .. NN
-            table.insert(tbl1, text)
-            table.insert(tbl2, { text })
-        end
-    end
-    -- 支出
-    do
-        local text
-        if onClick then
-            text = format(L["< 支 %s 出 >"], BG.SetRaidTargetingIcons(onClick, "sanjiao"))
-        else
-            text = "|cffffffff" .. format(L["< 支 %s 出 >"], BG.SetRaidTargetingIcons(onClick, "sanjiao")) .. RN
-        end
-        table.insert(tbl1, text)
-        table.insert(tbl2, { text })
-        local yes
-        local tbl_boss = {}
-        local num = 1
-
-        local b = Maxb[FB] + 1
-        for i = 1, BG.GetMaxi(FB, b), 1 do
-            local zhuangbei = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
-            local jine = BG.Frame[FB]["boss" .. b]["jine" .. i]
-            if zhuangbei then
-                local jineText = jine:GetText()
-                if tonumber(jineText) and tonumber(jineText) ~= 0 then
-                    local zhuangbeiText = zhuangbei:GetText()
-                    if zhuangbeiText:gsub(" ", "") == "" then
-                        zhuangbeiText = L["支出"]
-                    end
-                    local text
-                    if onClick then
-                        text = zhuangbeiText .. " " .. jineText
+                local equipmentName = equipment:GetText()
+                if equipmentName:gsub(" ", "") == "" then
+                    if b == Maxb[FB] then
+                        equipmentName = L["罚款"]
                     else
-                        text = BG.STC_g1(zhuangbeiText) .. " " .. BG.STC_g1(jineText)
+                        equipmentName = L["未知装备"]
                     end
-                    table.insert(tbl_boss, text)
-                    num = num + 1
+                end
+                if preview then
+                    tinsert(rows, equipmentName .. " " .. buyerName .. " " .. amountText)
+                else
+                    tinsert(rows, equipmentName .. " " .. RGB_16(buyerName, red, green, blue) .. " " .. amountText)
                 end
             end
         end
-        if #tbl_boss ~= 0 then
-            yes = true
-            local tbl = {}
-            for i, v in ipairs(tbl_boss) do
-                tbl[i] = v
+    end
+    return rows
+end
+
+local function BuildIncomeSection(preview, FB, flatRows, groupedRows)
+    AddReportLine(flatRows, groupedRows, SectionLine(preview, L["< 收 %s 入 >"], "xingxing", "|cffffffff"))
+    local found
+    for b = 1, Maxb[FB] do
+        local bossRows = CollectIncomeRows(preview, FB, b)
+        if #bossRows ~= 0 then
+            found = true
+            local fineTotalText = ""
+            if b == Maxb[FB] then
+                fineTotalText = format(L["（合计%s）"], GetFaKuanSumMoney())
             end
-            table.insert(tbl2, tbl)
-            for i, v in ipairs(tbl_boss) do
-                table.insert(tbl1, v)
-            end
-        end
-        if not yes then
-            local text = L["没有支出"] .. NN
-            table.insert(tbl1, text)
-            table.insert(tbl2, { text })
+            AppendBossSection(flatRows, groupedRows, BossTitle(preview, FB, b, fineTotalText), bossRows)
         end
     end
-    -- 总览和工资
-    tbl1, tbl2 = ZongLan(onClick, tbl1, tbl2)
-    return tbl1, tbl2
+    if not found then
+        AddReportLine(flatRows, groupedRows, L["没有收入"] .. NN)
+    end
 end
+
+local function BuildExpenseSection(preview, FB, flatRows, groupedRows)
+    AddReportLine(flatRows, groupedRows, SectionLine(preview, L["< 支 %s 出 >"], "sanjiao", "|cffffffff"))
+    local b = Maxb[FB] + 1
+    local bossRows = {}
+    for i = 1, BG.GetMaxi(FB, b), 1 do
+        local equipment = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
+        local amount = BG.Frame[FB]["boss" .. b]["jine" .. i]
+        if equipment then
+            local amountText = amount:GetText()
+            if tonumber(amountText) and tonumber(amountText) ~= 0 then
+                local equipmentName = equipment:GetText()
+                if equipmentName:gsub(" ", "") == "" then
+                    equipmentName = L["支出"]
+                end
+                local line
+                if preview then
+                    line = equipmentName .. " " .. amountText
+                else
+                    line = BG.STC_g1(equipmentName) .. " " .. BG.STC_g1(amountText)
+                end
+                tinsert(bossRows, line)
+            end
+        end
+    end
+    if #bossRows ~= 0 then
+        table.insert(groupedRows, CopyTextRows(bossRows))
+        for _, entry in ipairs(bossRows) do
+            table.insert(flatRows, entry)
+        end
+    else
+        AddReportLine(flatRows, groupedRows, L["没有支出"] .. NN)
+    end
+end
+
+local function CreateListTable(preview, flatRows)
+    local FB = BG.FB1
+    local flatRows = flatRows or {}
+    local groupedRows = {}
+    -- 收入
+    BuildIncomeSection(preview, FB, flatRows, groupedRows)
+    -- 支出
+    BuildExpenseSection(preview, FB, flatRows, groupedRows)
+    -- 总览和工资
+    flatRows, groupedRows = ZongLan(preview, flatRows, groupedRows)
+    return flatRows, groupedRows
+end
+
+local MODIFIER_REPORTS = {
+    { isDown = IsAltKeyDown, title = L["———通报总览———"], build = ZongLan },
+    { isDown = IsShiftKeyDown, title = L["———通报罚款———"], build = FaKuan },
+    { isDown = IsControlKeyDown, title = L["———通报支出———"], build = ZhiChu },
+}
+
 local function OnEnter(self)
     self.OnEnter = true
     if BG.Backing then return end
-    local FB = BG.FB1
-    local tbl1 = {}
+    local flatRows = {}
 
-    if IsAltKeyDown() then
-        local type = nil
-        local text = L["———通报总览———"]
-        table.insert(tbl1, text)
-        -- 总览和工资
-        tbl1 = ZongLan(type, tbl1)
-    elseif IsShiftKeyDown() then
-        local type = nil
-        local text = L["———通报罚款———"]
-        table.insert(tbl1, text)
-        -- 罚款
-        tbl1 = FaKuan(type, tbl1)
-    elseif IsControlKeyDown() then
-        local type = nil
-        local text = L["———通报支出———"]
-        table.insert(tbl1, text)
-        -- 支出
-        tbl1 = ZhiChu(type, tbl1)
-    else
-        local text = L["———通报账单———"]
-        table.insert(tbl1, text)
-        local text = format(BG.STC_b1(L["表格：%s"]), BG.FB1)
-        table.insert(tbl1, text)
-        tbl1 = CreateListTable(nil, tbl1)
+    local matched
+    for _, rule in ipairs(MODIFIER_REPORTS) do
+        if rule.isDown() then
+            table.insert(flatRows, rule.title)
+            flatRows = rule.build(nil, flatRows)
+            matched = true
+            break
+        end
+    end
+    if not matched then
+        table.insert(flatRows, L["———通报账单———"])
+        table.insert(flatRows, format(BG.STC_b1(L["表格：%s"]), BG.FB1))
+        flatRows = CreateListTable(nil, flatRows)
     end
 
     GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0);
     GameTooltip:ClearLines()
-    for i, v in ipairs(tbl1) do
-        GameTooltip:AddLine(v)
+    for i, entry in ipairs(flatRows) do
+        GameTooltip:AddLine(entry)
     end
     GameTooltip:Show()
     GameTooltip:SetClampedToScreen(false)
@@ -497,6 +463,7 @@ local function OnEnter(self)
     BiaoGeTooltip2:AddLine(L["长按ALT：仅通报总览"], 0.5, 0.5, 0.5)
     BiaoGeTooltip2:Show()
 end
+
 local function OnClick(self)
     local FB = BG.FB1
     BG.FrameHide(0)
@@ -506,123 +473,128 @@ local function OnClick(self)
         self:SetEnabled(true)
     end)
 
-    if IsAltKeyDown() then
-        -- 总览和工资
-        local _, tbl = ZongLan(true)
-        tinsert(tbl, 1, { L["———通报总览———"] })
-        BG.SendMsgToRaid(tbl)
-    elseif IsShiftKeyDown() then
-        -- 罚款
-        local _, tbl = FaKuan(true)
-        tinsert(tbl, 1, { L["———通报罚款———"] })
-        BG.SendMsgToRaid(tbl)
-    elseif IsControlKeyDown() then
-        -- 支出
-        local _, tbl = ZhiChu(true)
-        tinsert(tbl, 1, { L["———通报支出———"] })
-        BG.SendMsgToRaid(tbl)
-    else
+    local matched
+    for _, rule in ipairs(MODIFIER_REPORTS) do
+        if rule.isDown() then
+            local _, rows = rule.build(true)
+            tinsert(rows, 1, { rule.title })
+            BG.SendMsgToRaid(rows)
+            matched = true
+            break
+        end
+    end
+    if not matched then
         if HasQianKuan() then
             BG.PlaySound("qiankuan")
         end
-        local channel = BiaoGe.NotifyChannel
-        if channel == "RAID" then
+        local channelName = BiaoGe.NotifyChannel
+        if channelName == "RAID" then
             BG.After(2, function()
-                for ii in ipairs(BiaoGe[FB].tradeTbl) do
-                    local text = "DuiZhang-"
-                    local yes = true
-                    for i, v in ipairs(BiaoGe[FB].tradeTbl[ii]) do
+                for groupIdx in ipairs(BiaoGe[FB].tradeTbl) do
+                    local line = "DuiZhang-"
+                    local found = true
+                    for i, entry in ipairs(BiaoGe[FB].tradeTbl[groupIdx]) do
                         if i == 1 then
-                            if BiaoGe[v.FB]["boss" .. v.b]["maijia" .. v.i] then
+                            if BiaoGe[entry.FB]["boss" .. entry.b]["maijia" .. entry.i] then
                                 -- DuiZhang-苍牧-
-                                text = text .. BiaoGe[v.FB]["boss" .. v.b]["maijia" .. v.i] .. "-"
+                                line = line .. BiaoGe[entry.FB]["boss" .. entry.b]["maijia" .. entry.i] .. "-"
                             else
-                                yes = nil
+                                found = nil
                                 break
                             end
                         end
-                        local jine = BiaoGe[v.FB]["boss" .. v.b]["jine" .. v.i]
-                        if not jine then
-                            yes = nil
+                        local amount = BiaoGe[entry.FB]["boss" .. entry.b]["jine" .. entry.i]
+                        if not amount then
+                            found = nil
                             break
                         end
-                        if jine == L["打包交易"] then
-                            jine = "t"
+                        if amount == L["打包交易"] then
+                            amount = "t"
                         end
                         -- DuiZhang-苍牧-24478 10000,27854 t,27503 t,
-                        text = text .. v.itemID .. " " .. jine .. ","
+                        line = line .. entry.itemID .. " " .. amount .. ","
                     end
-                    if yes then
-                        C_ChatInfo.SendAddonMessage("BiaoGe", text, "RAID")
+                    if found then
+                        SendGateway.Addon(C.PREFIX_MAIN, line, "RAID")
                     end
                 end
             end)
         end
-        local _, tbl = CreateListTable(true)
-        tinsert(tbl, 1, { format(L["表格：%s"], BG.FB1) })
-        tinsert(tbl, 1, { L["———通报账单———"] })
-        tinsert(tbl, { L["—感谢使用金团表格—"] })
+        local _, rows = CreateListTable(true)
+        tinsert(rows, 1, { format(L["表格：%s"], BG.FB1) })
+        tinsert(rows, 1, { L["———通报账单———"] })
+        tinsert(rows, { L["—感谢使用金团表格—"] })
         BG.After(.2, function()
-            BG.SendMsgToRaid(tbl)
+            BG.SendMsgToRaid(rows)
         end)
     end
     BG.PlaySound(2)
 end
 
-function BG.ZhangDanUI(lastbt)
-    local bt = BG.CreateButton(BG.FBMainFrame)
-    bt:SetSize(60, 25)
-    bt.jiange = 5
-    if lastbt then
-        bt:SetPoint("LEFT", lastbt, "RIGHT", bt.jiange, 0)
-    else
-        local x = -290
-        if BG.hasWCL then
-            x = x - 60
+local MODIFIER_KEYS = { "LALT", "RALT", "LSHIFT", "RSHIFT", "LCTRL", "RCTRL" }
+
+local function IsWindowModifier(key)
+    for _, name in ipairs(MODIFIER_KEYS) do
+        if key == name then
+            return true
         end
-        bt:SetPoint("BOTTOMRIGHT", BG.MainFrame, "BOTTOMRIGHT", x, 38)
     end
-    bt:SetText(L["账单"])
-    BG.ButtonZhangDan = bt
-    tinsert(BG.TongBaoButtons, bt)
+    return false
+end
+
+local function OnLeave(self)
+    self.OnEnter = false
+    GameTooltip:Hide()
+    GameTooltip:SetClampedToScreen(true)
+    BiaoGeTooltip2:Hide()
+end
+
+function BG.ZhangDanUI(previousButton)
+    local tmpValue5 = BG.CreateButton(BG.FBMainFrame)
+    tmpValue5:SetSize(60, 25)
+    tmpValue5.jiange = 5
+    if previousButton then
+        tmpValue5:SetPoint("LEFT", previousButton, "RIGHT", tmpValue5.jiange, 0)
+    else
+        local offsetX = -290
+        if BG.hasWCL then
+            offsetX = offsetX - 60
+        end
+        tmpValue5:SetPoint("BOTTOMRIGHT", BG.MainFrame, "BOTTOMRIGHT", offsetX, 38)
+    end
+    tmpValue5:SetText(L["账单"])
+    BG.ButtonZhangDan = tmpValue5
+    tinsert(BG.TongBaoButtons, tmpValue5)
 
     -- 鼠标悬停提示账单
-    bt:SetScript("OnEnter", OnEnter)
-    bt:SetScript("OnLeave", function(self)
-        self.OnEnter = false
-        GameTooltip:Hide()
-        GameTooltip:SetClampedToScreen(true)
-        BiaoGeTooltip2:Hide()
-    end)
+    tmpValue5:SetScript("OnEnter", OnEnter)
+    tmpValue5:SetScript("OnLeave", OnLeave)
     -- 点击通报账单
-    bt:SetScript("OnClick", OnClick)
+    tmpValue5:SetScript("OnClick", OnClick)
 
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("MODIFIER_STATE_CHANGED")
-    f:SetScript("OnEvent", function(self, event, enter)
-        if (enter == "LALT" or enter == "RALT"
-                or enter == "LSHIFT" or enter == "RSHIFT"
-                or enter == "LCTRL" or enter == "RCTRL")
-            and bt.OnEnter then
-            OnEnter(bt)
+    local frame = CreateFrame("Frame")
+    frame:RegisterEvent("MODIFIER_STATE_CHANGED")
+    frame:SetScript("OnEvent", function(self, event, key)
+        if IsWindowModifier(key) and tmpValue5.OnEnter then
+            OnEnter(tmpValue5)
         end
     end)
 
-    local t = bt:CreateFontString()
+    local t = tmpValue5:CreateFontString()
     t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-    t:SetPoint("RIGHT", bt, "LEFT", -5, 0)
+    t:SetPoint("RIGHT", tmpValue5, "LEFT", -5, 0)
     t:SetTextColor(1, 0.82, 0)
     t:SetText(L["通报："])
 
-    return bt
+    return tmpValue5
 end
 
 local function FormatExpenses(self, event, msg, ...)
-    local text, money = msg:match("^(" .. L["人均工资"] .. L["："] .. ")(%d+)$")
-    if money then
-        money = BG.FormatNumber(money, 5)
-        local newMsg = text .. money
-        return false, newMsg, ...
+    local line, moneyText = msg:match("^(" .. L["人均工资"] .. L["："] .. ")(%d+)$")
+    if moneyText then
+        moneyText = BG.FormatNumber(moneyText, 5)
+        local replacedMessage = line .. moneyText
+        return false, replacedMessage, ...
     end
 end
 ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID", FormatExpenses)

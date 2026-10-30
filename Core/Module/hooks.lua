@@ -16,12 +16,105 @@ local player = BG.playerName
 
 local r, g, b = GetClassRGB(nil, "player")
 
+local CURRENCY_ITEM_IDS = {
+    [247796] = 395,
+    [256883] = 395,
+    [248329] = 3350,
+    [266272] = 3414,
+}
+
+local function InstallSecureHook(target, name, callback)
+    if target then
+        hooksecurefunc(target, name, callback)
+    else
+        hooksecurefunc(name, callback)
+    end
+end
+
+local function InstallTooltipHook(enumKey, eventName, callback)
+    if BG.IsRetail then
+        TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType[enumKey], callback)
+    else
+        GameTooltip:HookScript(eventName, callback)
+    end
+end
+
+local function RunAll(funcs, ...)
+    for _, callback in ipairs(funcs) do
+        callback(...)
+    end
+end
+
+local function FormatAuctionMoney(record)
+    return BG.FormatNumber(record.jine, 2) .. "(|c" .. select(4, GetClassColor(record.class)) .. record.maijia .. "|r)"
+end
+
+local function AddAuctionLines(self, records, label, red, green, blue)
+    for _, record in ipairs(records) do
+        self:AddDoubleLine(label, FormatAuctionMoney(record), red, green, blue)
+    end
+end
+
+local function HookChatFrameHyperlinks()
+    local index = 1
+    while _G["ChatFrame" .. index] do
+        local chatFrame = _G["ChatFrame" .. index]
+        chatFrame:HookScript("OnHyperlinkEnter", function(_, link)
+            BG.Show_AllHighlight(link, "chat")
+        end)
+        chatFrame:HookScript("OnHyperlinkLeave", BG.Hide_AllHighlight)
+        index = index + 1
+    end
+end
+
+local function HookBagnonContainerHooks()
+    local handler = ContainerFrameItemButton_OnLeave
+    if BG.IsRetail then
+        handler = GameTooltip_Hide
+    end
+    local index = 1
+    while _G["BagnonContainerItem" .. index] do
+        _G["BagnonContainerItem" .. index]:HookScript("OnLeave", handler)
+        index = index + 1
+    end
+end
+
+local function CreateBagHighlightDriver()
+    local link
+    local dalayFrame = CreateFrame("Frame")
+    dalayFrame.t = 0
+    dalayFrame:Hide()
+    local function OnUpdate(self, t)
+        self.t = self.t + t
+        if self.t >= .1 then
+            self:Hide()
+            if link then
+                BG.Show_AllHighlight(link, "bag")
+            end
+        end
+    end
+    local function OnHide()
+        dalayFrame:Hide()
+        BG.Hide_AllHighlight()
+    end
+    dalayFrame:SetScript('OnUpdate', OnUpdate)
+
+    local function OnEnter(self, button)
+        local b = self:GetParent():GetID()
+        local i = self:GetID()
+        link = C_Container.GetContainerItemLink(b, i)
+        dalayFrame.t = 0
+        dalayFrame:Show()
+    end
+    return OnEnter, OnHide
+end
+
 BG.Init2(function()
     local itemFucs = {}
     local unitFucs = {}
     -- 单位
     do
-        -- 鼠标提示玩家的欠款和罚款
+        -- 悬停玩家时展示其欠款与罚款
         do
             local fk = {}
             local qk = {}
@@ -32,14 +125,13 @@ BG.Init2(function()
                 qk = {}
                 BG.PairFBItem(function(item, buyer, money, b, i)
                     local name = buyer:GetText()
-                    if name ~= '' then
-                        fk[name] = fk[name] or 0
-                        qk[name] = qk[name] or 0
-                        if b == Maxb[FB] then
-                            fk[name] = fk[name] + (tonumber(money:GetText()) or 0)
-                        end
-                        qk[name] = qk[name] + (tonumber(BiaoGe[FB]["boss" .. b]["qiankuan" .. i]) or 0)
+                    if name == '' then return end
+                    fk[name] = fk[name] or 0
+                    qk[name] = qk[name] or 0
+                    if b == Maxb[FB] then
+                        fk[name] = fk[name] + (tonumber(money:GetText()) or 0)
                     end
+                    qk[name] = qk[name] + (tonumber(BiaoGe[FB]["boss" .. b]["qiankuan" .. i]) or 0)
                 end)
             end
             C_Timer.NewTicker(2, Get)
@@ -49,15 +141,14 @@ BG.Init2(function()
                 if not IsInRaid(1) then return end
                 local fkMoney = fk[name] or 0
                 local qkMoney = qk[name] or 0
+                if fkMoney == 0 and qkMoney == 0 then return end
                 if fkMoney ~= 0 then
                     self:AddLine(L["罚款："] .. BG.STC_w1(BG.FormatNumber(fkMoney, 2)), 1, .82, 0)
                 end
                 if qkMoney ~= 0 then
                     self:AddLine(L["欠款："] .. BG.STC_w1(BG.FormatNumber(qkMoney, 2)), 1, .82, 0)
                 end
-                if fkMoney ~= 0 or qkMoney ~= 0 then
-                    self:Show()
-                end
+                self:Show()
             end
             tinsert(unitFucs, AddUnitInfo)
         end
@@ -69,7 +160,6 @@ BG.Init2(function()
                 local currentLevel = BG.MeetingHornRegimentData[name]
                 if not currentLevel then return end
                 currentLevel = currentLevel.level
-                -- local currentLevel = 5 -- test
                 local nextText = _G["GameTooltipTextLeft1"]
                 local str = nextText:GetText() or ''
                 nextText:SetFormattedText('%s|T%s%s|t', str, BG.MeetingHornStarTexture(currentLevel), BG.MeetingHornGetCoords("tooltip"))
@@ -81,38 +171,29 @@ BG.Init2(function()
 
     -- 物品
     do
-        -- MOP在正义奖章和一袋岩石碎片里显示正义点数数量
+        -- MOP版本中，正义奖章与一袋岩石碎片会显示正义点数的数量
         if BG.IsMOP then
-            local itemIDs = {
-                [247796] = 395,
-                [256883] = 395,
-                [248329] = 3350,
-                [266272] = 3414,
-            }
-
             local function AddInfo(self, itemID, link, name)
                 if BiaoGe.options["showCurrencyCount"] ~= 1 then return end
-                local currency = itemIDs[itemID]
-                if currency then
-                    local info = C_CurrencyInfo.GetCurrencyInfo(currency)
-                    local name = info.name
-                    local count = info.quantity
-                    local maxCount = info.maxQuantity
-                    local tex = info.iconFileID
-                    local quality = info.quality
-                    local r, g, b = GetItemQualityColor(quality)
-                    self:AddLine(" ")
-                    self:AddLine("< BGForge >", 0, .75, 1)
-                    if not info.useTotalEarnedForMaxQty then
-                        self:AddDoubleLine(AddTexture(tex) .. name, BG.FormatNumber(count) .. "/" .. BG.FormatNumber(maxCount), r, g, b, 1, 1, 1)
-                    else
-                        local totalEarned = info.totalEarned
-                        self:AddDoubleLine(AddTexture(tex) .. name,
-                            format(L["%s(总上限:%s/%s)"], count, BG.FormatNumber(totalEarned), BG.FormatNumber(maxCount)), r, g, b, 1, 1, 1)
-                    end
-                    self:Show()
-                    return
+                local currency = CURRENCY_ITEM_IDS[itemID]
+                if not currency then return end
+                local info = C_CurrencyInfo.GetCurrencyInfo(currency)
+                local currencyName = info.name
+                local count = info.quantity
+                local maxCount = info.maxQuantity
+                local tex = info.iconFileID
+                local quality = info.quality
+                local r, g, b = GetItemQualityColor(quality)
+                self:AddLine(" ")
+                self:AddLine("< BGForge >", 0, .75, 1)
+                if info.useTotalEarnedForMaxQty then
+                    local totalEarned = info.totalEarned
+                    self:AddDoubleLine(AddTexture(tex) .. currencyName,
+                        format(L["%s(总上限:%s/%s)"], count, BG.FormatNumber(totalEarned), BG.FormatNumber(maxCount)), r, g, b, 1, 1, 1)
+                else
+                    self:AddDoubleLine(AddTexture(tex) .. currencyName, BG.FormatNumber(count) .. "/" .. BG.FormatNumber(maxCount), r, g, b, 1, 1, 1)
                 end
+                self:Show()
             end
             tinsert(itemFucs, AddInfo)
         end
@@ -128,8 +209,8 @@ BG.Init2(function()
             if not info.isBound then
                 notBound = true
             else
-                for i = 1, self:NumLines() do
-                    local tx = _G["GameTooltipTextLeft" .. i]:GetText()
+                for lineIndex = 1, self:NumLines() do
+                    local tx = _G["GameTooltipTextLeft" .. lineIndex]:GetText()
                     if tx then
                         local time = tx:match(BIND_TRADE_TIME_REMAINING:gsub("%%s", "(.+)"))
                         if time then
@@ -137,90 +218,38 @@ BG.Init2(function()
                             break
                         end
                     end
-                    i = i + 1
                 end
             end
-            if notBound then
-                local trade = {}
-                local notrade = {}
-                for _, v in pairs(BiaoGe[FB].auctionLog) do
-                    if v.type == 1 and BG.IsSameItem(info.hyperlink, v.zhuangbei) then
-                        tinsert(v.trade and trade or notrade, v)
-                    end
-                end
-                if next(trade) or next(notrade) then
-                    self:AddLine(" ")
-                    for _, v in ipairs(trade) do
-                        local text = BG.FormatNumber(v.jine, 2) .. "(|c" .. select(4, GetClassColor(v.class)) .. v.maijia .. "|r)"
-                        self:AddDoubleLine(L["已拍已交易"], text, 0, 1, 0)
-                    end
-                    for _, v in ipairs(notrade) do
-                        local text = BG.FormatNumber(v.jine, 2) .. "(|c" .. select(4, GetClassColor(v.class)) .. v.maijia .. "|r)"
-                        self:AddDoubleLine(L["已拍未交易"], text, 1, 0, 0)
-                    end
-                    self:Show()
+            if not notBound then return end
+            local trade = {}
+            local notrade = {}
+            for _, record in pairs(BiaoGe[FB].auctionLog) do
+                if record.type == 1 and BG.IsSameItem(info.hyperlink, record.zhuangbei) then
+                    tinsert(record.trade and trade or notrade, record)
                 end
             end
+            if not (next(trade) or next(notrade)) then return end
+            self:AddLine(" ")
+            AddAuctionLines(self, trade, L["已拍已交易"], 0, 1, 0)
+            AddAuctionLines(self, notrade, L["已拍未交易"], 1, 0, 0)
+            self:Show()
         end
-        hooksecurefunc(GameTooltip, "SetBagItem", SetBagItem)
+        InstallSecureHook(GameTooltip, "SetBagItem", SetBagItem)
 
-        -- 表格/背包高亮对应物品
+        -- 在表格和背包里高亮与之对应的物品
         do
-            local i = 1
-            while _G["ChatFrame" .. i] do
-                _G["ChatFrame" .. i]:HookScript("OnHyperlinkEnter", function(self, link, text)
-                    BG.Show_AllHighlight(link, "chat")
-                end)
-                _G["ChatFrame" .. i]:HookScript("OnHyperlinkLeave", BG.Hide_AllHighlight)
-                i = i + 1
-            end
+            HookChatFrameHyperlinks()
 
             if IsAddOnLoaded("Bagnon") then
-                BG.After(1, function()
-                    local i = 1
-                    while _G["BagnonContainerItem" .. i] do
-                        local bag = _G["BagnonContainerItem" .. i]
-                        if BG.IsRetail then
-                            bag:HookScript("OnLeave", GameTooltip_Hide)
-                        else
-                            bag:HookScript("OnLeave", ContainerFrameItemButton_OnLeave)
-                        end
-                        i = i + 1
-                    end
-                end)
+                BG.After(1, HookBagnonContainerHooks)
             end
 
-            local link
-            local dalayFrame = CreateFrame("Frame")
-            dalayFrame.t = 0
-            dalayFrame:Hide()
-            local function OnUpdate(self, t)
-                self.t = self.t + t
-                if self.t >= .1 then
-                    self:Hide()
-                    if link then
-                        BG.Show_AllHighlight(link, "bag")
-                    end
-                end
-            end
-            local function OnHide()
-                dalayFrame:Hide()
-                BG.Hide_AllHighlight()
-            end
-            dalayFrame:SetScript('OnUpdate', OnUpdate)
-
-            local function OnEnter(self, button)
-                local b = self:GetParent():GetID()
-                local i = self:GetID()
-                link = C_Container.GetContainerItemLink(b, i)
-                dalayFrame.t = 0
-                dalayFrame:Show()
-            end
-            hooksecurefunc("ContainerFrameItemButton_OnEnter", OnEnter)
+            local OnEnter, OnHide = CreateBagHighlightDriver()
+            InstallSecureHook(nil, "ContainerFrameItemButton_OnEnter", OnEnter)
             if BG.IsRetail then
-                hooksecurefunc("GameTooltip_Hide", OnHide)
+                InstallSecureHook(nil, "GameTooltip_Hide", OnHide)
             else
-                hooksecurefunc("ContainerFrameItemButton_OnLeave", OnHide)
+                InstallSecureHook(nil, "ContainerFrameItemButton_OnLeave", OnHide)
             end
         end
     end
@@ -233,16 +262,9 @@ BG.Init2(function()
             local _, unit = self:GetUnit()
             if BG.IsSecret(unit) then return end
             if not unit or not UnitIsPlayer(unit) then return end
-            local name = BG.GN(unit)
-            for _, fuc in ipairs(unitFucs) do
-                fuc(self, unit, name)
-            end
+            RunAll(unitFucs, self, unit, BG.GN(unit))
         end
-        if BG.IsRetail then
-            TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, UnitGo)
-        else
-            GameTooltip:HookScript("OnTooltipSetUnit", UnitGo)
-        end
+        InstallTooltipHook("Unit", "OnTooltipSetUnit", UnitGo)
 
         local function ItemGo(self)
             if self ~= GameTooltip  then return end
@@ -250,15 +272,8 @@ BG.Init2(function()
             if not link then return end
             local itemID = GetItemID(link)
             if not itemID then return end
-            itemID = BG.GetLeiTingItem(itemID)
-            for _, fuc in ipairs(itemFucs) do
-                fuc(self, itemID, link, name)
-            end
+            RunAll(itemFucs, self, BG.GetLeiTingItem(itemID), link, name)
         end
-        if BG.IsRetail then
-            TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, ItemGo)
-        else
-            GameTooltip:HookScript("OnTooltipSetItem", ItemGo)
-        end
+        InstallTooltipHook("Item", "OnTooltipSetItem", ItemGo)
     end
 end)

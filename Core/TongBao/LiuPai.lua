@@ -8,134 +8,161 @@ local Maxb = ns.Maxb
 local GetItemID = ns.GetItemID
 
 
-local function CreateListTable(onClick, tbl1)
-    local FB = BG.FB1
-    local tbl1 = tbl1 or {}
-    local tbl2 = {}
+local function AppendReportLine(flatRows, groupedRows, text)
+    table.insert(flatRows, text)
+    table.insert(groupedRows, { text })
+end
 
-    local text = L["———通报流拍装备———"]
-    table.insert(tbl1, text)
-    table.insert(tbl2, { text })
-    local num = 0
+local function UnsoldSuffix(preview, itemType, itemLevel)
+    if itemType ~= 2 and itemType ~= 4 then
+        return ""
+    end
+    if preview then
+        return "(" .. itemLevel .. ")"
+    end
+    return "|cff9370DB(" .. itemLevel .. ")"
+end
 
-    local yes
-    local sellSum = 0
-    for b = 1, Maxb[FB] - 1 do
-        local tbl_boss = {}
-        for i = 1, BG.GetMaxi(FB, b) do
-            local zb = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
-            if zb and zb:GetText() ~= "" and GetItemID(zb:GetText())
-                and BG.Frame[FB]["boss" .. b]["maijia" .. i]:GetText() == ""
-                and BG.Frame[FB]["boss" .. b]["jine" .. i]:GetText() == "" then
-                local name, link, quality, level, _, _, _, _, _, _, sellPrice, typeID = GetItemInfo(zb:GetText())
-                local leveltext = ""
-                if typeID == 2 or typeID == 4 then
-                    if onClick then
-                        leveltext = "(" .. level .. ")"
-                    else
-                        leveltext = "|cff9370DB(" .. level .. ")"
-                    end
-                end
-                local text = L["流拍："] .. zb:GetText() .. leveltext
-                table.insert(tbl_boss, text)
-                num = num + 1
-                sellSum = sellSum + (sellPrice or 0)
+local function ReadUnsold(preview, raidKey)
+    local groups = {}
+    local counter = 0
+    local vendorSum = 0
+    local bossCount = Maxb[raidKey] - 1
+    for bossIdx = 1, bossCount do
+        local bossRows = {}
+        local slotCount = BG.GetMaxi(raidKey, bossIdx)
+        for idx = 1, slotCount do
+            local equipmentField = BG.Frame[raidKey]["boss" .. bossIdx]["zhuangbei" .. idx]
+            if equipmentField and equipmentField:GetText() ~= "" and GetItemID(equipmentField:GetText())
+                and BG.Frame[raidKey]["boss" .. bossIdx]["maijia" .. idx]:GetText() == ""
+                and BG.Frame[raidKey]["boss" .. bossIdx]["jine" .. idx]:GetText() == "" then
+                local unitName, hyperlink, itemQuality, itemLevel, _, _, _, _, _, _, vendorPrice, itemType = GetItemInfo(equipmentField:GetText())
+                local levelSuffix = UnsoldSuffix(preview, itemType, itemLevel)
+                tinsert(bossRows, L["流拍："] .. equipmentField:GetText() .. levelSuffix)
+                counter = counter + 1
+                vendorSum = vendorSum + (vendorPrice or 0)
             end
         end
-        if #tbl_boss ~= 0 then
-            yes = true
-            local text = ""
-            local b_tx
-            if b == Maxb[FB] - 1 or b == Maxb[FB] then
-                b_tx = L["项目："]
-            else
-                b_tx = L["Boss："]
-            end
-            local bossname2 = BG.Boss[FB]["boss" .. b].name2
-            local bosscolor = BG.Boss[FB]["boss" .. b].color
-            local text
-            if onClick then
-                text = b_tx .. bossname2
-            else
-                text = "|cff" .. bosscolor .. b_tx .. bossname2 .. RN
-            end
-
-            table.insert(tbl2, { text })
-            local tbl = {}
-            for i, v in ipairs(tbl_boss) do
-                tbl[i] = v
-            end
-            table.insert(tbl2, tbl)
-
-            table.insert(tbl_boss, 1, text)
-            for index, value in ipairs(tbl_boss) do
-                table.insert(tbl1, value)
-            end
+        if #bossRows ~= 0 then
+            tinsert(groups, { bossIdx = bossIdx, rows = bossRows })
         end
     end
-    if not yes then
-        local text = L["没有流拍装备"]
-        table.insert(tbl1, text)
-        table.insert(tbl2, { text })
+    return groups, counter, vendorSum
+end
+
+local function BossSectionTitle(preview, raidKey, bossIdx)
+    local header
+    if bossIdx == Maxb[raidKey] - 1 or bossIdx == Maxb[raidKey] then
+        header = L["项目："]
     else
-        local text
-        if onClick then
-            text = format(L["%s 流拍装备一共%s件 %s"], BG.SetRaidTargetingIcons(onClick, "chacha"), num, BG.SetRaidTargetingIcons(onClick, "chacha"))
-        else
-            text = "|cffffffff" .. format(L["%s 流拍装备一共%s件 %s"], BG.SetRaidTargetingIcons(onClick, "chacha"), num, BG.SetRaidTargetingIcons(onClick, "chacha"))
-        end
-        table.insert(tbl1, text)
-        table.insert(tbl2, { text })
-
-        if not onClick then
-            local text = "|cffffffff" .. format(L['流拍装备卖店总价：%s金'], BG.FormatNumber(floor(sellSum / 10000), 5))
-            table.insert(tbl1, text)
-            table.insert(tbl2, { text })
-        end
+        header = L["Boss："]
     end
-    return tbl1, tbl2, num
+    local bossLabel = BG.Boss[raidKey]["boss" .. bossIdx].name2
+    local bossColor = BG.Boss[raidKey]["boss" .. bossIdx].color
+    if preview then
+        return header .. bossLabel
+    end
+    return "|cff" .. bossColor .. header .. bossLabel .. RN
+end
+
+local function AppendBossGroup(flatRows, groupedRows, preview, raidKey, group)
+    local title = BossSectionTitle(preview, raidKey, group.bossIdx)
+    table.insert(groupedRows, { title })
+
+    local rows = {}
+    for idx, entry in ipairs(group.rows) do
+        rows[idx] = entry
+    end
+    table.insert(groupedRows, rows)
+
+    table.insert(flatRows, title)
+    for _, entry in ipairs(group.rows) do
+        table.insert(flatRows, entry)
+    end
+end
+
+local function CreateListTable(preview, flatRows)
+    local raidKey = BG.FB1
+    local flatRows = flatRows or {}
+    local groupedRows = {}
+
+    AppendReportLine(flatRows, groupedRows, L["———通报流拍装备———"])
+    local groups, counter, vendorSum = ReadUnsold(preview, raidKey)
+
+    if #groups == 0 then
+        AppendReportLine(flatRows, groupedRows, L["没有流拍装备"])
+        return flatRows, groupedRows, counter
+    end
+
+    for _, group in ipairs(groups) do
+        AppendBossGroup(flatRows, groupedRows, preview, raidKey, group)
+    end
+
+    local summary
+    if preview then
+        summary = format(L["%s 流拍装备一共%s件 %s"], BG.SetRaidTargetingIcons(preview, "chacha"), counter, BG.SetRaidTargetingIcons(preview, "chacha"))
+    else
+        summary = "|cffffffff" .. format(L["%s 流拍装备一共%s件 %s"], BG.SetRaidTargetingIcons(preview, "chacha"), counter, BG.SetRaidTargetingIcons(preview, "chacha"))
+    end
+    table.insert(flatRows, summary)
+    table.insert(groupedRows, { summary })
+
+    if not preview then
+        local vendorLine = "|cffffffff" .. format(L['流拍装备卖店总价：%s金'], BG.FormatNumber(floor(vendorSum / 10000), 5))
+        table.insert(flatRows, vendorLine)
+        table.insert(groupedRows, { vendorLine })
+    end
+    return flatRows, groupedRows, counter
+end
+
+local function ShowReportTooltip(anchor, lines)
+    GameTooltip:SetOwner(anchor, "ANCHOR_TOPLEFT", 0, 0);
+    GameTooltip:ClearLines()
+    for _, entry in ipairs(lines) do
+        GameTooltip:AddLine(entry)
+    end
+    GameTooltip:Show()
+    GameTooltip:SetClampedToScreen(false)
+end
+
+local function HideReportTooltip()
+    GameTooltip:Hide()
+    GameTooltip:SetClampedToScreen(true)
+end
+
+local function SendReport(button, builder)
+    BG.FrameHide(0)
+    if BG.IsErrorSendChannel() then return end
+    button:SetEnabled(false)
+    C_Timer.After(2, function()
+        button:SetEnabled(true)
+    end)
+    local _, rows = builder(true)
+    BG.SendMsgToRaid(rows)
+
+    BG.PlaySound(2)
 end
 
 
-function BG.LiuPaiUI(lastbt)
-    local bt = BG.CreateButton(BG.ButtonZhangDan)
-    bt:SetSize(BG.ButtonZhangDan:GetWidth(), BG.ButtonZhangDan:GetHeight())
-    bt:SetPoint("LEFT", lastbt, "RIGHT", BG.ButtonZhangDan.jiange, 0)
-    bt:SetText(L["流拍"])
-    BG.ButtonLiuPai = bt
-    tinsert(BG.TongBaoButtons, bt)
+function BG.LiuPaiUI(previousButton)
+    local tmpValue = BG.CreateButton(BG.ButtonZhangDan)
+    tmpValue:SetSize(BG.ButtonZhangDan:GetWidth(), BG.ButtonZhangDan:GetHeight())
+    tmpValue:SetPoint("LEFT", previousButton, "RIGHT", BG.ButtonZhangDan.jiange, 0)
+    tmpValue:SetText(L["流拍"])
+    BG.ButtonLiuPai = tmpValue
+    tinsert(BG.TongBaoButtons, tmpValue)
 
-    bt:SetScript("OnEnter", function(self)
+    tmpValue:SetScript("OnEnter", function(self)
         if BG.Backing then return end
-        local FB = BG.FB1
-        local tx = {}
-        CreateListTable(nil, tx)
+        local markTexture = CreateListTable(nil)
 
-        GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0);
-        GameTooltip:ClearLines()
-        for i, v in ipairs(tx) do
-            GameTooltip:AddLine(v)
-        end
-        GameTooltip:Show()
-        GameTooltip:SetClampedToScreen(false)
+        ShowReportTooltip(self, markTexture)
     end)
-    bt:SetScript("OnLeave", function(self)
-        GameTooltip:Hide()
-        GameTooltip:SetClampedToScreen(true)
+    tmpValue:SetScript("OnLeave", HideReportTooltip)
+
+    tmpValue:SetScript("OnClick", function(self)
+        SendReport(self, CreateListTable)
     end)
 
-    bt:SetScript("OnClick", function(self)
-        BG.FrameHide(0)
-        if BG.IsErrorSendChannel() then return end
-        self:SetEnabled(false)
-        C_Timer.After(2, function()
-            bt:SetEnabled(true)
-        end)
-        local _, tbl = CreateListTable(true)
-        BG.SendMsgToRaid(tbl)
-
-        BG.PlaySound(2)
-    end)
-
-    return bt
+    return tmpValue
 end
