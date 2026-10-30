@@ -21,7 +21,7 @@ local function Size(t)
 end
 ns.Size = Size
 
-----------把16进制颜色转换成0-1RGB----------
+----------将16进制色值换算成0到1范围的RGB分量----------
 local function RGB(hex, Alpha)
     local red = hex:sub(1, 2)
     local green = hex:sub(3, 4)
@@ -39,7 +39,7 @@ local function RGB(hex, Alpha)
 end
 ns.RGB = RGB
 
-----------DB_Loot插入职业任务文本----------
+----------向DB_Loot补充职业任务说明文本----------
 local function ClassQuest(classID)
     local className, classFile, classID = GetClassInfo(classID)
     local color = select(4, GetClassColor(classFile))
@@ -50,44 +50,35 @@ ns.ClassQuest = ClassQuest
 
 -- 注册事件
 do
-    local addonLoadedFuncs = {}
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("ADDON_LOADED")
-    f:SetScript("OnEvent", function(self, event, addonName)
-        if addonName ~= AddonName then return end
-        self:UnregisterEvent("ADDON_LOADED")
-        for _, func in ipairs(addonLoadedFuncs) do
-            securecall(func)
-        end
-    end)
+    local LIFECYCLE = {
+        { event = "ADDON_LOADED", guard = function(name) return type(name) == "string" and name:lower() == AddonName:lower() end },
+        { event = "PLAYER_ENTERING_WORLD" },
+        { event = "PLAYER_LOGIN" },
+    }
+    local lifecycle = {}
+    for i = 1, #LIFECYCLE do
+        local spec = LIFECYCLE[i]
+        local queue = {}
+        lifecycle[i] = queue
+        local frame = CreateFrame("Frame")
+        frame:RegisterEvent(spec.event)
+        frame:SetScript("OnEvent", function(self, _, ...)
+            if spec.guard and not spec.guard(...) then return end
+            self:UnregisterEvent(spec.event)
+            for j = 1, #queue do
+                securecall(queue[j])
+            end
+        end)
+    end
+
     function BG.Init(func)
-        tinsert(addonLoadedFuncs, func)
+        tinsert(lifecycle[1], func)
     end
-
-    local enterWorldFuncs = {}
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    f:SetScript("OnEvent", function(self, event, ...)
-        self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-        for _, func in ipairs(enterWorldFuncs) do
-            securecall(func)
-        end
-    end)
     function BG.Init2(func)
-        tinsert(enterWorldFuncs, func)
+        tinsert(lifecycle[2], func)
     end
-
-    local loginFuncs = {}
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_LOGIN")
-    f:SetScript("OnEvent", function(self, event)
-        self:UnregisterEvent("PLAYER_LOGIN")
-        for _, func in ipairs(loginFuncs) do
-            securecall(func)
-        end
-    end)
     function BG.Init3(func)
-        tinsert(loginFuncs, func)
+        tinsert(lifecycle[3], func)
     end
 
     local events = {}
@@ -120,74 +111,55 @@ do
 end
 
 -- 版本号
-if GetCurrentRegion() ~= 5 then
+local ver = select(4, GetBuildInfo())
+local isTW = GetCurrentRegion() ~= 5
+if isTW then
     BG.IsTW = true
 end
 
-local ver = select(4, GetBuildInfo())
-if ver < 30000 then
-    BG.verLess2 = true
-end
-if ver >= 30000 then
-    BG.verOver3 = true
-end
-if ver >= 40000 then
-    BG.verOver4 = true
-else
-    BG.verLess3 = true
-end
-if ver >= 50000 then
-    BG.verOver5 = true
-else
-    BG.verLess4 = true
-end
+local function ApplyVersion(ver)
+    BG.verLess2 = ver < 30000
+    BG.verOver3 = ver >= 30000
+    BG.verOver4 = ver >= 40000
+    BG.verLess3 = ver < 40000
+    BG.verOver5 = ver >= 50000
+    BG.verLess4 = ver < 50000
 
-if ver < 20000 then
-    BG.IsVanilla = true
-    BG.onlyOneHard = true
-    if (C_Engraving and C_Engraving.IsEngravingEnabled()) then
-        BG.IsVanilla_Sod = true
-    else
-        BG.IsVanilla_60 = true
+    local rules = {
+        { lt = 20000, flags = { "IsVanilla" }, hard = true, vanilla = true },
+        { min = 20000, lt = 30000, flags = { "IsTBC" }, hard = true },
+        { min = 30000, lt = 38000, flags = { "IsWLK", "IsWLK_80" } },
+        { min = 38000, lt = 40000, flags = { "IsWLK", "IsTitan" }, hard = true },
+        { min = 40000, lt = 50000, flags = { "IsCTM" } },
+        { min = 50000, lt = 60000, flags = { "IsMOP" }, mop = true },
+        { min = 110000, lt = math.huge, flags = { "IsRetail" } },
+    }
+    for _, rule in ipairs(rules) do
+        if ver >= (rule.min or 0) and ver < rule.lt then
+            for _, flag in ipairs(rule.flags) do
+                BG[flag] = true
+            end
+            if rule.hard then
+                BG.onlyOneHard = true
+            end
+            if rule.vanilla then
+                if C_Engraving and C_Engraving.IsEngravingEnabled() then
+                    BG.IsVanilla_Sod = true
+                else
+                    BG.IsVanilla_60 = true
+                end
+            end
+            if rule.mop then
+                BG[BG.IsTW and "IsMOP_TW" or "IsMOP_CN"] = true
+            end
+            break
+        end
     end
 end
-
-if ver >= 20000 and ver < 30000 then
-    BG.IsTBC = true
-    BG.onlyOneHard = true
-end
-
-if ver >= 30000 and ver < 40000 then
-    BG.IsWLK = true
-    if ver >= 38000 then
-        BG.IsTitan = true
-        BG.onlyOneHard = true
-    else
-        BG.IsWLK_80 = true
-    end
-end
-
-if ver >= 40000 and ver < 50000 then
-    BG.IsCTM = true
-end
-
-if ver >= 50000 and ver < 60000 then
-    BG.IsMOP = true
-    if BG.IsTW then
-        BG.IsMOP_TW = true
-    else
-        BG.IsMOP_CN = true
-    end
-    -- BG.IsTW = true
-    -- BG.IsMOP_TW = true
-    -- BG.IsMOP_CN = nil
-end
-
-if ver >= 110000 then
-    BG.IsRetail = true
-end
+ApplyVersion(ver)
 
 BG.IsNewUI = true
+
 
 
 function BG.IsWLKFB(FB)

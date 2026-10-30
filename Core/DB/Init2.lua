@@ -1,13 +1,14 @@
 local AddonName, ns = ...
 
 local L             = ns.L
+local C = ns.Protocol
 local IsAddOnLoaded = IsAddOnLoaded or C_AddOns.IsAddOnLoaded
 local GetLootMethod = GetLootMethod or C_PartyInfo.GetLootMethod
 local GetAddOnMetadata = GetAddOnMetadata or C_AddOns.GetAddOnMetadata
 
-C_ChatInfo.RegisterAddonMessagePrefix("BiaoGe")
-C_ChatInfo.RegisterAddonMessagePrefix("BiaoGe2")
-C_ChatInfo.RegisterAddonMessagePrefix("BiaoGeWorldBoss")
+C_ChatInfo.RegisterAddonMessagePrefix(C.PREFIX_MAIN)
+C_ChatInfo.RegisterAddonMessagePrefix(C.PREFIX_AUX)
+C_ChatInfo.RegisterAddonMessagePrefix(C.PREFIX_WORLD_BOSS)
 
 BiaoGeTooltip = CreateFrame("GameTooltip", "BiaoGeTooltip", UIParent, "GameTooltipTemplate")   -- 通用隐藏物品提示读取
 BiaoGeTooltip2 = CreateFrame("GameTooltip", "BiaoGeTooltip2", UIParent, "GameTooltipTemplate") -- 用于装备库
