@@ -4,6 +4,8 @@ local AddonName, ns = ...
 local LibBG         = ns.LibBG
 local L             = ns.L
 
+local C = ns.Protocol
+local SendGateway = ns.SendGateway
 local Size          = ns.Size
 local RGB           = ns.RGB
 local GetClassRGB   = ns.GetClassRGB
@@ -55,68 +57,116 @@ BG.Init(function()
     local sendingCount = {}
     local notShowSendingText = {}
 
-    local function UpdateGuildFrame(frame)
+    local function UpdateGuildFrame(panel)
         if IsInRaid(1) then
-            frame:SetWidth(1)
-            frame:Hide()
+            panel:SetWidth(1)
+            panel:Hide()
         elseif IsInGuild() then
-            local numTotal, numOnline, numOnlineAndMobile = GetNumGuildMembers()
-            frame.text:SetFormattedText(frame.title2, (Size(frame.table) .. "/" .. numOnline))
-            frame:SetWidth(frame.text:GetWidth() + 10)
-            frame:Show()
+            local totalMembers, onlineMembers, onlineMobileMembers = GetNumGuildMembers()
+            panel.text:SetFormattedText(panel.title2, (Size(panel.table) .. "/" .. onlineMembers))
+            panel:SetWidth(panel.text:GetWidth() + 10)
+            panel:Show()
         end
     end
 
-    local function UpdateAddonFrame(frame)
+    local function UpdateAddonFrame(panel)
         if IsInRaid(1) then
-            local count = 0
-            for name in pairs(frame.table) do
-                name = BG.GSN(name)
-                if BG.raidRosterName[name] then
-                    count = count + 1
+            local tally = 0
+            for memberName in pairs(panel.table) do
+                memberName = BG.GSN(memberName)
+                if BG.raidRosterName[memberName] then
+                    tally = tally + 1
                 end
             end
-            frame.text:SetFormattedText(frame.title2, (count .. "/" .. GetNumGroupMembers()))
-            frame:SetWidth(frame.text:GetWidth() + 10)
-            frame:Show()
+            panel.text:SetFormattedText(panel.title2, (tally .. "/" .. GetNumGroupMembers()))
+            panel:SetWidth(panel.text:GetWidth() + 10)
+            panel:Show()
         else
-            wipe(frame.table)
-            frame:Hide()
+            wipe(panel.table)
+            panel:Hide()
         end
     end
+    local function AddGuildRosterTooltipLine(memberName, versionText, classToken, onlineSlot, rowOffset)
+        local red, green, blue = GetClassColor(classToken)
+        GameTooltip:AddDoubleLine(BG.GSN(memberName), versionText, red, green, blue, 1, 1, 1)
+        if versionText == L["无"] then
+            local opacity = 0.3
+            local textLeft = _G["GameTooltipTextLeft" .. (onlineSlot + rowOffset)]
+            if textLeft then
+                textLeft:SetAlpha(opacity)
+            end
+            local textRight = _G["GameTooltipTextRight" .. (onlineSlot + rowOffset)]
+            if textRight then
+                textRight:SetAlpha(opacity)
+            end
+        end
+    end
+
     local function Guild_OnEnter(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0)
         GameTooltip:ClearLines()
         GameTooltip:AddLine(self.title, 0, 1, 0)
         GameTooltip:AddLine(" ")
-        local ii = 0
-        for i = 1, GetNumGuildMembers() do
-            local name, rankName, rankIndex, level, classDisplayName, zone,
-            publicNote, officerNote, isOnline, status, class, achievementPoints,
-            achievementRank, isMobile, canSoR, repStanding, guid = GetGuildRosterInfo(i)
-            if isOnline then
-                name = BG.GSN(name)
-                if ii > 40 then
+        local onlineSlot = 0
+        for slot = 1, GetNumGuildMembers() do
+            local memberName, rankLabel, rankId, itemLevel, classDisplayLabel, zoneName,
+            publicComment, officerComment, onlineNow, stateValue, classToken, achievementScore,
+            achievementRankValue, onMobile, canSortRoster, reputationStanding, playerGuid = GetGuildRosterInfo(slot)
+            if onlineNow then
+                memberName = BG.GSN(memberName)
+                if onlineSlot > 40 then
                     GameTooltip:AddLine("......")
                     break
                 end
-                ii = ii + 1
-                local line = 2
-                local Ver = self.table[name] or L["无"]
-                local r, g, b = GetClassColor(class)
-                GameTooltip:AddDoubleLine(BG.GSN(name), Ver, r, g, b, 1, 1, 1)
-                if Ver == L["无"] then
-                    local alpha = 0.3
-                    if _G["GameTooltipTextLeft" .. (ii + line)] then
-                        _G["GameTooltipTextLeft" .. (ii + line)]:SetAlpha(alpha)
-                    end
-                    if _G["GameTooltipTextRight" .. (ii + line)] then
-                        _G["GameTooltipTextRight" .. (ii + line)]:SetAlpha(alpha)
-                    end
-                end
+                onlineSlot = onlineSlot + 1
+                local rowOffset = 2
+                local versionText = self.table[memberName] or L["无"]
+                AddGuildRosterTooltipLine(memberName, versionText, classToken, onlineSlot, rowOffset)
             end
         end
         GameTooltip:Show()
+    end
+
+    local function ResolveMemberVersionText(self, entry, name)
+        local versionText = self.table[name]
+        local red, green, blue = 1, 1, 1
+        if not versionText then
+            if entry.online then
+                versionText = L["无"]
+            else
+                versionText = L["未知(离线)"]
+            end
+            if self.isAuciton then
+                if sendDone[name] then
+                    versionText = L["接收完毕，但未导入"]
+                elseif sending[name] then
+                    versionText = L["正在接收拍卖WA"]
+                end
+            end
+        elseif not self.isAuciton then
+            local clientVersion = BG.GetVerNum(BG.ver)
+            local memberVersion = BG.GetVerNum(versionText)
+            if clientVersion > memberVersion then
+                red = .6
+                green, blue = red, red
+            elseif clientVersion < memberVersion then
+                red, green, blue = 0, 1, 0
+            end
+        end
+        return versionText, red, green, blue
+    end
+
+    local function BuildRaidRoleText(entry, cursorY)
+        local roleText = ""
+        if entry.rank == 2 then
+            roleText = roleText .. AddTexture("interface/groupframe/ui-group-leadericon", cursorY)
+        elseif entry.rank == 1 then
+            roleText = roleText .. AddTexture("interface/groupframe/ui-group-assistanticon", cursorY)
+        end
+        if entry.isML then
+            roleText = roleText .. AddTexture("interface/groupframe/ui-group-masterlooter", cursorY)
+        end
+        return roleText
     end
 
     local function Addon_OnEnter(self, _, tooltip)
@@ -137,7 +187,7 @@ BG.Init(function()
             tooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0)
             tooltip:ClearLines()
         end
-        local line = 2
+        local rowOffset = 2
         tooltip:AddLine(self.title, 0, 1, 0)
         --[[         if self.isAuciton then
             tooltip:AddLine(L["需全团安装%s，没安装的人将会看不到拍卖窗口。"]:format(BG.IsRetail and "BGForge插件" or L["拍卖WA"]), 0.5, 0.5, 0.5, true)
@@ -158,50 +208,19 @@ BG.Init(function()
             end
         end ]]
         tooltip:AddLine(" ")
-        for i, v in ipairs(BG.SortRaidRosterInfo()) do
-            local name = v.name
-            local Ver = self.table[name]
-            local r, g, b = 1, 1, 1
-            if not Ver then
-                if v.online then
-                    Ver = L["无"]
-                else
-                    Ver = L["未知(离线)"]
+        for slot, entry in ipairs(BG.SortRaidRosterInfo()) do
+            local name = entry.name
+            local versionText, red, green, blue = ResolveMemberVersionText(self, entry, name)
+            local roleText = BuildRaidRoleText(entry, nil)
+            local colorR, colorG, colorB = GetClassRGB(name)
+            tooltip:AddDoubleLine(name .. roleText, versionText, colorR, colorG, colorB, red, green, blue)
+            if versionText == L["无"] or versionText == L["未知(离线)"] then
+                local opacity = 0.4
+                if _G[tooltip:GetName() .. "TextLeft" .. (slot + rowOffset)] then
+                    _G[tooltip:GetName() .. "TextLeft" .. (slot + rowOffset)]:SetAlpha(opacity)
                 end
-                if self.isAuciton then
-                    if sendDone[name] then
-                        Ver = L["接收完毕，但未导入"]
-                    elseif sending[name] then
-                        Ver = L["正在接收拍卖WA"]
-                    end
-                end
-            elseif not self.isAuciton then
-                if BG.GetVerNum(BG.ver) > BG.GetVerNum(Ver) then
-                    r = .6
-                    g, b = r, r
-                elseif BG.GetVerNum(BG.ver) < BG.GetVerNum(Ver) then
-                    r, g, b = 0, 1, 0
-                end
-            end
-            local role = ""
-            local y
-            if v.rank == 2 then
-                role = role .. AddTexture("interface/groupframe/ui-group-leadericon", y)
-            elseif v.rank == 1 then
-                role = role .. AddTexture("interface/groupframe/ui-group-assistanticon", y)
-            end
-            if v.isML then
-                role = role .. AddTexture("interface/groupframe/ui-group-masterlooter", y)
-            end
-            local c1, c2, c3 = GetClassRGB(name)
-            tooltip:AddDoubleLine(name .. role, Ver, c1, c2, c3, r, g, b)
-            if Ver == L["无"] or Ver == L["未知(离线)"] then
-                local alpha = 0.4
-                if _G[tooltip:GetName() .. "TextLeft" .. (i + line)] then
-                    _G[tooltip:GetName() .. "TextLeft" .. (i + line)]:SetAlpha(alpha)
-                end
-                if _G[tooltip:GetName() .. "TextRight" .. (i + line)] then
-                    _G[tooltip:GetName() .. "TextRight" .. (i + line)]:SetAlpha(alpha)
+                if _G[tooltip:GetName() .. "TextRight" .. (slot + rowOffset)] then
+                    _G[tooltip:GetName() .. "TextRight" .. (slot + rowOffset)]:SetAlpha(opacity)
                 end
             end
         end
@@ -228,45 +247,18 @@ BG.Init(function()
             BG.SendSystemMessage(L["你没有安装WeakAuras插件。"])
         end
     end
-    local function StartSend()
-        if cd then return end
-        for i = 1, 10 do
-            local header = _G["WeakAurasLoadedHeaderButton" .. i]
-            if header then
-                local titleString = _G[header:GetName() .. "Text"]:GetText()
-                if titleString:match("/") then
-                    -- if titleString:match("Loaded/Standby") or titleString:match("已载入") then
-                    local tbl = { header:GetParent():GetChildren() }
-                    for i, bt in ipairs(tbl) do
-                        if bt.id and WeakAuras.IsAuraLoaded(bt.id) then
-                            local ver = bt.id:match("<BiaoGe>拍卖%s-v(%d+%.%d+)")
-                            if ver then
-                                if IsShiftKeyDown() then
-                                    cd = true
-                                    BG.After(2, function() cd = nil end)
-                                    BG.PlaySound(2)
-                                    local edit = ChatEdit_ChooseBoxForSend()
-                                    edit:SetText("")
-                                    ChatEdit_ActivateChat(edit)
-                                    bt:Click()
-                                    BG.ButtonRaidAuction.WACode = edit:GetText()
-                                    edit:SetText("")
-                                    edit:Hide()
-                                    GameTooltip:Hide()
-                                    if BG.ButtonRaidAuction.isOnEnter then
-                                        BG.ButtonRaidAuction:GetScript("OnEnter")(BG.ButtonRaidAuction)
-                                    end
-                                    if BG.ButtonRaidAuction.WACode ~= "" then
-                                        for _, v in ipairs(BG.raidRosterInfo) do
-                                            if not BG.raidAuctionVersion[v.name] and v.online then
-                                                SendChatMessage(BG.ButtonRaidAuction.WACode, "WHISPER", nil, v.name)
-                                            end
-                                        end
-                                    end
-                                else
-                                    BG.SendSystemMessage(L["需要按下SHIFT才能发送WA。"])
-                                end
-                                return
+    local function FindAuctionWAButton()
+        for slot = 1, 10 do
+            local titleLabel = _G["WeakAurasLoadedHeaderButton" .. slot]
+            if titleLabel then
+                local titleText = _G[titleLabel:GetName() .. "Text"]:GetText()
+                if titleText:match("/") then
+                    local tbl = { titleLabel:GetParent():GetChildren() }
+                    for slot, buttonRef in ipairs(tbl) do
+                        if buttonRef.id and WeakAuras.IsAuraLoaded(buttonRef.id) then
+                            local versionText = buttonRef.id:match("<BiaoGe>拍卖%s-v(%d+%.%d+)")
+                            if versionText then
+                                return buttonRef
                             end
                         end
                     end
@@ -274,7 +266,40 @@ BG.Init(function()
                 end
             end
         end
-        BG.SendSystemMessage(L["在你的WA面板里未找到拍卖WA字符串，你需要先从表格左上角的\"拍卖WA\"按钮导入该字符串。"])
+    end
+
+    local function StartSend()
+        if cd then return end
+        local buttonRef = FindAuctionWAButton()
+        if not buttonRef then
+            BG.SendSystemMessage(L["在你的WA面板里未找到拍卖WA字符串，你需要先从表格左上角的\"拍卖WA\"按钮导入该字符串。"])
+            return
+        end
+        if not IsShiftKeyDown() then
+            BG.SendSystemMessage(L["需要按下SHIFT才能发送WA。"])
+            return
+        end
+        cd = true
+        BG.After(2, function() cd = nil end)
+        BG.PlaySound(2)
+        local editBoxRef = ChatEdit_ChooseBoxForSend()
+        editBoxRef:SetText("")
+        ChatEdit_ActivateChat(editBoxRef)
+        buttonRef:Click()
+        BG.ButtonRaidAuction.WACode = editBoxRef:GetText()
+        editBoxRef:SetText("")
+        editBoxRef:Hide()
+        GameTooltip:Hide()
+        if BG.ButtonRaidAuction.isOnEnter then
+            BG.ButtonRaidAuction:GetScript("OnEnter")(BG.ButtonRaidAuction)
+        end
+        if BG.ButtonRaidAuction.WACode ~= "" then
+            for _, entry in ipairs(BG.raidRosterInfo) do
+                if not BG.raidAuctionVersion[entry.name] and entry.online then
+                    SendGateway.Chat(BG.ButtonRaidAuction.WACode, "WHISPER", nil, entry.name)
+                end
+            end
+        end
     end
     local function SendWACode()
         if not CanSend() then return end
@@ -703,39 +728,146 @@ BG.Init(function()
             UpdateVisibility()
         end
 
-        function BG.SendStartAuctionMsg(isGen2, itemID, money, duration, mod, link, resetThreshold)
-            local channel, text
-            if isGen2 then
-                channel = BGA.aura_env.GetAddonChannelName()
-                text = format("StartAuction^%s^%s^%s^%s^^%s^%s^%s",
-                    GetTime(), itemID, money, duration, mod, link, resetThreshold)
-            else
-                channel = "BiaoGeAuction"
-                text = format("StartAuction,%s,%s,%s,%s,,%s,%s",
-                    GetTime(), itemID, money, duration, mod, link)
+        local function ComposeStartAuctionLabel(secondGen, itemId, price, timeout, mode, link, resetFloor)
+            if not secondGen then
+                return C.PREFIX_AUCTION, format(C.OP_START_AUCTION .. ",%s,%s,%s,%s,,%s,%s",
+                    GetTime(), itemId, price, timeout, mode, link)
             end
-            C_ChatInfo.SendAddonMessage(channel, text, "RAID")
+            return BGA.aura_env.GetAddonChannelName(), format(
+                C.OP_START_AUCTION .. "^%s^%s^%s^%s" .. C.SEP_SECTION .. "%s^%s^%s",
+                GetTime(), itemId, price, timeout, mode, link, resetFloor)
         end
 
-        local function OverAuctionMaxCount(i)
-            local j = 0
-            for _, f in pairs(BGA.Frames) do
-                j = j + 1
+        function BG.SendStartAuctionMsg(secondGen, itemId, price, timeout, mode, link, resetFloor)
+            local channelName, label = ComposeStartAuctionLabel(
+                secondGen, itemId, price, timeout, mode, link, resetFloor)
+            SendGateway.Addon(channelName, label, "RAID")
+        end
+
+        local function OverAuctionMaxCount(slot)
+            local innerSlot = 0
+            for _, panel in pairs(BGA.Frames) do
+                innerSlot = innerSlot + 1
             end
-            if i + j > maxCount then
+            if slot + innerSlot > maxCount then
                 UIErrorsFrame:AddMessage(errorMsg, 1, 0, 0)
                 return true
             end
         end
 
-        local function ClearAllFocus(f)
-            local i = 1
-            while f['Edit' .. i] do
-                f['Edit' .. i]:ClearFocus()
-                i = i + 1
+        local function ClearAllFocus(panel)
+            local position = 1
+            while panel['Edit' .. position] do
+                panel['Edit' .. position]:ClearFocus()
+                position = position + 1
             end
             LibBG:CloseDropDownMenus()
         end
+
+        local COUNT_STEP_TEX_COORD = { .13, 1 - .13, .13, 1 - .13 }
+        local ITEM_ICON_BACKDROP = {
+            edgeFile = "Interface/ChatFrame/ChatFrameBackground",
+            edgeSize = 1.5,
+        }
+
+        local function BuildAuctionEdit(owner, boxWidth, anchor, editType, editNum, initialText, maxLetters)
+            local edit = CreateFrame("EditBox", nil, owner, BG.editTemplate)
+            edit:SetSize(boxWidth, 20)
+            edit:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 3, 0)
+            edit._type = editType
+            if editNum then
+                edit.num = editNum
+            end
+            edit:SetText(initialText)
+            edit:SetAutoFocus(false)
+            edit:SetNumeric(true)
+            edit:SetMaxLetters(maxLetters)
+            return edit
+        end
+
+        local function BuildAuctionDropDown(owner, menuWidthValue, anchor, text)
+            local dropDown = LibBG:Create_UIDropDownMenu(nil, owner)
+            dropDown:SetScale(0.95)
+            dropDown:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -17, 2)
+            LibBG:UIDropDownMenu_SetText(dropDown, text)
+            dropDown.Text:SetJustifyH("LEFT")
+            LibBG:UIDropDownMenu_SetWidth(dropDown, menuWidthValue)
+            LibBG:UIDropDownMenu_SetAnchor(dropDown, 0, 0, "BOTTOM", dropDown, "TOP")
+            return dropDown
+        end
+
+        local function NewAuctionLabel(owner, boxWidth, point, anchor, relativePoint, x, y, text)
+            local label = owner:CreateFontString()
+            label:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            label:SetSize(boxWidth, 20)
+            label:SetPoint(point, anchor, relativePoint, x, y)
+            label:SetJustifyH("LEFT")
+            label:SetWordWrap(false)
+            label:SetText(text)
+            return label
+        end
+
+        local function NewAuctionLabelWide(owner, boxWidth, point, anchor, relativePoint, x, y, text)
+            local label = owner:CreateFontString()
+            label:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            label:SetSize(boxWidth, 20)
+            label:SetJustifyH("LEFT")
+            label:SetText(text)
+            label:SetPoint(point, anchor, relativePoint, x, y)
+            return label
+        end
+
+        local function BuildCountStepButton(owner, edit, anchor, relativePoint, width, height,
+                                            texNormal, texPushed, texDisabled, step)
+            local stepButton = CreateFrame("Button", nil, owner)
+            stepButton:SetSize(width, height)
+            stepButton:SetPoint("RIGHT", anchor, relativePoint, 0, 0)
+            stepButton:SetFrameLevel(edit:GetFrameLevel() + 2)
+            stepButton:SetNormalTexture(texNormal)
+            stepButton:GetNormalTexture():SetTexCoord(unpack(COUNT_STEP_TEX_COORD))
+            stepButton:SetPushedTexture(texPushed)
+            stepButton:GetPushedTexture():SetTexCoord(unpack(COUNT_STEP_TEX_COORD))
+            stepButton:SetDisabledTexture(texDisabled)
+            stepButton:GetDisabledTexture():SetTexCoord(unpack(COUNT_STEP_TEX_COORD))
+            stepButton:SetHighlightTexture("Interface/Buttons/UI-Common-MouseHilight")
+            stepButton:SetScript("OnClick", function()
+                local storedValue = tonumber(edit:GetText()) or 1
+                local nextValue = storedValue + step
+                if nextValue >= 1 and nextValue <= 9 then
+                    edit:SetText(nextValue)
+                end
+                BG.PlaySound(1)
+            end)
+            return stepButton
+        end
+
+        local function ScheduleAuctionSend(button, isGen2, money, duration, mod, resetThreshold)
+            local delay = 0
+            local entries = button.items
+            local total = #entries
+            if total > 1 then
+                for slot = 1, total do
+                    local entry = entries[slot]
+                    local itemID = entry.id
+                    local link = entry.link
+                    BG.After(delay, function()
+                        BG.SendStartAuctionMsg(isGen2, itemID, money, duration, mod, link, resetThreshold)
+                    end)
+                    delay = delay + 1
+                end
+                return
+            end
+            local tally = tonumber(button:GetParent().Edit4:GetText()) or 1
+            for slot = 1, tally do
+                local itemID = entries[1].id
+                local link = entries[1].link
+                BG.After(delay, function()
+                    BG.SendStartAuctionMsg(isGen2, itemID, money, duration, mod, link, resetThreshold)
+                end)
+                delay = delay + 1
+            end
+        end
+
         local function item_OnEnter(self)
             if BG.ButtonIsInRight(self) then
                 GameTooltip:SetOwner(self, "ANCHOR_LEFT", 0, 0)
@@ -773,7 +905,7 @@ BG.Init(function()
                 if #self.items > 1 then
                     return
                 end
-                SendChatMessage(format(L["{rt1}Roll点开始{rt1} %s"], self.items[1].link), "RAID_WARNING")
+                SendGateway.Chat(format(L["{rt1}Roll点开始{rt1} %s"], self.items[1].link), "RAID_WARNING")
             else
                 local money = self.money or tonumber(BiaoGe.Auction.money)
                 local _duration = tonumber(BiaoGe.Auction.duration)
@@ -781,27 +913,7 @@ BG.Init(function()
                 if not (money and duration) then return end
                 local isGen2 = BiaoGe.Auction.gen == 2
                 local resetThreshold = max(tonumber(BiaoGe.Auction.resetThreshold) or 0, 10)
-                local delay = 0
-                if #self.items > 1 then
-                    for i, v in ipairs(self.items) do
-                        local itemID = v.id
-                        local link = v.link
-                        BG.After(delay, function()
-                            BG.SendStartAuctionMsg(isGen2, itemID, money, duration, mod, link, resetThreshold)
-                        end)
-                        delay = delay + 1
-                    end
-                else
-                    local count = tonumber(self:GetParent().Edit4:GetText()) or 1
-                    for i = 1, count do
-                        local itemID = self.items[1].id
-                        local link = self.items[1].link
-                        BG.After(delay, function()
-                            BG.SendStartAuctionMsg(isGen2, itemID, money, duration, mod, link, resetThreshold)
-                        end)
-                        delay = delay + 1
-                    end
-                end
+                ScheduleAuctionSend(self, isGen2, money, duration, mod, resetThreshold)
                 if self.callback then
                     self.callback()
                 end
@@ -841,19 +953,19 @@ BG.Init(function()
             end
         end
         local matchStr = ITEM_CLASSES_ALLOWED:gsub("%%s", "")
-        function BG.GetTooltipClassText(itemID)
-            BG.Tooltip_SetItemByID(itemID)
-            for i = 1, BiaoGeTooltip:NumLines() do
-                local str = _G["BiaoGeTooltipTextLeft" .. i]:GetText()
+        function BG.GetTooltipClassText(itemId)
+            BG.Tooltip_SetItemByID(itemId)
+            for slot = 1, BiaoGeTooltip:NumLines() do
+                local str = _G["BiaoGeTooltipTextLeft" .. slot]:GetText()
                 if str then
-                    local classStr = str:match(matchStr .. "(.+)")
-                    if classStr then
-                        local colorCls = ""
-                        for _, className in ipairs({ strsplit(",", classStr) }) do
-                            className = className:gsub("^%s+", "")
-                            colorCls = colorCls .. (BG.classColorNames[className] or className) .. "  "
+                    local classString = str:match(matchStr .. "(.+)")
+                    if classString then
+                        local classColor = ""
+                        for _, classLabel in ipairs({ strsplit(",", classString) }) do
+                            classLabel = classLabel:gsub("^%s+", "")
+                            classColor = classColor .. (BG.classColorNames[classLabel] or classLabel) .. "  "
                         end
-                        return colorCls
+                        return classColor
                     end
                 end
             end
@@ -861,21 +973,159 @@ BG.Init(function()
         end
 
         local function UpdateFrame()
-            local mainFrame = BG.StartAucitonFrame
-            if BiaoGe.Auction.gen == 2 then
-                mainFrame.Edit3:SetEnabled(true)
-                mainFrame.Edit3:SetTextColor(1, 1, 1)
-                mainFrame.Text5:SetTextColor(1, .82, 0)
+            local mainPanel = BG.StartAucitonFrame
+            local secondGen = BiaoGe.Auction.gen == 2
+            local shade = secondGen and 1 or 0.5
+            mainPanel.Edit3:SetEnabled(secondGen)
+            mainPanel.Edit3:SetTextColor(shade, shade, shade)
+            if secondGen then
+                mainPanel.Text5:SetTextColor(1, .82, 0)
             else
-                mainFrame.Edit3:SetEnabled(false)
-                mainFrame.Edit3:SetTextColor(0.5, 0.5, 0.5)
-                mainFrame.Edit3:SetText(20)
-                mainFrame.Text5:SetTextColor(0.5, 0.5, 0.5)
+                mainPanel.Edit3:SetText(20)
+                mainPanel.Text5:SetTextColor(0.5, 0.5, 0.5)
             end
         end
 
-        function BG.StartAuction(link, bt, isNotAuctioned, notAlt, isRightButton, noSound, callback)
-            if BiaoGe.options["autoAuctionStart"] ~= 1 and not notAlt then return end
+        local function BuildAuctionItemIcons(itemFrame, mainFrame, items)
+            local icons = {}
+            for slot, entry in ipairs(items) do
+                local itemID = entry.id
+                local link = entry.link
+                local memberName, link, rarity, itemLevel, _, itemCategory, itemSubcategory, _, equipLocation, Texture,
+                _, classId, subclassId, bindingKind = GetItemInfo(link)
+
+                -- 图标
+                local red, green, blue = GetItemQualityColor(rarity)
+                local flashTexture = CreateFrame("Frame", nil, itemFrame, "BackdropTemplate")
+                flashTexture:SetBackdrop(ITEM_ICON_BACKDROP)
+                flashTexture:SetBackdropBorderColor(red, green, blue, 1)
+                if slot == 1 then
+                    flashTexture:SetPoint("TOPLEFT", 0, 0)
+                else
+                    flashTexture:SetPoint("TOPLEFT", icons[slot - 1], "TOPRIGHT", 3, 0)
+                end
+                flashTexture:SetSize(itemFrame:GetHeight() - 2, itemFrame:GetHeight() - 2)
+                flashTexture.itemID = itemID
+                flashTexture.link = link
+                tinsert(icons, flashTexture)
+
+                flashTexture.isIcon = true
+                flashTexture.owner = mainFrame
+                flashTexture:SetScript("OnEnter", item_OnEnter)
+                flashTexture:SetScript("OnLeave", item_OnLeave)
+                flashTexture:SetScript("OnMouseUp", function(self)
+                    mainFrame:GetScript("OnMouseUp")(mainFrame)
+                end)
+                flashTexture:SetScript("OnMouseDown", function(self)
+                    mainFrame:GetScript("OnMouseDown")(mainFrame)
+                end)
+
+                flashTexture.tex = flashTexture:CreateTexture(nil, "BACKGROUND")
+                flashTexture.tex:SetAllPoints()
+                flashTexture.tex:SetTexture(Texture)
+                flashTexture.tex:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+                -- 装备等级
+                local store = flashTexture:CreateFontString()
+                store:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
+                store:SetPoint("BOTTOM", flashTexture, "BOTTOM", 0, 1)
+                store:SetText(itemLevel)
+                store:SetTextColor(red, green, blue)
+                -- 装绑
+                if bindingKind == 2 then
+                    local store = flashTexture:CreateFontString()
+                    store:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
+                    store:SetPoint("TOP", flashTexture, 0, -2)
+                    store:SetText(L["装绑"])
+                    store:SetTextColor(0, 1, 0)
+                end
+            end
+            return icons
+        end
+
+        local function BuildSingleAuctionItemName(itemFrame, icons, itemId, itemLink,
+                                                  equipLocation, classId, itemSubcategory, itemFrameHeight)
+            local nameLabel = itemFrame:CreateFontString()
+            nameLabel:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            nameLabel:SetPoint("TOPLEFT", icons[1], "TOPRIGHT", 2, -2)
+            nameLabel:SetWidth(itemFrame:GetWidth() - itemFrameHeight - 10)
+            nameLabel:SetText(itemLink:gsub("%[", ""):gsub("%]", ""))
+            nameLabel:SetJustifyH("LEFT")
+            nameLabel:SetWordWrap(false)
+            -- 装备类型
+            local typeLabel = itemFrame:CreateFontString()
+            typeLabel:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
+            typeLabel:SetPoint("BOTTOMLEFT", icons[1], "BOTTOMRIGHT", 2, 1)
+            typeLabel:SetHeight(12)
+            typeLabel:SetWidth(nameLabel:GetWidth())
+            local classCaption = BG.GetTooltipClassText(itemId) or ""
+            if _G[equipLocation] then
+                if classId == 2 then
+                    typeLabel:SetText(itemSubcategory .. "  " .. classCaption)
+                else
+                    typeLabel:SetText(_G[equipLocation] .. " " .. itemSubcategory .. "  " .. classCaption)
+                end
+            else
+                typeLabel:SetText(classCaption)
+            end
+            typeLabel:SetJustifyH("LEFT")
+        end
+
+        local function BuildAuctionFastMoneyBar(mainFrame, startOnClick)
+            mainFrame.fastMoneyFrame = CreateFrame("Frame", nil, mainFrame)
+            local tex = mainFrame.fastMoneyFrame:CreateTexture()
+            tex:SetPoint("TOPLEFT", mainFrame, "BOTTOMLEFT", 2, 18)
+            tex:SetPoint("BOTTOMRIGHT", mainFrame, "BOTTOMRIGHT", -2, 2)
+            tex:SetColorTexture(0.2, 0.2, 0.2, 1)
+
+            local buttons = {}
+            local function CreateButton()
+                local money = BiaoGe.Auction.fastMoney[#buttons + 1]
+                local bt = CreateFrame("Button", nil, mainFrame.fastMoneyFrame)
+                bt:SetSize(50, 18)
+                if #buttons == 0 then
+                    bt:SetPoint("BOTTOMLEFT", mainFrame, 0, 1)
+                else
+                    bt:SetPoint("BOTTOMLEFT", buttons[#buttons], "BOTTOMRIGHT", 0, 0)
+                end
+                if BiaoGe.Auction.fastMoney[#buttons + 1] == "" then
+                    bt:Hide()
+                end
+                bt.money = money
+                local t = bt:CreateFontString()
+                t:SetFont(BIAOGE_TEXT_FONT, 10, "OUTLINE")
+                t:SetWidth(bt:GetWidth())
+                t:SetPoint("CENTER")
+                t:SetText(BG.FormatNumber(money, 2))
+                t:SetTextColor(1, 0.82, 0)
+                t:SetWordWrap(false)
+                bt:SetFontString(t)
+                tinsert(buttons, bt)
+                bt:SetScript("OnClick", function(self)
+                    mainFrame.Edit2:SetText(self.money)
+                    BiaoGe.Auction.money = self.money
+                    startOnClick(mainFrame.bt)
+                end)
+                bt:SetScript("OnEnter", function(self)
+                    t:SetTextColor(1, 1, 1)
+                    if t:GetStringWidth() > bt:GetWidth() then
+                        GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0)
+                        GameTooltip:ClearLines()
+                        GameTooltip:AddLine(t:GetText(), 1, 0.82, 0, true)
+                        GameTooltip:Show()
+                    end
+                end)
+                bt:SetScript("OnLeave", function(self)
+                    t:SetTextColor(1, .82, 0)
+                    GameTooltip:Hide()
+                end)
+            end
+            for slot = 1, #BiaoGe.Auction.fastMoney do
+                CreateButton()
+            end
+        end
+
+        function BG.StartAuction(link, bt, unsoldPanel, altReleased, rightClick, noSound, callback)
+            if BiaoGe.options["autoAuctionStart"] ~= 1 and not altReleased then return end
             if not link then return end
             if not BG.IsML then return end
             local link = BG.Copy(link)
@@ -888,8 +1138,8 @@ BG.Init(function()
             if OverAuctionMaxCount(#items) then return end
             if BG.StartAucitonFrame then BG.StartAucitonFrame:Hide() end
             GameTooltip:Hide()
-            local name, link, quality, level, _, itemType, itemSubType, _, itemEquipLoc, Texture,
-            _, classID, subclassID, bindType = GetItemInfo(items[1].link)
+            local memberName, link, rarity, itemLevel, _, itemCategory, itemSubcategory, _, equipLocation, Texture,
+            _, classId, subclassId, bindingKind = GetItemInfo(items[1].link)
 
             local mainFrame
             local f = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
@@ -903,15 +1153,15 @@ BG.Init(function()
                 f:SetBackdropBorderColor(0, 0, 0, 1)
                 f:SetSize(mainFrameWidth, mainFrameHeight)
                 if bt then
-                    if isNotAuctioned then
+                    if unsoldPanel then
                         f:SetPoint("TOP", bt, "BOTTOM", 10, 0)
                     else
                         f:SetPoint("BOTTOM", bt, "TOP", 0, 0)
                     end
                 else
-                    local x, y = GetCursorPosition()
-                    x, y = x / UIParent:GetEffectiveScale(), y / UIParent:GetEffectiveScale()
-                    f:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", x + 10, y + 10)
+                    local cursorX, cursorY = GetCursorPosition()
+                    cursorX, cursorY = cursorX / UIParent:GetEffectiveScale(), cursorY / UIParent:GetEffectiveScale()
+                    f:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", cursorX + 10, cursorY + 10)
                 end
                 f:SetFrameStrata("DIALOG")
                 f:SetFrameLevel(300)
@@ -967,142 +1217,34 @@ BG.Init(function()
                 end)
                 mainFrame.itemFrame = f
                 -- 黑色背景
-                local s = CreateFrame("StatusBar", nil, f)
-                s:SetAllPoints()
-                s:SetFrameLevel(s:GetParent():GetFrameLevel() - 5)
-                s:SetStatusBarTexture("Interface/ChatFrame/ChatFrameBackground")
-                s:SetStatusBarColor(0, 0, 0, 0.8)
+                local scratchText = CreateFrame("StatusBar", nil, f)
+                scratchText:SetAllPoints()
+                scratchText:SetFrameLevel(scratchText:GetParent():GetFrameLevel() - 5)
+                scratchText:SetStatusBarTexture("Interface/ChatFrame/ChatFrameBackground")
+                scratchText:SetStatusBarColor(0, 0, 0, 0.8)
 
-                local icons = {}
-                for i, v in ipairs(items) do
-                    local itemID = v.id
-                    local link = v.link
-                    local name, link, quality, level, _, itemType, itemSubType, _, itemEquipLoc, Texture,
-                    _, classID, subclassID, bindType = GetItemInfo(link)
-
-                    -- 图标
-                    local r, g, b = GetItemQualityColor(quality)
-                    local ftex = CreateFrame("Frame", nil, f, "BackdropTemplate")
-                    ftex:SetBackdrop({
-                        edgeFile = "Interface/ChatFrame/ChatFrameBackground",
-                        edgeSize = 1.5,
-                    })
-                    ftex:SetBackdropBorderColor(r, g, b, 1)
-                    if i == 1 then
-                        ftex:SetPoint("TOPLEFT", 0, 0)
-                    else
-                        ftex:SetPoint("TOPLEFT", icons[i - 1], "TOPRIGHT", 3, 0)
-                    end
-                    ftex:SetSize(f:GetHeight() - 2, f:GetHeight() - 2)
-                    ftex.itemID = itemID
-                    ftex.link = link
-                    tinsert(icons, ftex)
-
-                    ftex.isIcon = true
-                    ftex.owner = mainFrame
-                    ftex:SetScript("OnEnter", item_OnEnter)
-                    ftex:SetScript("OnLeave", item_OnLeave)
-                    ftex:SetScript("OnMouseUp", function(self)
-                        mainFrame:GetScript("OnMouseUp")(mainFrame)
-                    end)
-                    ftex:SetScript("OnMouseDown", function(self)
-                        mainFrame:GetScript("OnMouseDown")(mainFrame)
-                    end)
-
-                    ftex.tex = ftex:CreateTexture(nil, "BACKGROUND")
-                    ftex.tex:SetAllPoints()
-                    ftex.tex:SetTexture(Texture)
-                    ftex.tex:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-                    -- 装备等级
-                    local t = ftex:CreateFontString()
-                    t:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
-                    t:SetPoint("BOTTOM", ftex, "BOTTOM", 0, 1)
-                    t:SetText(level)
-                    t:SetTextColor(r, g, b)
-                    -- 装绑
-                    if bindType == 2 then
-                        local t = ftex:CreateFontString()
-                        t:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-                        t:SetPoint("TOP", ftex, 0, -2)
-                        t:SetText(L["装绑"])
-                        t:SetTextColor(0, 1, 0)
-                    end
-                end
-
+                local icons = BuildAuctionItemIcons(f, mainFrame, items)
                 if #items == 1 then
-                    -- 装备名称
-                    local t = f:CreateFontString()
-                    t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-                    t:SetPoint("TOPLEFT", icons[1], "TOPRIGHT", 2, -2)
-                    t:SetWidth(f:GetWidth() - f:GetHeight() - 10)
-                    t:SetText(link:gsub("%[", ""):gsub("%]", ""))
-                    t:SetJustifyH("LEFT")
-                    t:SetWordWrap(false)
-                    local itemNameText = t
-                    -- 装备类型
-                    local t = f:CreateFontString()
-                    t:SetFont(BIAOGE_TEXT_FONT, 12, "OUTLINE")
-                    t:SetPoint("BOTTOMLEFT", icons[1], "BOTTOMRIGHT", 2, 1)
-                    t:SetHeight(12)
-                    t:SetWidth(itemNameText:GetWidth())
-                    local classText = BG.GetTooltipClassText(items[1].id) or ""
-                    if _G[itemEquipLoc] then
-                        if classID == 2 then
-                            t:SetText(itemSubType .. "  " .. classText)
-                        else
-                            t:SetText(_G[itemEquipLoc] .. " " .. itemSubType .. "  " .. classText)
-                        end
-                    else
-                        t:SetText(classText)
-                    end
-                    t:SetJustifyH("LEFT")
+                    BuildSingleAuctionItemName(f, icons, items[1].id, link, equipLocation, classId, itemSubcategory, f:GetHeight())
                 end
             end
 
-            local width = 90
-            local textWidth = width + 12
+            local extent = 90
+            local textWidth = extent + 12
             -- 拍卖时长、起拍价
             do
-                local t = mainFrame:CreateFontString()
-                t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-                t:SetSize(textWidth, 20)
-                t:SetPoint("TOPLEFT", mainFrame.itemFrame, "BOTTOMLEFT", 10, -2)
-                t:SetJustifyH("LEFT")
-                t:SetWordWrap(false)
-                t:SetText(L["|cffFFD100拍卖时长(秒)"])
-                mainFrame.Text3 = t
+                local store = NewAuctionLabel(mainFrame, textWidth, "TOPLEFT", mainFrame.itemFrame, "BOTTOMLEFT", 10, -2, L["|cffFFD100拍卖时长(秒)"])
+                mainFrame.Text3 = store
 
-                local edit = CreateFrame("EditBox", nil, mainFrame, BG.editTemplate)
-                edit:SetSize(textWidth, 20)
-                edit:SetPoint("TOPLEFT", t, "BOTTOMLEFT", 3, 0)
-                edit._type = "duration"
-                edit.num = 1
-                edit:SetText(BiaoGe.Auction[edit._type])
-                edit:SetAutoFocus(false)
-                edit:SetNumeric(true)
-                edit:SetMaxLetters(3)
+                local edit = BuildAuctionEdit(mainFrame, textWidth, store, "duration", 1, BiaoGe.Auction.duration, 3)
                 edit:SetScript("OnTextChanged", OnTextChanged)
                 edit:SetScript("OnEnterPressed", OnEnterPressed)
                 mainFrame.Edit1 = edit
 
-                local t = f:CreateFontString()
-                t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-                t:SetSize(textWidth, 20)
-                t:SetPoint("TOPLEFT", mainFrame.Text3, "BOTTOMLEFT", 0, -20)
-                t:SetJustifyH("LEFT")
-                t:SetWordWrap(false)
-                t:SetText(L["|cffFFD100起拍价|r"])
-                mainFrame.Text4 = t
+                local store = NewAuctionLabel(mainFrame, textWidth, "TOPLEFT", mainFrame.Text3, "BOTTOMLEFT", 0, -20, L["|cffFFD100起拍价|r"])
+                mainFrame.Text4 = store
 
-                local edit = CreateFrame("EditBox", nil, mainFrame, BG.editTemplate)
-                edit:SetSize(textWidth, 20)
-                edit:SetPoint("TOPLEFT", t, "BOTTOMLEFT", 3, 0)
-                edit._type = "money"
-                edit.num = 2
-                edit:SetText(BiaoGe.Auction[edit._type])
-                edit:SetAutoFocus(false)
-                edit:SetNumeric(true)
-                edit:SetMaxLetters(8)
+                local edit = BuildAuctionEdit(mainFrame, textWidth, store, "money", 2, BiaoGe.Auction.money, 8)
                 edit:SetScript("OnTextChanged", OnTextChanged)
                 edit:SetScript("OnEnterPressed", OnEnterPressed)
                 mainFrame.Edit2 = edit
@@ -1110,102 +1252,52 @@ BG.Init(function()
 
             -- 重置阈值、拍卖数量
             do
-                local t = f:CreateFontString()
-                t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-                t:SetSize(textWidth, 20)
-                t:SetJustifyH("LEFT")
-                t:SetText(L["重置阈值(秒)"])
-                t:SetPoint("LEFT", mainFrame.Text3, "RIGHT", 18, 0)
-                mainFrame.Text5 = t
-                local edit3 = CreateFrame("EditBox", nil, mainFrame, BG.editTemplate)
-                edit3:SetSize(textWidth, 20)
-                edit3:SetPoint("TOPLEFT", t, "BOTTOMLEFT", 3, 0)
-                edit3._type = "resetThreshold"
-                edit3:SetText(BiaoGe.Auction.resetThreshold)
-                edit3:SetAutoFocus(false)
-                edit3:SetNumeric(true)
-                edit3:SetMaxLetters(3)
-                edit3:SetScript("OnTextChanged", OnTextChanged)
-                edit3:SetScript("OnEnterPressed", OnEnterPressed)
-                edit3:SetScript("OnEnter", resetThreshold_OnEnter)
-                edit3:SetScript("OnLeave", GameTooltip_Hide)
-                mainFrame.Edit3 = edit3
+                local store = NewAuctionLabelWide(mainFrame, textWidth, "LEFT", mainFrame.Text3, "RIGHT", 18, 0, L["重置阈值(秒)"])
+                mainFrame.Text5 = store
+                local thirdInput = BuildAuctionEdit(mainFrame, textWidth, store, "resetThreshold", nil, BiaoGe.Auction.resetThreshold, 3)
+                thirdInput:SetScript("OnTextChanged", OnTextChanged)
+                thirdInput:SetScript("OnEnterPressed", OnEnterPressed)
+                thirdInput:SetScript("OnEnter", resetThreshold_OnEnter)
+                thirdInput:SetScript("OnLeave", GameTooltip_Hide)
+                mainFrame.Edit3 = thirdInput
 
-                local t = f:CreateFontString()
-                t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-                t:SetSize(textWidth, 20)
-                t:SetPoint("TOPLEFT", mainFrame.Text5, "BOTTOMLEFT", 0, -20)
-                t:SetJustifyH("LEFT")
-                t:SetWordWrap(false)
-                t:SetText(L["|cffFFD100拍卖数量|r"])
-                mainFrame.Text6 = t
-                local edit = CreateFrame("EditBox", nil, mainFrame, BG.editTemplate)
-                edit:SetSize(textWidth, 20)
-                edit:SetPoint("TOPLEFT", t, "BOTTOMLEFT", 3, 0)
-                edit._type = "count"
-                edit.num = 3
-                edit:SetText(1)
-                edit:SetAutoFocus(false)
-                edit:SetNumeric(true)
-                edit:SetMaxLetters(1)
+                local store = NewAuctionLabel(mainFrame, textWidth, "TOPLEFT", mainFrame.Text5, "BOTTOMLEFT", 0, -20, L["|cffFFD100拍卖数量|r"])
+                mainFrame.Text6 = store
+                local edit = BuildAuctionEdit(mainFrame, textWidth, store, "count", 3, 1, 1)
                 edit:SetScript("OnEnterPressed", OnEnterPressed)
                 edit:SetScript("OnMouseWheel", function(self, delta)
-                    local val = tonumber(self:GetText()) or 1
-                    val = val + delta
-                    if val < 1 then val = 1 end
-                    if val > 9 then val = 9 end
-                    self:SetText(val)
+                    local storedValue = tonumber(self:GetText()) or 1
+                    storedValue = storedValue + delta
+                    if storedValue < 1 then storedValue = 1 end
+                    if storedValue > 9 then storedValue = 9 end
+                    self:SetText(storedValue)
                 end)
                 mainFrame.Edit4 = edit
-                -- 右侧 +/- 按钮（左右分布）
-                local a = .13
-                local coord = { a, 1 - a, a, 1 - a }
-                local w, h = 18, 18
-                local btnDown = CreateFrame("Button", nil, mainFrame)
-                btnDown:SetSize(w, h)
-                btnDown:SetPoint("RIGHT", edit, "RIGHT", 0, 0)
-                btnDown:SetFrameLevel(edit:GetFrameLevel() + 2)
-                btnDown:SetNormalTexture("Interface/ChatFrame/UI-ChatIcon-ScrollDown-Up")
-                btnDown:GetNormalTexture():SetTexCoord(unpack(coord))
-                btnDown:SetPushedTexture("Interface/ChatFrame/UI-ChatIcon-ScrollDown-Down")
-                btnDown:GetPushedTexture():SetTexCoord(unpack(coord))
-                btnDown:SetDisabledTexture("Interface/ChatFrame/UI-ChatIcon-ScrollDown-Disabled")
-                btnDown:GetDisabledTexture():SetTexCoord(unpack(coord))
-                btnDown:SetHighlightTexture("Interface/Buttons/UI-Common-MouseHilight")
-                btnDown:SetScript("OnClick", function()
-                    local val = tonumber(edit:GetText()) or 1
-                    if val > 1 then edit:SetText(val - 1) end
-                    BG.PlaySound(1)
-                end)
-                local btnUp = CreateFrame("Button", nil, mainFrame)
-                btnUp:SetSize(w, h)
-                btnUp:SetPoint("RIGHT", btnDown, "LEFT", 0, 0)
-                btnUp:SetFrameLevel(edit:GetFrameLevel() + 2)
-                btnUp:SetNormalTexture("Interface/ChatFrame/UI-ChatIcon-ScrollUp-Up")
-                btnUp:GetNormalTexture():SetTexCoord(unpack(coord))
-                btnUp:SetPushedTexture("Interface/ChatFrame/UI-ChatIcon-ScrollUp-Down")
-                btnUp:GetPushedTexture():SetTexCoord(unpack(coord))
-                btnUp:SetDisabledTexture("Interface/ChatFrame/UI-ChatIcon-ScrollUp-Disabled")
-                btnUp:GetDisabledTexture():SetTexCoord(unpack(coord))
-                btnUp:SetHighlightTexture("Interface/Buttons/UI-Common-MouseHilight")
-                btnUp:SetScript("OnClick", function()
-                    local val = tonumber(edit:GetText()) or 1
-                    if val < 9 then edit:SetText(val + 1) end
-                    BG.PlaySound(1)
-                end)
+                -- 位于右侧的加减按钮，左右各一个
+                local widthValue, heightValue = 18, 18
+                local downControl = BuildCountStepButton(mainFrame, edit, edit, "RIGHT",
+                    widthValue, heightValue,
+                    "Interface/ChatFrame/UI-ChatIcon-ScrollDown-Up",
+                    "Interface/ChatFrame/UI-ChatIcon-ScrollDown-Down",
+                    "Interface/ChatFrame/UI-ChatIcon-ScrollDown-Disabled", -1)
+                local upControl = BuildCountStepButton(mainFrame, edit, downControl, "LEFT",
+                    widthValue, heightValue,
+                    "Interface/ChatFrame/UI-ChatIcon-ScrollUp-Up",
+                    "Interface/ChatFrame/UI-ChatIcon-ScrollUp-Down",
+                    "Interface/ChatFrame/UI-ChatIcon-ScrollUp-Disabled", 1)
                 if #items > 1 then
                     mainFrame.Edit4:SetEnabled(false)
                     mainFrame.Edit4:SetTextColor(0.5, 0.5, 0.5)
                     mainFrame.Text6:SetTextColor(0.5, 0.5, 0.5)
-                    btnUp:Hide()
-                    btnDown:Hide()
+                    upControl:Hide()
+                    downControl:Hide()
                 end
             end
 
             -- 开始拍卖
             do
                 local bt = BG.CreateButton(mainFrame)
-                bt:SetSize(width + 19, 25)
+                bt:SetSize(extent + 19, 25)
                 bt:SetPoint("TOPLEFT", mainFrame, "BOTTOMLEFT", 10, BiaoGe.options["fastMoney"] == 1 and 50 or 30)
                 bt:SetPoint("BOTTOMRIGHT", mainFrame, "BOTTOMRIGHT", -10, BiaoGe.options["fastMoney"] == 1 and 25 or 5)
                 bt:SetText(L["开始拍卖"])
@@ -1243,57 +1335,7 @@ BG.Init(function()
 
             -- 底部文字
             if BiaoGe.options["fastMoney"] == 1 then
-                mainFrame.fastMoneyFrame = CreateFrame("Frame", nil, mainFrame)
-                local tex = mainFrame.fastMoneyFrame:CreateTexture()
-                tex:SetPoint("TOPLEFT", mainFrame, "BOTTOMLEFT", 2, 18)
-                tex:SetPoint("BOTTOMRIGHT", mainFrame, "BOTTOMRIGHT", -2, 2)
-                tex:SetColorTexture(0.2, 0.2, 0.2, 1)
-
-                local buttons = {}
-                local function CreateButton()
-                    local money = BiaoGe.Auction.fastMoney[#buttons + 1]
-                    local bt = CreateFrame("Button", nil, mainFrame.fastMoneyFrame)
-                    bt:SetSize(50, 18)
-                    if #buttons == 0 then
-                        bt:SetPoint("BOTTOMLEFT", mainFrame, 0, 1)
-                    else
-                        bt:SetPoint("BOTTOMLEFT", buttons[#buttons], "BOTTOMRIGHT", 0, 0)
-                    end
-                    if BiaoGe.Auction.fastMoney[#buttons + 1] == "" then
-                        bt:Hide()
-                    end
-                    bt.money = money
-                    local t = bt:CreateFontString()
-                    t:SetFont(BIAOGE_TEXT_FONT, 10, "OUTLINE")
-                    t:SetWidth(bt:GetWidth())
-                    t:SetPoint("CENTER")
-                    t:SetText(BG.FormatNumber(money, 2))
-                    t:SetTextColor(1, 0.82, 0)
-                    t:SetWordWrap(false)
-                    bt:SetFontString(t)
-                    tinsert(buttons, bt)
-                    bt:SetScript("OnClick", function(self)
-                        mainFrame.Edit2:SetText(self.money)
-                        BiaoGe.Auction.money = self.money
-                        Start_OnClick(mainFrame.bt)
-                    end)
-                    bt:SetScript("OnEnter", function(self)
-                        t:SetTextColor(1, 1, 1)
-                        if t:GetStringWidth() > bt:GetWidth() then
-                            GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0)
-                            GameTooltip:ClearLines()
-                            GameTooltip:AddLine(t:GetText(), 1, 0.82, 0, true)
-                            GameTooltip:Show()
-                        end
-                    end)
-                    bt:SetScript("OnLeave", function(self)
-                        t:SetTextColor(1, .82, 0)
-                        GameTooltip:Hide()
-                    end)
-                end
-                for i = 1, #BiaoGe.Auction.fastMoney do
-                    CreateButton()
-                end
+                BuildAuctionFastMoneyBar(mainFrame, Start_OnClick)
             else
                 mainFrame:SetHeight(mainFrameHeight - 20)
             end
@@ -1302,10 +1344,10 @@ BG.Init(function()
         end
 
         -- ALT点击背包生效
-        local function func(self, button)
+        local function func(self, clickedButton)
             if not IsAltKeyDown() then return end
             local link = C_Container.GetContainerItemLink(self:GetParent():GetID(), self:GetID())
-            BG.StartAuction(link, self, nil, nil, button == "RightButton")
+            BG.StartAuction(link, self, nil, nil, clickedButton == "RightButton")
         end
         if BG.IsRetail then
             hooksecurefunc("ContainerFrameItemButton_OnClick", func)
@@ -1378,7 +1420,6 @@ BG.Init(function()
                 GameTooltip:Hide()
                 self.isOnEnter = false
             end)
-            -- if not BG.IsRetail then
             --     auction:SetScript("OnMouseUp", function(self)
             --         SendWACode()
             --     end)
@@ -1392,19 +1433,19 @@ BG.Init(function()
 
         local lastNum = 0
         function BG.CanSend_BiaoGeVer()
-            local n
-            local canSend = true
+            local groupSize
+            local sendAllowed = true
             if IsInRaid(1) then
-                n = GetNumGroupMembers(1)
-                if lastNum >= n then
-                    canSend = false
+                groupSize = GetNumGroupMembers(1)
+                if lastNum >= groupSize then
+                    sendAllowed = false
                 end
             else
-                canSend = false
-                n = 0
+                sendAllowed = false
+                groupSize = 0
             end
-            lastNum = n
-            return canSend
+            lastNum = groupSize
+            return sendAllowed
         end
 
         BG.RegisterEvent("GROUP_ROSTER_UPDATE", function(self, event, ...)
@@ -1412,7 +1453,7 @@ BG.Init(function()
             BG.After(1, function()
                 if IsInRaid(1) then
                     if canSend then
-                        C_ChatInfo.SendAddonMessage("BiaoGe", "MyVer-" .. BG.ver, "RAID")
+                        SendGateway.Addon(C.PREFIX_MAIN, C.OP_MY_VER .. "-" .. BG.ver, "RAID")
                     end
                 else
                     UpdateAddonFrame(addon)
@@ -1426,17 +1467,17 @@ BG.Init(function()
         end)
         BG.RegisterEvent("GUILD_ROSTER_UPDATE", function(self, event, ...)
             BG.After(1, function()
-                for i = 1, GetNumGuildMembers() do
-                    local name, rankName, rankIndex, level, classDisplayName, zone,
-                    publicNote, officerNote, isOnline, status, class, achievementPoints,
-                    achievementRank, isMobile, canSoR, repStanding, guid = GetGuildRosterInfo(i)
-                    if name then
-                        name = BG.GSN(name)
-                        if not isOnline then
-                            BG.guildBiaoGeVersion[name] = nil
-                            BG.guildClass[name] = nil
+                for slot = 1, GetNumGuildMembers() do
+                    local memberName, rankLabel, rankId, itemLevel, classDisplayLabel, zoneName,
+                    publicComment, officerComment, onlineNow, stateValue, classToken, achievementScore,
+                    achievementRankValue, onMobile, canSortRoster, reputationStanding, playerGuid = GetGuildRosterInfo(slot)
+                    if memberName then
+                        memberName = BG.GSN(memberName)
+                        if not onlineNow then
+                            BG.guildBiaoGeVersion[memberName] = nil
+                            BG.guildClass[memberName] = nil
                         else
-                            BG.guildClass[name] = class
+                            BG.guildClass[memberName] = classToken
                         end
                     end
                 end
@@ -1444,14 +1485,14 @@ BG.Init(function()
             end)
         end)
         BG.RegisterEvent("CHAT_MSG_SYSTEM", function(self, event, ...) -- 如果团队里有人退出，就删掉
-            local msg = ...
-            if BG.IsSecret(msg) then return end
+            local messageText = ...
+            if BG.IsSecret(messageText) then return end
             local leave = ERR_RAID_MEMBER_REMOVED_S:gsub("%%s", "(.+)")
-            local name = strmatch(msg, leave)
-            if name then
-                BG.raidBiaoGeVersion[name] = nil
-                BG.raidBiaoGeNewVersion[name] = nil
-                BG.raidAuctionVersion[name] = nil
+            local memberName = strmatch(messageText, leave)
+            if memberName then
+                BG.raidBiaoGeVersion[memberName] = nil
+                BG.raidBiaoGeNewVersion[memberName] = nil
+                BG.raidAuctionVersion[memberName] = nil
                 UpdateAddonFrame(addon)
                 UpdateAddonFrame(auction)
                 if BG.RefreshAuctionVersionCompatibility then
@@ -1460,21 +1501,21 @@ BG.Init(function()
             end
         end)
         BG.RegisterEvent("CHAT_MSG_ADDON", function(self, event, ...)
-            local prefix, msg, distType, sender = ...
-            sender = BG.GSN(sender)
-            if prefix == "BiaoGe" and distType == "GUILD" then
-                if strfind(msg, "MyVer") then
-                    local _, version = strsplit("-", msg)
-                    BG.guildBiaoGeVersion[sender] = version
+            local prefixText, messageText, distributionType, senderName = ...
+            senderName = BG.GSN(senderName)
+            if prefixText == C.PREFIX_MAIN and distributionType == "GUILD" then
+                if strfind(messageText, C.OP_MY_VER) then
+                    local _, version = strsplit("-", messageText)
+                    BG.guildBiaoGeVersion[senderName] = version
                     UpdateGuildFrame(guild)
                 end
-            elseif prefix == "BiaoGe" and distType == "RAID" then -- 插件版本
-                if msg == "VersionCheck" then
-                    C_ChatInfo.SendAddonMessage("BiaoGe", "MyVer-" .. BG.ver, "RAID")
-                elseif strfind(msg, "MyVer") then
-                    local _, version = strsplit("-", msg)
-                    BG.raidBiaoGeVersion[sender] = version
-                    BG.raidBiaoGeNewVersion[sender] = BG.GetVerNum(version) >= 20000 and true or nil
+            elseif prefixText == C.PREFIX_MAIN and distributionType == "RAID" then -- 插件版本
+                if messageText == C.OP_VERSION_CHECK then
+                    SendGateway.Addon(C.PREFIX_MAIN, C.OP_MY_VER .. "-" .. BG.ver, "RAID")
+                elseif strfind(messageText, C.OP_MY_VER) then
+                    local _, version = strsplit("-", messageText)
+                    BG.raidBiaoGeVersion[senderName] = version
+                    BG.raidBiaoGeNewVersion[senderName] = BG.GetVerNum(version) >= 20000 and true or nil
                     UpdateAddonFrame(addon)
                     if BG.RefreshAuctionVersionCompatibility then
                         BG.RefreshAuctionVersionCompatibility()
@@ -1483,15 +1524,15 @@ BG.Init(function()
                         BG.StartAucitonFrame:UpdateFrame()
                     end
                 end
-            elseif prefix == "BiaoGeAuction" and distType == "RAID" then -- 拍卖版本
-                local arg1, version = strsplit(",", msg)
-                if arg1 == "MyVer" then
-                    BG.raidAuctionVersion[sender] = version
+            elseif prefixText == C.PREFIX_AUCTION and distributionType == "RAID" then -- 拍卖版本
+                local firstArgument, version = strsplit(",", messageText)
+                if firstArgument == C.OP_MY_VER then
+                    BG.raidAuctionVersion[senderName] = version
                     UpdateAddonFrame(auction)
-                    if sendDone[sender] then
-                        sendDone[sender] = nil
-                        if not notShowSendingText[sender] and sendingCount[sender] <= 2 then
-                            BG.SendSystemMessage(format(BG.STC_g1(L["%s已成功导入拍卖WA。"]), SetClassCFF(sender)))
+                    if sendDone[senderName] then
+                        sendDone[senderName] = nil
+                        if not notShowSendingText[senderName] and sendingCount[senderName] <= 2 then
+                            BG.SendSystemMessage(format(BG.STC_g1(L["%s已成功导入拍卖WA。"]), SetClassCFF(senderName)))
                         end
                         UpdateOnEnter(BG.ButtonRaidAuction)
                         UpdateOnEnter(BG.StartAucitonFrame)
@@ -1502,8 +1543,8 @@ BG.Init(function()
         BG.Init2(function()
             C_Timer.After(3, function()
                 if IsInRaid(1) then
-                    C_ChatInfo.SendAddonMessage("BiaoGe", "VersionCheck", "RAID")
-                    C_ChatInfo.SendAddonMessage("BiaoGeAuction", "VersionCheck", "RAID")
+                    SendGateway.Addon(C.PREFIX_MAIN, C.OP_VERSION_CHECK, "RAID")
+                    SendGateway.Addon(C.PREFIX_AUCTION, C.OP_VERSION_CHECK, "RAID")
                 end
             end)
         end)
@@ -1512,27 +1553,27 @@ BG.Init(function()
     -- 移除屏蔽
     local CheckIgnore
     do
-        local link = "|cffFFFF00|Hgarrmission:" .. "BiaoGeIgnore:" .. "|h[" .. L["禁用此功能"] .. "]|h|r"
-        local function Send(ignoreName)
+        local link = "|cffFFFF00" .. C.ITEM_PROTOCOL .. "BiaoGeIgnore:" .. "|h[" .. L["禁用此功能"] .. "]|h|r"
+        local function Send(excludedName)
             BG.SendSystemMessage((format(L["已把%s从屏蔽名单中移除，防止你看不到对方的拍卖聊天信息。"],
-                SetClassCFF(ignoreName)) .. link))
+                SetClassCFF(excludedName)) .. link))
         end
         function CheckIgnore()
             if BiaoGe.options.ignore ~= 1 then return end
-            for i = 1, C_FriendList.GetNumIgnores() do
-                local ignoreName = C_FriendList.GetIgnoreName(i)
-                if UnitInRaid(ignoreName) then
-                    C_FriendList.DelIgnore(ignoreName)
-                    Send(ignoreName)
+            for slot = 1, C_FriendList.GetNumIgnores() do
+                local excludedName = C_FriendList.GetIgnoreName(slot)
+                if UnitInRaid(excludedName) then
+                    C_FriendList.DelIgnore(excludedName)
+                    Send(excludedName)
                 end
             end
         end
 
         local str = ERR_IGNORE_ADDED_S:gsub("%%s", "(.+)")
-        BG.RegisterEvent("CHAT_MSG_SYSTEM", function(self, event, msg)
+        BG.RegisterEvent("CHAT_MSG_SYSTEM", function(self, event, messageText)
             if BiaoGe.options.ignore ~= 1 then return end
-            if BG.IsSecret(msg) then return end
-            local ignoreName = msg:match(str)
+            if BG.IsSecret(messageText) then return end
+            local ignoreName = messageText:match(str)
             if ignoreName and UnitInRaid(ignoreName) then
                 C_FriendList.DelIgnore(ignoreName)
                 BG.After(0, function()
@@ -1541,12 +1582,12 @@ BG.Init(function()
             end
         end)
 
-        hooksecurefunc("SetItemRef", function(link, _, button)
-            local arg1, arg2, arg3, arg4 = strsplit(":", link)
-            if arg2 == "BiaoGeIgnore" then
-                local name = "ignore"
-                BiaoGe.options[name] = 0
-                BG.options["button" .. name]:SetChecked(false)
+        hooksecurefunc("SetItemRef", function(link, _, clickedButton)
+            local firstArgument, secondArgument, thirdArgument, arg4 = strsplit(":", link)
+            if secondArgument == "BiaoGeIgnore" then
+                local memberName = "ignore"
+                BiaoGe.options[memberName] = 0
+                BG.options["button" .. memberName]:SetChecked(false)
                 BG.SendSystemMessage(L["已禁用自动移除屏蔽对象功能。"])
             end
         end)
@@ -1559,13 +1600,13 @@ BG.Init(function()
         end)
     end
 
-    -- 给拍卖WA设置关注和心愿
+    -- 为拍卖WA写入关注列表与心愿单
     local LibCustomGlow = LibStub("LibCustomGlow-1.0")
     local function ShowTooltipGlow(frame)
-        local startColor = nil
+        local initialColor = nil
         LibCustomGlow.PixelGlow_Start(
             frame,      -- 目标帧（必填）
-            startColor, -- 颜色 {r,g,b,a}，默认 {0.95,0.95,0.32,1}
+            initialColor, -- 颜色 {r,g,b,a}，默认 {0.95,0.95,0.32,1}
             10,         -- 线条数量 N，默认 8
             0.2,        -- 旋转频率（负数反转方向），默认 0.25
             nil,        -- 线条长度（默认随帧大小/线条数自适应）
@@ -1586,38 +1627,44 @@ BG.Init(function()
     end
     -- 已移除 SetBestPriceAuto：它读取第三方付费模块 BGV 的「最佳价格」并自动填入出价框、
     -- 自动点击出价按钮。该能力依赖付费模块，本插件不做付费模块挂载点，整函数删除。
-    function BG.HookCreateAuction(f)
-        local leiting
-        for _, FB in ipairs(BG.GetAllFB()) do
-            if BG.GetLeiTingItem(f.itemID, FB) ~= f.itemID then
-                leiting = BG.GetLeiTingItem(f.itemID, FB)
-                break
+    local function FindThunderItemID(itemID)
+        for _, raidKey in ipairs(BG.GetAllFB()) do
+            if BG.GetLeiTingItem(itemID, raidKey) ~= itemID then
+                return BG.GetLeiTingItem(itemID, raidKey)
             end
         end
-        local itemID = leiting or f.itemID
-        -- 关注
-        local hasGZ, hasHope
-        for _, FB in ipairs(BG.GetAllFB()) do
-            for b = 1, Maxb[FB] do
-                for i = 1, BG.GetMaxi(FB, b) do
-                    local zb = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
-                    if zb and itemID == GetItemID(zb:GetText()) and BiaoGe[FB]["boss" .. b]["guanzhu" .. i] then
-                        local itemType = f.itemFrame.itemTypeText
-                        itemType:SetText((itemType:GetText() or "") .. BG.STC_b1(L["<关注>"]))
-                        hasGZ = true
-                        break
+    end
+
+    local function AppendFocusMark(f, itemID)
+        for _, raidKey in ipairs(BG.GetAllFB()) do
+            for bossSlot = 1, Maxb[raidKey] do
+                for slot = 1, BG.GetMaxi(raidKey, bossSlot) do
+                    local equipment = BG.Frame[raidKey]["boss" .. bossSlot]["zhuangbei" .. slot]
+                    if equipment and itemID == GetItemID(equipment:GetText()) and BiaoGe[raidKey]["boss" .. bossSlot]["guanzhu" .. slot] then
+                        local itemCategory = f.itemFrame.itemTypeText
+                        itemCategory:SetText((itemCategory:GetText() or "") .. BG.STC_b1(L["<关注>"]))
+                        return true
                     end
                 end
-                if hasGZ then break end
             end
-            if hasGZ then break end
         end
-        -- 心愿直接查询本地数据模型，不依赖心愿页面是否已经创建或显示。
-        hasHope = BG.IsHope(itemID)
+        return false
+    end
+
+    local function AppendWishMark(f, itemID, focused)
+        -- Query the local wishlist model even before its UI has been created.
+        local hasHope = BG.IsHope(itemID)
         if hasHope then
-            local itemType = f.itemFrame.itemTypeText
-            itemType:SetText((itemType:GetText() or "") .. (hasGZ and " " or "") .. BG.STC_g1(L["<心愿>"]))
+            local itemCategory = f.itemFrame.itemTypeText
+            itemCategory:SetText((itemCategory:GetText() or "") .. (focused and " " or "") .. BG.STC_g1(L["<心愿>"]))
         end
+        return hasHope
+    end
+
+    function BG.HookCreateAuction(f)
+        local itemID = FindThunderItemID(f.itemID) or f.itemID
+        local hasGZ = AppendFocusMark(f, itemID)
+        local hasHope = AppendWishMark(f, itemID, hasGZ)
         if hasGZ or hasHope then
             BG.After(0.5, function()
                 f.autoFrame:Show()
@@ -1636,9 +1683,9 @@ BG.Init(function()
 
     -- 被顶价语音提醒
     local tipTime = 10
-    function BG.PlayTopPriceSound(f, player)
-        if BiaoGe.options.autoAuctionAutoEndTips == 1 and f.remaining and f.player then
-            if f.remaining <= tipTime and f.player == BG.playerName
+    function BG.PlayTopPriceSound(panel, player)
+        if BiaoGe.options.autoAuctionAutoEndTips == 1 and panel.remaining and panel.player then
+            if panel.remaining <= tipTime and panel.player == BG.playerName
                 and player ~= BG.playerName then
                 BG.PlaySound("auctionTopPrice")
             end
@@ -1769,25 +1816,25 @@ BG.Init(function()
 
             BG.RegisterEvent("CHAT_MSG_ADDON", function(self, event, ...)
                 if not (BG.IsLeader and BiaoGe.options.autoAuctionHappySay == 1) then return end
-                local prefix, msg, distType, sender = ...
-                local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10
-                if prefix == "BiaoGeAuction" then
-                    arg1, arg2, arg3, arg4, arg5, arg6, arg7 = strsplit(",", msg)
-                elseif prefix:match("BiaoGeAuction(%d+)") then
-                    arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 = strsplit("^", msg)
+                local prefixText, messageText, distributionType, senderName = ...
+                local firstArgument, secondArgument, thirdArgument, arg4, arg5, arg6, arg7, arg8, arg9, arg10
+                if prefixText == C.PREFIX_AUCTION then
+                    firstArgument, secondArgument, thirdArgument, arg4, arg5, arg6, arg7 = strsplit(",", messageText)
+                elseif prefixText:match("BiaoGeAuction(%d+)") then
+                    firstArgument, secondArgument, thirdArgument, arg4, arg5, arg6, arg7, arg8, arg9, arg10 = strsplit("^", messageText)
                 end
-                if not arg1 then return end
-                sender = BG.GSN(sender)
-                if arg1 == "SendMyMoney" and distType == "RAID" then
-                    local auctionID = tonumber(arg2)
-                    local money = tonumber(arg3)
-                    if money and money >= BG.autoAuctionHappySay_minMoney then
-                        for _, f in pairs(_G.BGA.Frames) do
-                            if not f.IsEnd and not f.isPaused and f.auctionID == auctionID then
+                if not firstArgument then return end
+                senderName = BG.GSN(senderName)
+                if firstArgument == C.OP_SEND_MY_MONEY and distributionType == "RAID" then
+                    local auctionID = tonumber(secondArgument)
+                    local price = tonumber(thirdArgument)
+                    if price and price >= BG.autoAuctionHappySay_minMoney then
+                        for _, panel in pairs(_G.BGA.Frames) do
+                            if not panel.IsEnd and not panel.isPaused and panel.auctionID == auctionID then
                                 if random(10) > 5 then
-                                    local text = tbl[random(#tbl)]
-                                    if text and sender then
-                                        SendChatMessage(format(text, sender), "RAID")
+                                    local label = tbl[random(#tbl)]
+                                    if label and senderName then
+                                        SendGateway.Chat(format(label, senderName), "RAID")
                                     end
                                 end
                                 return
@@ -1799,45 +1846,45 @@ BG.Init(function()
         end
     end
 
-    -- 团长拍的装备询问记账
+    -- 询问是否为团长拍下的装备记账
     BG.Init2(function()
-        local function HasEmptyGeZi(link, FB)
-            for b = 1, BG.Maxb[FB] do
-                for i = 1, BG.GetMaxi and BG.GetMaxi(FB, b) or BG.Maxi do
-                    local zhuangbei = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
-                    local maijia = BG.Frame[FB]["boss" .. b]["maijia" .. i]
-                    local jine = BG.Frame[FB]["boss" .. b]["jine" .. i]
+        local function HasEmptyGeZi(link, raidKey)
+            for bossSlot = 1, BG.Maxb[raidKey] do
+                for slot = 1, BG.GetMaxi and BG.GetMaxi(raidKey, bossSlot) or BG.Maxi do
+                    local equipment = BG.Frame[raidKey]["boss" .. bossSlot]["zhuangbei" .. slot]
+                    local buyer = BG.Frame[raidKey]["boss" .. bossSlot]["maijia" .. slot]
+                    local amount = BG.Frame[raidKey]["boss" .. bossSlot]["jine" .. slot]
 
-                    if zhuangbei and GetItemID(zhuangbei:GetText()) == GetItemID(link) and
-                        maijia:GetText() == "" and jine:GetText() == "" and
-                        not BiaoGe[FB]["boss" .. b]["qiankuan" .. i] then
-                        return b, i, zhuangbei, maijia, jine, FB
+                    if equipment and GetItemID(equipment:GetText()) == GetItemID(link) and
+                        buyer:GetText() == "" and amount:GetText() == "" and
+                        not BiaoGe[raidKey]["boss" .. bossSlot]["qiankuan" .. slot] then
+                        return bossSlot, slot, equipment, buyer, amount, raidKey
                     end
                 end
             end
         end
-        local function OnClick(zhuangbei, maijia, jine, saveQianKuan, FB)
-            local b, i, _, _maijia, _jine = HasEmptyGeZi(zhuangbei, FB)
-            if b then
-                _maijia:SetText(maijia or "")
+        local function OnClick(equipment, buyer, amount, saveQianKuan, raidKey)
+            local bossSlot, position, _, _maijia, _jine = HasEmptyGeZi(equipment, raidKey)
+            if bossSlot then
+                _maijia:SetText(buyer or "")
                 _maijia:SetTextColor(GetClassRGB(nil, "player"))
-                _jine:SetText(jine)
-                BiaoGe[FB]["boss" .. b]["maijia" .. i] = maijia
-                BiaoGe[FB]["boss" .. b]["jine" .. i] = jine
-                for k, v in pairs(BG.playerClass) do
-                    BiaoGe[FB]["boss" .. b][k .. i] = select(v.select, v.func("player"))
+                _jine:SetText(amount)
+                BiaoGe[raidKey]["boss" .. bossSlot]["maijia" .. position] = buyer
+                BiaoGe[raidKey]["boss" .. bossSlot]["jine" .. position] = amount
+                for fieldKey, entry in pairs(BG.playerClass) do
+                    BiaoGe[raidKey]["boss" .. bossSlot][fieldKey .. position] = select(entry.select, entry.func("player"))
                 end
                 if saveQianKuan then
-                    BiaoGe[FB]["boss" .. b]["qiankuan" .. i] = tonumber(jine)
-                    BG.Frame[FB]["boss" .. b]["qiankuan" .. i]:Show()
+                    BiaoGe[raidKey]["boss" .. bossSlot]["qiankuan" .. position] = tonumber(amount)
+                    BG.Frame[raidKey]["boss" .. bossSlot]["qiankuan" .. position]:Show()
                 end
-                BG.SendSystemMessage(zhuangbei .. BG.STC_g1(L["记账成功！"]))
+                BG.SendSystemMessage(equipment .. BG.STC_g1(L["记账成功！"]))
             else
-                BG.SendSystemMessage(zhuangbei .. BG.STC_r1(L["记账失败！表格里没有匹配到合适的装备！"]))
+                BG.SendSystemMessage(equipment .. BG.STC_r1(L["记账失败！表格里没有匹配到合适的装备！"]))
             end
         end
-        local function MoneyIsError(money)
-            return money:match("[!@#$%^&*]")
+        local function MoneyIsError(price)
+            return price:match("[!@#$%^&*]")
         end
 
         local frameName = 'BiaoGe_SaveRaidLeaderBuyItem'
@@ -1859,16 +1906,16 @@ BG.Init(function()
 
         function BG.SaveRLAuction(zhuangbei, maijia, jine, FB)
             if BG.ImMLorLeader() and zhuangbei and maijia and jine and maijia == player then
-                for i = 1, 4 do
-                    local _, dialog = StaticPopup_Visible(frameName .. i)
+                for slot = 1, 4 do
+                    local _, dialog = StaticPopup_Visible(frameName .. slot)
                     if not dialog then
-                        StaticPopupDialogs[frameName .. i].OnButton1 = function()
+                        StaticPopupDialogs[frameName .. slot].OnButton1 = function()
                             OnClick(zhuangbei, maijia, jine, nil, FB)
                         end
-                        StaticPopupDialogs[frameName .. i].OnButton2 = function()
+                        StaticPopupDialogs[frameName .. slot].OnButton2 = function()
                             OnClick(zhuangbei, maijia, jine, true, FB)
                         end
-                        StaticPopup_Show(frameName .. i, jine, zhuangbei)
+                        StaticPopup_Show(frameName .. slot, jine, zhuangbei)
                         return
                     end
                 end

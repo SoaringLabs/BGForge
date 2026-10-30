@@ -29,7 +29,8 @@ fi
 
 # The dormant implementation stays available for a future policy change.
 rg -q '<Script file="HistoryUIfunction.lua"/>' Core/FBUI/FBUI.xml
-rg -q 'elseif type == "History" then' Core/FBUI/CreateFBUI.lua
+rg -Fq '["History"] = "HistoryFrame"' Core/FBUI/CreateFBUI.lua
+rg -Fq '["History"] = BG.HistoryMainFrame' Core/FBUI/CreateFBUI.lua
 rg -q 'securecall\(BG\.HistoryUI\)' Core/BiaoGe.lua
 rg -q 'function BG\.SaveBiaoGe' "$module"
 rg -q 'function BG\.SetBiaoGeFormHistory' "$module"

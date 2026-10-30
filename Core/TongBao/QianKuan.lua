@@ -9,125 +9,166 @@ local RGB_16 = ns.RGB_16
 local Maxb = ns.Maxb
 
 
-------------------函数：通报欠款-----------------
-local function CreateListTable(onClick, tbl1)
-    local alltable = {}
-    local maijiatable = {}
-    local sumtable = {}
-    local allsum = 0
-    local FB = BG.FB1
-    for b = 1, Maxb[FB] do
-        for i = 1, BG.GetMaxi(FB, b) do
-            if BG.Frame[FB]["boss" .. b]["qiankuan" .. i] then
-                if BiaoGe[FB]["boss" .. b]["qiankuan" .. i] then
-                    local maijia = BG.Frame[FB]["boss" .. b]["maijia" .. i]:GetText() == "" and L["没记买家"]
-                        or BG.Frame[FB]["boss" .. b]["maijia" .. i]:GetText()
-                    local q = {
-                        zhuangbei = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]:GetText(),
-                        maijia = maijia,
-                        color = { BG.Frame[FB]["boss" .. b]["maijia" .. i]:GetTextColor() },
-                        qiankuan = tonumber(BiaoGe[FB]["boss" .. b]["qiankuan" .. i])
-                    }
-                    tinsert(alltable, q)
-                    -- 单独保存买家名字
-                    maijiatable[maijia] = true
+local function AppendReportLine(flatRows, groupedRows, text)
+    table.insert(flatRows, text)
+    table.insert(groupedRows, { text })
+end
+
+local function CollectRosterIndexes(filter)
+    local indexes = {}
+    local total = GetNumGroupMembers()
+    for rosterIndex = 1, total do
+        local unitName, _, subgroup = GetRaidRosterInfo(rosterIndex)
+        if filter(unitName, subgroup) then
+            tinsert(indexes, rosterIndex)
+        end
+    end
+    return indexes
+end
+
+------------------用于通报欠款的函数-----------------
+local function ReadDebtEntries(raidKey)
+    local entries = {}
+    local buyerSet = {}
+    local bossCount = Maxb[raidKey]
+    for bossIdx = 1, bossCount do
+        local slotCount = BG.GetMaxi(raidKey, bossIdx)
+        for i = 1, slotCount do
+            local debtField = BG.Frame[raidKey]["boss" .. bossIdx]["qiankuan" .. i]
+            if debtField then
+                local storedDebt = BiaoGe[raidKey]["boss" .. bossIdx]["qiankuan" .. i]
+                if storedDebt then
+                    local buyerField = BG.Frame[raidKey]["boss" .. bossIdx]["maijia" .. i]
+                    local buyerName = buyerField:GetText()
+                    if buyerName == "" then
+                        buyerName = L["没记买家"]
+                    end
+                    tinsert(entries, {
+                        zhuangbei = BG.Frame[raidKey]["boss" .. bossIdx]["zhuangbei" .. i]:GetText(),
+                        maijia = buyerName,
+                        color = { buyerField:GetTextColor() },
+                        qiankuan = tonumber(storedDebt),
+                    })
+                    buyerSet[buyerName] = true
                 end
             end
         end
     end
-    for i, v in ipairs(alltable) do
-        allsum = v.qiankuan + allsum
+    return entries, buyerSet
+end
+
+local function SumDebt(entries, buyerSet)
+    local grandTotal = 0
+    for _, entry in ipairs(entries) do
+        grandTotal = entry.qiankuan + grandTotal
     end
-    for maijia, _ in pairs(maijiatable) do
-        local sum = 0
+
+    local totals = {}
+    for buyerName in pairs(buyerSet) do
+        local runningTotal = 0
         local color
-        for i, v in ipairs(alltable) do
-            if maijia == v.maijia then
-                sum = v.qiankuan + sum
-                color = v.color
+        for _, entry in ipairs(entries) do
+            if buyerName == entry.maijia then
+                runningTotal = entry.qiankuan + runningTotal
+                color = entry.color
             end
         end
-        local s = { maijia = maijia, color = color, qiankuan = sum }
-        tinsert(sumtable, s)
+        tinsert(totals, { maijia = buyerName, color = color, qiankuan = runningTotal })
     end
-    sort(sumtable, function(a, b)
-        if a.qiankuan > b.qiankuan then
-            return true
-        end
-        return false
+    sort(totals, function(left, right)
+        return left.qiankuan > right.qiankuan
     end)
+    return totals, grandTotal
+end
+
+local function DebtLine(preview, entry)
+    if preview then
+        return L["欠款："] .. entry.maijia .. " " .. BG.FormatNumber(entry.qiankuan, 5)
+    end
+    return L["欠款："] .. RGB_16(entry.maijia, unpack(entry.color)) .. " |cffFF0000" .. BG.FormatNumber(entry.qiankuan, 5) .. RR
+end
+
+local function TotalDebtLine(preview, grandTotal)
+    if preview then
+        return L["总欠款："] .. BG.FormatNumber(grandTotal, 5)
+    end
+    return L["总欠款："] .. " |cffFF0000" .. BG.FormatNumber(grandTotal, 5) .. RR
+end
+
+local function CreateListTable(preview, flatRows)
+    local entries, buyerSet = ReadDebtEntries(BG.FB1)
+    local totals, grandTotal = SumDebt(entries, buyerSet)
 
     -- 开始
-    local tbl1 = tbl1 or {}
-    local tbl2 = {}
-    local text = L["———通报欠款———"]
-    table.insert(tbl1, text)
-    table.insert(tbl2, { text })
+    local flatRows = flatRows or {}
+    local groupedRows = {}
+    AppendReportLine(flatRows, groupedRows, L["———通报欠款———"])
 
-    if #alltable ~= 0 then
-        for i, v in ipairs(sumtable) do
-            if onClick then
-                text = L["欠款："] .. v.maijia .. " " .. BG.FormatNumber(v.qiankuan,5)
-            else
-                text = L["欠款："] .. RGB_16(v.maijia, unpack(v.color)) .. " |cffFF0000" .. BG.FormatNumber(v.qiankuan,5) .. RR
-            end
-            table.insert(tbl1, text)
-            table.insert(tbl2, { text })
-        end
-
-        if onClick then
-            text = L["总欠款："] .. BG.FormatNumber(allsum,5)
-        else
-            text = L["总欠款："] .. " |cffFF0000" .. BG.FormatNumber(allsum,5) .. RR
-        end
-        table.insert(tbl1, text)
-        table.insert(tbl2, { text })
-    else
-        local text = L["没有欠款"]
-        table.insert(tbl1, text)
-        table.insert(tbl2, { text })
+    if #entries == 0 then
+        AppendReportLine(flatRows, groupedRows, L["没有欠款"])
+        return flatRows, groupedRows, totals
     end
-    return tbl1, tbl2, sumtable
+
+    for _, entry in ipairs(totals) do
+        AppendReportLine(flatRows, groupedRows, DebtLine(preview, entry))
+    end
+    AppendReportLine(flatRows, groupedRows, TotalDebtLine(preview, grandTotal))
+    return flatRows, groupedRows, totals
+end
+
+local function ShowReportTooltip(anchor, lines)
+    GameTooltip:SetOwner(anchor, "ANCHOR_TOPLEFT", 0, 0);
+    GameTooltip:ClearLines()
+    for _, entry in ipairs(lines) do
+        GameTooltip:AddLine(entry)
+    end
+    GameTooltip:Show()
+    GameTooltip:SetClampedToScreen(false)
+end
+
+local function HideReportTooltip()
+    GameTooltip:Hide()
+    GameTooltip:SetClampedToScreen(true)
+end
+
+local function SendReport(button, builder)
+    BG.FrameHide(0)
+    if BG.IsErrorSendChannel() then return end
+    button:SetEnabled(false)
+    C_Timer.After(2, function()
+        button:SetEnabled(true)
+    end)
+
+    local _, rows = builder(true)
+    BG.SendMsgToRaid(rows)
+
+    BG.PlaySound(2)
+end
+
+local function AddTooltipError(text)
+    GameTooltip:AddLine(text, 1, 0, 0, true)
+    GameTooltip:Show()
 end
 
 
-function BG.QianKuanUI(lastbt)
+function BG.QianKuanUI(previousButton)
     local bt = BG.CreateButton(BG.ButtonZhangDan)
     bt:SetSize(BG.ButtonZhangDan:GetWidth(), BG.ButtonZhangDan:GetHeight())
-    bt:SetPoint("LEFT", lastbt, "RIGHT", BG.ButtonZhangDan.jiange, 0)
+    bt:SetPoint("LEFT", previousButton, "RIGHT", BG.ButtonZhangDan.jiange, 0)
     bt:SetText(L["欠款"])
     BG.ButtonQianKuan = bt
     tinsert(BG.TongBaoButtons, bt)
 
     bt:SetScript("OnEnter", function(self)
         if BG.Backing then return end
-        local tx = CreateListTable(nil)
+        local markTexture = CreateListTable(nil)
 
-        GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0);
-        GameTooltip:ClearLines()
-        for i, text in ipairs(tx) do
-            GameTooltip:AddLine(text)
-        end
-        GameTooltip:Show()
-        GameTooltip:SetClampedToScreen(false)
+        ShowReportTooltip(self, markTexture)
     end)
-    bt:SetScript("OnLeave", function(self)
-        GameTooltip:Hide()
-        GameTooltip:SetClampedToScreen(true)
-    end)
+    bt:SetScript("OnLeave", HideReportTooltip)
     -- 单击触发
     bt:SetScript("OnClick", function(self)
-        BG.FrameHide(0)
-        if BG.IsErrorSendChannel() then return end
-        self:SetEnabled(false)
-        C_Timer.After(2, function()
-            bt:SetEnabled(true)
-        end)
-
-        local _, tbl = CreateListTable(true)
-        BG.SendMsgToRaid(tbl)
-
-        BG.PlaySound(2)
+        SendReport(self, CreateListTable)
     end)
 
     return bt
@@ -152,90 +193,68 @@ BG.Init(function()
         for i = 1, 8 do
             tbl[i] = 5
         end
-        for id = 1, GetNumGroupMembers() do
-            local _, _, subgroup = GetRaidRosterInfo(id)
+        for rosterIndex = 1, GetNumGroupMembers() do
+            local _, _, subgroup = GetRaidRosterInfo(rosterIndex)
             tbl[subgroup] = tbl[subgroup] - 1
         end
         return tbl
     end
-    local function Move(team)
+    local function FillFreeSlots(indexes, maxGroup)
+        if not next(indexes) then return end
+        local freeSlots = {}
+        local freeCounts = GetSupgroupEmpty()
+        for groupNo = 1, maxGroup do
+            for _ = 1, freeCounts[groupNo] do
+                tinsert(freeSlots, groupNo)
+            end
+        end
+        for i, rosterIndex in ipairs(indexes) do
+            if freeSlots[i] then
+                SetRaidSubgroup(rosterIndex, freeSlots[i])
+            end
+        end
+        return true
+    end
+    local function Move(groupNo)
         if not CanMove() then return end
-        if team <= 1 then
+        if groupNo <= 1 then
             BG.SendSystemMessage(L["队伍调整已完成。"])
             bt:SetEnabled(true)
             PlaySoundFile("Interface\\AddOns\\" .. AddonName .. "\\Media\\sound\\other\\done.mp3", "Master")
             return
         end
-        local needMoveIDs = {}
-        for id = 1, GetNumGroupMembers() do
-            local name, _, subgroup = GetRaidRosterInfo(id)
-            if subgroup == team and name ~= BG.playerName then
-                tinsert(needMoveIDs, id)
-            end
-        end
-        if next(needMoveIDs) then
-            local emptypTeams = {}
-            local emptyTbl = GetSupgroupEmpty()
-            for teamIndex = 1, team - 1 do
-                for _ = 1, emptyTbl[teamIndex] do
-                    tinsert(emptypTeams, teamIndex)
-                end
-            end
-            for i, id in ipairs(needMoveIDs) do
-                if emptypTeams[i] then
-                    SetRaidSubgroup(id, emptypTeams[i])
-                end
-            end
+        local indexes = CollectRosterIndexes(function(unitName, subgroup)
+            return subgroup == groupNo and unitName ~= BG.playerName
+        end)
+        if FillFreeSlots(indexes, groupNo - 1) then
             BG.After(.5, function()
-                Move(team - 1)
+                Move(groupNo - 1)
             end)
         else
-            Move(team - 1)
+            Move(groupNo - 1)
         end
     end
     local function Move78()
         if not CanMove() then return end
-        local t78 = {}
-        for id = 1, GetNumGroupMembers() do
-            local name, _, subgroup = GetRaidRosterInfo(id)
-            if (subgroup == 7 or subgroup == 8) and not BG.ValueInTable(qkPlayers, name) then
-                tinsert(t78, id)
-            end
-        end
-        if next(t78) then
-            local emptypTeams = {}
-            local emptyTbl = GetSupgroupEmpty()
-            for teamIndex = 1, 6 do
-                for _ = 1, emptyTbl[teamIndex] do
-                    tinsert(emptypTeams, teamIndex)
-                end
-            end
-            for i, id in ipairs(t78) do
-                if emptypTeams[i] then
-                    SetRaidSubgroup(id, emptypTeams[i])
-                end
-            end
-            return true
-        end
+        local indexes = CollectRosterIndexes(function(unitName, subgroup)
+            return (subgroup == 7 or subgroup == 8) and not BG.ValueInTable(qkPlayers, unitName)
+        end)
+        return FillFreeSlots(indexes, 6)
     end
     local function Move16()
         if not CanMove() then return end
-        local qkPlayerIDs = {}
-        for id = 1, GetNumGroupMembers() do
-            local name = GetRaidRosterInfo(id)
-            if BG.ValueInTable(qkPlayers, name) then
-                tinsert(qkPlayerIDs, id)
-            end
-        end
-        for i, id in ipairs(qkPlayerIDs) do
-            SetRaidSubgroup(id, i <= 5 and 8 or 7) -- 前5个先移到8队，后5个移到7队
+        local indexes = CollectRosterIndexes(function(unitName)
+            return BG.ValueInTable(qkPlayers, unitName)
+        end)
+        for i, rosterIndex in ipairs(indexes) do
+            SetRaidSubgroup(rosterIndex, i <= 5 and 8 or 7) -- 前5个先移到8队，后5个移到7队
         end
         BG.After(.5, function()
             if not BG.ValueInTable(qkPlayers, BG.playerName) then
-                for id = 1, GetNumGroupMembers() do
-                    local name, _, subgroup = GetRaidRosterInfo(id)
-                    if name == BG.playerName then
-                        SetRaidSubgroup(id, 6) -- 把自己调到6队
+                for rosterIndex = 1, GetNumGroupMembers() do
+                    local unitName, _, subgroup = GetRaidRosterInfo(rosterIndex)
+                    if unitName == BG.playerName then
+                        SetRaidSubgroup(rosterIndex, 6) -- 把自己调到6队
                         BG.After(.5, function()
                             Move(6)
                         end)
@@ -248,12 +267,12 @@ BG.Init(function()
         end)
     end
 
-    -- 先清空78队，再把欠款者放到78队，接着把6-1队往前填充空闲位置
+    -- 先把第7、8队清空，将欠款者放进这两队，再把第6到第1队依次往前挪，填补空位
     function BG.SetRaidSubgroup()
         if not CanMove() then return end
         BG.After((Move78() and .5 or 0), Move16)
     end
-    
+
     bt = BG.CreateButton(RaidFrame)
     bt:SetSize(90, 25)
     bt:SetPoint("TOPRIGHT", FriendsFrame, "BOTTOMRIGHT", -2, -2)
@@ -272,34 +291,28 @@ BG.Init(function()
         GameTooltip:ClearLines()
         GameTooltip:AddLine(L["把欠款者移到78队"], 1, 1, 1, true)
         if not IsInRaid(1) then
-            GameTooltip:AddLine(L["不在团队，该功能无法使用。"], 1, 0, 0, true)
-            GameTooltip:Show()
+            AddTooltipError(L["不在团队，该功能无法使用。"])
             return
         end
         if not IsLeader() then
-            GameTooltip:AddLine(L["你不是团长或助理，该功能无法使用。"], 1, 0, 0, true)
-            GameTooltip:Show()
+            AddTooltipError(L["你不是团长或助理，该功能无法使用。"])
             return
         end
         if InCombatLockdown() then
-            GameTooltip:AddLine(L["战斗中，该功能无法使用。"], 1, 0, 0, true)
-            GameTooltip:Show()
+            AddTooltipError(L["战斗中，该功能无法使用。"])
             return
         end
         if GetNumGroupMembers() > 30 then
-            GameTooltip:AddLine(L["团队人数超过30人，该功能无法使用。"], 1, 0, 0, true)
-            GameTooltip:Show()
+            AddTooltipError(L["团队人数超过30人，该功能无法使用。"])
             return
         end
         local _, _, players = CreateListTable(nil)
         if not next(players) then
-            GameTooltip:AddLine(L["没有欠款。"], 1, 0, 0, true)
-            GameTooltip:Show()
+            AddTooltipError(L["没有欠款。"])
             return
         end
         if #players > 10 then
-            GameTooltip:AddLine(L["欠款者超过10人，该功能无法使用。"], 1, 0, 0, true)
-            GameTooltip:Show()
+            AddTooltipError(L["欠款者超过10人，该功能无法使用。"])
             return
         end
         local tbl = {}

@@ -4,6 +4,7 @@ local _, ns = ...
 local LibBG = ns.LibBG
 local L = ns.L
 
+local C = ns.Protocol
 local RR = ns.RR
 local NN = ns.NN
 local RN = ns.RN
@@ -18,7 +19,6 @@ local HopeMaxi = ns.HopeMaxi
 local AddTexture = ns.AddTexture
 local GetItemID = ns.GetItemID
 
-local pt = print
 
 local linshi_duizhang
 local h_item = "|c.-|Hitem.-|h|r"
@@ -41,6 +41,313 @@ local locales = {
     ["^收入为：%d+。"] = { "^收入为：%d+。", "^收入為：%d+。", },
     ["-感谢使用大脚金团辅助工具-"] = { "-感谢使用大脚金团辅助工具-", "-感謝使用大脚金團輔助工具-", },
 }
+local BOSS_KEY = "boss"
+
+local function Cell(container, raidKey, bossIdx, field, slot)
+    return container[raidKey][BOSS_KEY .. bossIdx][field .. slot]
+end
+
+local function ForEachSlot(FB, maxBoss, handler)
+    for b = 1, maxBoss do
+        local limit = BG.GetMaxi(FB, b)
+        for i = 1, limit do
+            if handler(b, i) then
+                return true
+            end
+        end
+    end
+end
+
+local function ReadAmount(field)
+    local value = tonumber(field:GetText())
+    if not value or value == 0 then
+        return ""
+    end
+    return value
+end
+
+local function CompareAmountState(mine, theirs)
+    local mineValue = tonumber(mine)
+    local theirsValue = tonumber(theirs)
+    if not (mineValue or theirsValue) then
+        return 0
+    end
+    if mineValue == theirsValue then
+        return 1
+    end
+    return 2
+end
+
+local function MemberColor(class)
+    if class then
+        return select(4, GetClassColor(class))
+    end
+    return "ffFFFFFF"
+end
+
+local function RaidSuffix(raidKey)
+    for _, info in ipairs(BG.FBtable2) do
+        if raidKey == info.FB then
+            return L["，"] .. BG.STC_b1(info.shortName or info.localName)
+        end
+    end
+    return ""
+end
+
+local function CopyAmounts(FB, b, i, theirAmount, ourAmount, jine)
+    local amountText = theirAmount:GetText()
+    ourAmount:SetText(amountText)
+    jine:SetText(amountText)
+    if amountText == "" then
+        BiaoGe[FB][BOSS_KEY .. b]["jine" .. i] = nil
+    else
+        BiaoGe[FB][BOSS_KEY .. b]["jine" .. i] = amountText
+    end
+end
+
+local function CopyBuyer(FB, b, i, maijia)
+    local billBuyer = Cell(BG.DuiZhangFrame, FB, b, "maijia", i)
+    local billColor = Cell(BG.DuiZhangFrame, FB, b, "color", i)
+    maijia:SetText(billBuyer or "")
+    BiaoGe[FB][BOSS_KEY .. b]["maijia" .. i] = billBuyer
+    if billColor then
+        maijia:SetTextColor(unpack(billColor))
+    else
+        maijia:SetTextColor(1, 1, 1)
+    end
+    for k in pairs(BG.playerClass) do
+        BiaoGe[FB][BOSS_KEY .. b][k .. i] = Cell(BG.DuiZhangFrame, FB, b, k, i)
+    end
+end
+
+local function HasClaimedSlot(claimedSlots, tradeTbl)
+    for _, claimed in ipairs(claimedSlots) do
+        for _, entry in ipairs(tradeTbl) do
+            if claimed.b == entry.b and claimed.i == entry.i then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function MergeTradeTbl(FB, tradeTbl, claimedSlots)
+    if not tradeTbl or HasClaimedSlot(claimedSlots, tradeTbl) then
+        return
+    end
+    local copy = BG.Copy(tradeTbl)
+    for i, entry in ipairs(copy) do
+        local equipmentField = Cell(BG.Frame, FB, entry.b, "zhuangbei", entry.i)
+        entry.FB = FB
+        entry.itemID = GetItemID(equipmentField:GetText())
+        entry.link = equipmentField:GetText()
+        tinsert(claimedSlots, { b = entry.b, i = entry.i })
+    end
+    tinsert(BiaoGe[FB].tradeTbl, copy)
+end
+
+local function FillBillRow(FB, billRow)
+    local item = billRow.zhuangbei
+    local matched
+    ForEachSlot(FB, Maxb[FB] - 1, function(b, i)
+        local zhuangbei = Cell(BG.DuiZhangFrame, FB, b, "zhuangbei", i)
+        local theirAmount = Cell(BG.DuiZhangFrame, FB, b, "otherjine", i)
+        if zhuangbei and GetItemID(zhuangbei:GetText()) == GetItemID(item) and theirAmount:GetText() == "" then
+            theirAmount:SetText(billRow.jine)
+            BG.DuiZhangFrame[FB][BOSS_KEY .. b]["maijia" .. i] = billRow.maijia
+            for k in pairs(BG.playerClass) do
+                BG.DuiZhangFrame[FB][BOSS_KEY .. b][k .. i] = billRow[k]
+            end
+            matched = true
+            return true
+        end
+    end)
+    if matched then
+        return
+    end
+    local b = Maxb[FB]
+    for i = 1, BG.GetMaxi(FB, b) do
+        local zhuangbei = Cell(BG.DuiZhangFrame, FB, b, "zhuangbei", i)
+        if zhuangbei and not GetItemID(zhuangbei:GetText()) then
+            zhuangbei:SetText(item)
+            Cell(BG.DuiZhangFrame, FB, b, "otherjine", i):SetText(billRow.jine)
+            return
+        end
+    end
+end
+
+local function FindTradeSlot(FB, tradeEntry)
+    for b = 1, Maxb[FB] do
+        for i = 1, BG.GetMaxi(FB, b) do
+            local theirAmount = Cell(BG.DuiZhangFrame, FB, b, "otherjine", i)
+            if theirAmount and not (theirAmount.hasTradeTbl or theirAmount.tradeTbl) then
+                local maijia = Cell(BG.DuiZhangFrame, FB, b, "maijia", i)
+                local itemID = GetItemID(Cell(BG.DuiZhangFrame, FB, b, "zhuangbei", i):GetText())
+                local jine = theirAmount:GetText()
+                if jine == L["打包交易"] then
+                    jine = "t"
+                end
+                if maijia == tradeEntry.maijia and itemID == tradeEntry.itemID and jine == tradeEntry.jine then
+                    theirAmount.hasTradeTbl = true
+                    return b, i
+                end
+            end
+        end
+    end
+end
+
+local function MarkTradeGroups(FB, num)
+    local tradeGroups = BiaoGe.duizhang[num].tradeTbl
+    if not tradeGroups then return end
+    for groupIdx in ipairs(tradeGroups) do
+        local rows = {}
+        for _, tradeEntry in ipairs(tradeGroups[groupIdx]) do
+            local b, i = FindTradeSlot(FB, tradeEntry)
+            if b then
+                tinsert(rows, { b = b, i = i })
+            end
+        end
+        for _, slot in ipairs(rows) do
+            local amount = Cell(BG.DuiZhangFrame, FB, slot.b, "otherjine", slot.i)
+            amount.hasTradeTbl = nil
+            amount.tradeTbl = rows
+        end
+    end
+end
+
+local function UpdateMarks(FB)
+    local mismatchRows = {}
+    for b = 1, Maxb[FB] + 1 do
+        for i = 1, BG.GetMaxi(FB, b) do
+            local zhuangbei = Cell(BG.DuiZhangFrame, FB, b, "zhuangbei", i)
+            local ourAmount = Cell(BG.DuiZhangFrame, FB, b, "myjine", i)
+            local theirAmount = Cell(BG.DuiZhangFrame, FB, b, "otherjine", i)
+            local markTexture = Cell(BG.DuiZhangFrame, FB, b, "yes", i)
+            if zhuangbei and zhuangbei ~= BG.DuiZhangFrame[FB][BOSS_KEY .. Maxb[FB] + 1]["zhuangbei2"] then
+                local diffBackdrop = Cell(BG.DuiZhangFrameDs, FB .. 3, b, "ds", i)
+                local mine = ReadAmount(ourAmount)
+                local theirs = ReadAmount(theirAmount)
+                local state = CompareAmountState(mine, theirs)
+                if state == 1 then
+                    markTexture:SetTexture("interface/raidframe/readycheck-ready")
+                    diffBackdrop:Hide()
+                elseif state == 2 then
+                    markTexture:SetTexture("interface/raidframe/readycheck-notready")
+                    diffBackdrop:Show()
+                    if b <= Maxb[FB] - 1 then
+                        local itemID = GetItemID(zhuangbei:GetText())
+                        if itemID then
+                            tinsert(mismatchRows, {
+                                itemID = itemID,
+                                b = b,
+                                i = i,
+                                my = tonumber(mine) or 0,
+                                other = tonumber(theirs) or 0,
+                            })
+                        end
+                    end
+                else
+                    markTexture:SetTexture(nil)
+                    diffBackdrop:Hide()
+                end
+            end
+        end
+    end
+    if next(mismatchRows) then
+        local sameItem = {}
+        for _, row in ipairs(mismatchRows) do
+            local bucket = sameItem[row.itemID]
+            if not bucket then
+                bucket = { gz = {}, my = 0, other = 0, }
+                sameItem[row.itemID] = bucket
+            end
+            tinsert(bucket.gz, { b = row.b, i = row.i })
+            bucket.my = bucket.my + row.my
+            bucket.other = bucket.other + row.other
+        end
+        for _, bucket in pairs(sameItem) do
+            if bucket.my == bucket.other then
+                for _, slot in ipairs(bucket.gz) do
+                    local b = slot.b
+                    local i = slot.i
+                    Cell(BG.DuiZhangFrame, FB, b, "yes", i):SetTexture("interface/raidframe/readycheck-ready")
+                    Cell(BG.DuiZhangFrameDs, FB .. 3, b, "ds", i):Hide()
+                    Cell(BG.DuiZhangFrame, FB, b, "zhuangbei", i).sameItem = bucket.gz
+                    Cell(BG.DuiZhangFrame, FB, b, "myjine", i).sameItem = bucket.gz
+                    Cell(BG.DuiZhangFrame, FB, b, "otherjine", i).sameItem = bucket.gz
+                end
+            end
+        end
+    end
+end
+
+local function CreateSlotLabel(button, value)
+    local text = button:CreateFontString()
+    text:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
+    text:SetPoint("BOTTOM", button, "TOP", 0, 2)
+    text:SetText(value)
+    text:SetTextColor(.5, .5, .5)
+    return text
+end
+
+local function PlaceRaidButton(button, i, parent)
+    if i == 1 then
+        button:SetPoint("TOPLEFT", 15, -25)
+        CreateSlotLabel(button, 1)
+    elseif i == 21 then
+        button:SetPoint("TOPLEFT", parent.buttons[5], "BOTTOMLEFT", 0, -30)
+        CreateSlotLabel(button, (i - 1) / 5 + 1)
+    elseif (i - 1) % 5 == 0 then
+        button:SetPoint("TOPLEFT", parent.buttons[i - 5], "TOPRIGHT", 5, 0)
+        CreateSlotLabel(button, (i - 1) / 5 + 1)
+    else
+        button:SetPoint("TOPLEFT", parent.buttons[i - 1], "BOTTOMLEFT", 0, -1)
+    end
+end
+
+local function BuildRaidMemberButton(i, mainFrame)
+    local button = CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
+    button:SetBackdrop({
+        bgFile = "Interface/ChatFrame/ChatFrameBackground",
+        edgeFile = "Interface/ChatFrame/ChatFrameBackground",
+        edgeSize = 1,
+    })
+    button:SetBackdropColor(0, 0, 0, .2)
+    button:SetBackdropBorderColor(1, 1, 1, .2)
+    button:SetSize(90, 20)
+    PlaceRaidButton(button, i, mainFrame)
+    tinsert(mainFrame.buttons, button)
+
+    local nameText = button:CreateFontString()
+    nameText:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
+    nameText:SetPoint("LEFT", 2, 0)
+    nameText:SetWidth(button:GetWidth() - 5)
+    nameText:SetJustifyH("LEFT")
+    nameText:SetWordWrap(false)
+    button.nameText = nameText
+
+    local iconTexture = button:CreateTexture(nil, "OVERLAY")
+    iconTexture:SetPoint("CENTER", button, "TOPLEFT", 2, -2)
+    iconTexture:SetSize(10, 10)
+    button.icon = iconTexture
+
+    local masterTexture = button:CreateTexture(nil, "OVERLAY")
+    masterTexture:SetSize(10, 10)
+    button.master = masterTexture
+end
+
+local function MemberRankIcon(v)
+    if v.rank == 2 then
+        return "interface/groupframe/ui-group-leadericon"
+    elseif v.role == "MAINTANK" then
+        return 132064
+    elseif v.role == "MAINASSIST" then
+        return 132063
+    elseif v.rank == 1 then
+        return "interface/groupframe/ui-group-assistanticon"
+    end
+end
+
 local function Default(player, time)
     BG.IsSavingLedger = true
     return {
@@ -69,13 +376,13 @@ local function CheckTimeOut(time)
 end
 
 local function Send(num, sumMoney, FB)
-    local FBtext = ""
-    local FBName = BG.GetFBinfo(FB, "shortName")
-    if FBName then
-        FBtext = L["，"] .. BG.STC_b1(FBName)
+    local raidSuffix = ""
+    local raidShortName = BG.GetFBinfo(FB, "shortName")
+    if raidShortName then
+        raidSuffix = L["，"] .. BG.STC_b1(raidShortName)
     end
     local link = format(L["|Hgarrmission:BiaoGeDuiZhang:%s|h[点击：对账]（|cff00ff00装备总收入%s|r%s）"],
-        num, BG.FormatNumber(sumMoney, 5), FBtext)
+        num, BG.FormatNumber(sumMoney, 5), raidSuffix)
     SendSystemMessage(link)
     BG.After(0.1, function()
         local link = format(L["|Hgarrmission:BiaoGeDuiZhangCopy:%s:%s|h[ALT+点击：复制账单]（|cff00ff00仅对装备收入有效|r）"],
@@ -85,15 +392,15 @@ local function Send(num, sumMoney, FB)
 end
 
 local function SaveRaidMember()
-    local tbl = {}
+    local rows = {}
     local point = BG.GetRaidPoint()
     for _, v in ipairs(BG.raidRosterInfo) do
         local name = v.name
-        tbl[name] = BG.Copy(v)
-        tbl[name].point = point[name]
+        rows[name] = BG.Copy(v)
+        rows[name].point = point[name]
     end
-    if next(tbl) then
-        return tbl
+    if next(rows) then
+        return rows
     end
 end
 
@@ -149,7 +456,7 @@ BG.RegisterEvent({ "CHAT_MSG_RAID_WARNING", "CHAT_MSG_RAID_LEADER", "CHAT_MSG_RA
         linshi_duizhang.FB = FB
     end
 
-    -- 如果已经是账单了，则开始保存每个装备的价格
+    -- 一旦进入账单阶段，就逐件保存装备价格
     if linshi_duizhang.yes and sender == linshi_duizhang.player and strfind(msg, h_item) then
         local item = strmatch(msg, h_item)
         local jine
@@ -204,7 +511,7 @@ BG.RegisterEvent({ "CHAT_MSG_RAID_WARNING", "CHAT_MSG_RAID_LEADER", "CHAT_MSG_RA
         return
     end
 
-    -- 保存完整账单至数据库
+    -- 把整份账单写入存档
     local yes
     if linshi_duizhang.yes and sender == linshi_duizhang.player and (BG.FindTableString(msg, locales["平均每人收入:"]) or BG.FindTableString(msg, locales["感谢使用金团表格"])) then
         yes = true
@@ -258,7 +565,7 @@ end)
 BG.RegisterEvent("CHAT_MSG_ADDON", function(self, event, ...)
     local prefix, msg, distType = ...
     if not linshi_duizhang then return end
-    if prefix == "BiaoGe" and distType == "RAID" and msg:match("^DuiZhang-") then
+    if prefix == C.PREFIX_MAIN and distType == "RAID" and msg:match("^DuiZhang-") then
         linshi_duizhang.tradeTbl = linshi_duizhang.tradeTbl or {}
         local a = {}
         local _, maijia, text = strsplit("-", msg)
@@ -281,36 +588,36 @@ end)
 ------------------创建UI------------------
 function BG.DuiZhangUI()
     BG.DuiZhangDropDown = {}
-    local dropDown = LibBG:Create_UIDropDownMenu(nil, BG.DuiZhangMainFrame)
-    dropDown:SetPoint("BOTTOM", BG.MainFrame, "BOTTOM", -40, 30)
-    LibBG:UIDropDownMenu_SetWidth(dropDown, 450)
-    LibBG:UIDropDownMenu_SetText(dropDown, L["无"])
-    LibBG:UIDropDownMenu_SetAnchor(dropDown, 0, 0, "BOTTOM", dropDown, "TOP")
-    BG.dropDownToggle(dropDown)
-    BG.DuiZhangDropDown.DropDown = dropDown
-    local text = dropDown:CreateFontString()
-    text:SetPoint("RIGHT", dropDown, "LEFT", 10, 3)
+    local menu = LibBG:Create_UIDropDownMenu(nil, BG.DuiZhangMainFrame)
+    menu:SetPoint("BOTTOM", BG.MainFrame, "BOTTOM", -40, 30)
+    LibBG:UIDropDownMenu_SetWidth(menu, 450)
+    LibBG:UIDropDownMenu_SetText(menu, L["无"])
+    LibBG:UIDropDownMenu_SetAnchor(menu, 0, 0, "BOTTOM", menu, "TOP")
+    BG.dropDownToggle(menu)
+    BG.DuiZhangDropDown.DropDown = menu
+    local text = menu:CreateFontString()
+    text:SetPoint("RIGHT", menu, "LEFT", 10, 3)
     text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
     text:SetTextColor(1, 1, 0)
     text:SetText(BG.STC_g1(L["对比的账单："]))
     BG.DuiZhangDropDown.BiaoTi = text
 
     -- 删除账单
-    hooksecurefunc(LibBG, "ToggleDropDownMenu", function(_, _, _, dropDown)
-        if dropDown == BG.DuiZhangDropDown.DropDown then
+    hooksecurefunc(LibBG, "ToggleDropDownMenu", function(_, _, _, menu)
+        if menu == BG.DuiZhangDropDown.DropDown then
             for i = 1, _G['L_DropDownList1'].numButtons do
-                local button = _G["L_DropDownList1Button" .. i]
-                if not button.deleteZhangDan then
-                    local bt = CreateFrame("Button", nil, button)
-                    bt:SetSize(20, 20)
-                    bt:SetPoint("RIGHT", -2, 0)
-                    bt:SetNormalTexture("interface/raidframe/readycheck-notready")
-                    bt:SetHighlightTexture("interface/raidframe/readycheck-notready")
-                    bt:RegisterForClicks("AnyUp")
-                    bt.num = i
-                    bt:Hide()
-                    button.deleteZhangDan = bt
-                    bt:SetScript("OnClick", function(self)
+                local mouseButton = _G["L_DropDownList1Button" .. i]
+                if not mouseButton.deleteZhangDan then
+                    local tmpValue = CreateFrame("Button", nil, mouseButton)
+                    tmpValue:SetSize(20, 20)
+                    tmpValue:SetPoint("RIGHT", -2, 0)
+                    tmpValue:SetNormalTexture("interface/raidframe/readycheck-notready")
+                    tmpValue:SetHighlightTexture("interface/raidframe/readycheck-notready")
+                    tmpValue:RegisterForClicks("AnyUp")
+                    tmpValue.num = i
+                    tmpValue:Hide()
+                    mouseButton.deleteZhangDan = tmpValue
+                    tmpValue:SetScript("OnClick", function(self)
                         BG.PlaySound(1)
                         tremove(BiaoGe.duizhang, self.num)
                         BG.lastduizhangNum = nil
@@ -320,44 +627,44 @@ function BG.DuiZhangUI()
                         LibBG:CloseDropDownMenus()
                         LibBG:ToggleDropDownMenu(nil, nil, BG.DuiZhangDropDown.DropDown)
                     end)
-                    bt:SetScript("OnEnter", function(self)
+                    tmpValue:SetScript("OnEnter", function(self)
                         LibBG:UIDropDownMenu_StopCounting(self:GetParent():GetParent())
-                        button.Highlight:Show()
+                        mouseButton.Highlight:Show()
                         GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 0, 0)
                         GameTooltip:ClearLines()
                         GameTooltip:AddLine(L["删除该账单"], 1, 1, 1, true)
                         GameTooltip:Show()
                     end)
-                    bt:SetScript("OnLeave", function(self)
+                    tmpValue:SetScript("OnLeave", function(self)
                         LibBG:UIDropDownMenu_StartCounting(self:GetParent():GetParent())
-                        button.Highlight:Hide()
+                        mouseButton.Highlight:Hide()
                         GameTooltip:Hide()
                     end)
                 end
-                button.deleteZhangDan.num = i
-                button.deleteZhangDan:SetShown(not (i == _G['L_DropDownList1'].numButtons))
+                mouseButton.deleteZhangDan.num = i
+                mouseButton.deleteZhangDan:SetShown(not (i == _G['L_DropDownList1'].numButtons))
             end
         else
             for i = 1, L_UIDROPDOWNMENU_MAXBUTTONS do
-                local button = _G["L_DropDownList1Button" .. i]
-                if button.deleteZhangDan then
-                    button.deleteZhangDan:Hide()
+                local mouseButton = _G["L_DropDownList1Button" .. i]
+                if mouseButton.deleteZhangDan then
+                    mouseButton.deleteZhangDan:Hide()
                 end
             end
         end
     end)
 
-    -- 一天后自动删掉相应账单
+    -- 超过一天后自动清除对应的账单
     local name = "duiZhangTime"
     BG.options[name .. "reset"] = 24 -- 对账单保存24小时
     if not BiaoGe.options[name] then
         BiaoGe.options[name] = BG.options[name .. "reset"]
     end
-    local nowtime = GetServerTime()
+    local currentTime = GetServerTime()
     for i = #BiaoGe.duizhang, 1, -1 do
         if type(BiaoGe.duizhang[i]) == "table" and BiaoGe.duizhang[i].t then
-            local zhangdantime = BiaoGe.duizhang[i].t
-            if tonumber(nowtime) - tonumber(zhangdantime) >= (BiaoGe.options[name] * 60 * 60) then
+            local billTime = BiaoGe.duizhang[i].t
+            if tonumber(currentTime) - tonumber(billTime) >= (BiaoGe.options[name] * 60 * 60) then
                 tremove(BiaoGe.duizhang, i)
             end
         end
@@ -365,13 +672,13 @@ function BG.DuiZhangUI()
 
     -- 复制对方金额
     do
-        local bt = BG.CreateButton(BG.DuiZhangMainFrame)
-        bt:SetSize(100, 25)
-        bt:SetPoint("LEFT", dropDown, "RIGHT", 0, 3)
-        bt:SetText(L["复制对方账单"])
-        bt:Disable()
-        BG.DuiZhangMainFrame.ButtonCopy = bt
-        bt:SetScript("OnEnter", function(self)
+        local tmpValue = BG.CreateButton(BG.DuiZhangMainFrame)
+        tmpValue:SetSize(100, 25)
+        tmpValue:SetPoint("LEFT", menu, "RIGHT", 0, 3)
+        tmpValue:SetText(L["复制对方账单"])
+        tmpValue:Disable()
+        BG.DuiZhangMainFrame.ButtonCopy = tmpValue
+        tmpValue:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0)
             GameTooltip:ClearLines()
             GameTooltip:AddLine(L["复制对方账单"], 1, 1, 1, true)
@@ -380,108 +687,60 @@ function BG.DuiZhangUI()
             GameTooltip:AddLine(L["不会对漏记的装备和金额生效。"], 1, 0.82, 0, true)
             GameTooltip:Show()
         end)
-        bt:SetScript("OnLeave", GameTooltip_Hide)
-        bt:SetScript("OnClick", function(self)
-            bt:Copy()
+        tmpValue:SetScript("OnLeave", GameTooltip_Hide)
+        tmpValue:SetScript("OnClick", function(self)
+            tmpValue:Copy()
             BG.PlaySound(2)
         end)
-        function bt:Copy()
+        function tmpValue:Copy()
             local addons = BiaoGe.duizhang[BG.lastduizhangNum].addons
             local FB = BG.FB1
-            local tradeInfo = {}
+            local claimedSlots = {}
             BiaoGe[FB].tradeTbl = {}
-            for b = 1, Maxb[FB] - 1 do
-                for i = 1, BG.GetMaxi(FB, b) do
-                    local otherjine = BG.DuiZhangFrame[FB]["boss" .. b]["otherjine" .. i]
-                    local myjine = BG.DuiZhangFrame[FB]["boss" .. b]["myjine" .. i]
-                    local zhuangbei = BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]
-                    local maijia = BG.Frame[FB]["boss" .. b]["maijia" .. i]
-                    local jine = BG.Frame[FB]["boss" .. b]["jine" .. i]
-                    if zhuangbei then
-                        myjine:SetText(otherjine:GetText())
-                        jine:SetText(otherjine:GetText())
-                        if otherjine:GetText() == "" then
-                            BiaoGe[FB]["boss" .. b]["jine" .. i] = nil
-                        else
-                            BiaoGe[FB]["boss" .. b]["jine" .. i] = otherjine:GetText()
-                        end
-
-                        if addons == "biaoge" then
-                            local duizhangmaijia = BG.DuiZhangFrame[FB]["boss" .. b]["maijia" .. i]
-                            local duizhangcolor = BG.DuiZhangFrame[FB]["boss" .. b]["color" .. i]
-                            maijia:SetText(duizhangmaijia or "")
-                            BiaoGe[FB]["boss" .. b]["maijia" .. i] = duizhangmaijia
-                            if duizhangcolor then
-                                maijia:SetTextColor(unpack(duizhangcolor))
-                            else
-                                maijia:SetTextColor(1, 1, 1)
-                            end
-                            for k in pairs(BG.playerClass) do
-                                BiaoGe[FB]["boss" .. b][k .. i] = BG.DuiZhangFrame[FB]["boss" .. b][k .. i]
-                            end
-
-                            -- 打包交易
-                            if otherjine.tradeTbl then
-                                local notYes
-                                for ii, vv in ipairs(tradeInfo) do
-                                    for i, v in ipairs(otherjine.tradeTbl) do
-                                        if vv.b == v.b and vv.i == v.i then
-                                            notYes = true
-                                            break
-                                        end
-                                    end
-                                    if notYes then break end
-                                end
-                                if not notYes then
-                                    local tradeTbl = BG.Copy(otherjine.tradeTbl)
-                                    for i, v in ipairs(tradeTbl) do
-                                        local zb = BG.Frame[FB]["boss" .. v.b]["zhuangbei" .. v.i]
-                                        tradeTbl[i].FB = FB
-                                        tradeTbl[i].itemID = GetItemID(zb:GetText())
-                                        tradeTbl[i].link = zb:GetText()
-                                        tinsert(tradeInfo, { b = v.b, i = v.i })
-                                    end
-                                    tinsert(BiaoGe[FB].tradeTbl, tradeTbl)
-                                end
-                            end
-                        end
+            ForEachSlot(FB, Maxb[FB] - 1, function(b, i)
+                local theirAmount = Cell(BG.DuiZhangFrame, FB, b, "otherjine", i)
+                local zhuangbei = Cell(BG.Frame, FB, b, "zhuangbei", i)
+                if zhuangbei then
+                    local ourAmount = Cell(BG.DuiZhangFrame, FB, b, "myjine", i)
+                    local jine = Cell(BG.Frame, FB, b, "jine", i)
+                    CopyAmounts(FB, b, i, theirAmount, ourAmount, jine)
+                    if addons == "biaoge" then
+                        local maijia = Cell(BG.Frame, FB, b, "maijia", i)
+                        CopyBuyer(FB, b, i, maijia)
+                        MergeTradeTbl(FB, theirAmount.tradeTbl, claimedSlots)
                     end
                 end
-            end
+            end)
             BG.DuiZhangSet(BG.lastduizhangNum)
         end
     end
 
     -- 成员名单
     do
-        local bt = BG.CreateButton(BG.DuiZhangMainFrame)
-        bt:SetSize(80, 25)
-        bt:SetPoint("LEFT", BG.DuiZhangMainFrame.ButtonCopy, "RIGHT", 10, 0)
-        bt:SetText(L["团员名单"])
-        bt:Disable()
-        BG.DuiZhangMainFrame.ButtonRaidMember = bt
-        bt:SetScript("OnEnter", function(self)
+        local tmpValue = BG.CreateButton(BG.DuiZhangMainFrame)
+        tmpValue:SetSize(80, 25)
+        tmpValue:SetPoint("LEFT", BG.DuiZhangMainFrame.ButtonCopy, "RIGHT", 10, 0)
+        tmpValue:SetText(L["团员名单"])
+        tmpValue:Disable()
+        BG.DuiZhangMainFrame.ButtonRaidMember = tmpValue
+        tmpValue:SetScript("OnEnter", function(self)
             self:ShowRaidMember()
         end)
-        bt:SetScript("OnLeave", function(self)
+        tmpValue:SetScript("OnLeave", function(self)
             BG.DuiZhangMainFrame.raidMemberFrame:Hide()
             GameTooltip:Hide()
         end)
-        bt:SetScript("OnClick", function(self)
+        tmpValue:SetScript("OnClick", function(self)
             BG.PlaySound(1)
             local text = ""
             local num = BG.lastduizhangNum
             if not (BiaoGe.duizhang[num] and BiaoGe.duizhang[num].member) then return end
             for name, v in pairs(BiaoGe.duizhang[num].member) do
-                local color = "ffFFFFFF"
-                if v.class then
-                    color = select(4, GetClassColor(v.class))
-                end
-                text = text .. "|c" .. color .. name .. "|r\n"
+                text = text .. "|c" .. MemberColor(v.class) .. name .. "|r\n"
             end
             BG.CreateExportFrame(L["导出名单"], text)
         end)
-        function bt:ShowRaidMember()
+        function tmpValue:ShowRaidMember()
             if not BG.DuiZhangMainFrame.raidMemberFrame then
                 local mainFrame = CreateFrame("Frame", nil, BG.DuiZhangMainFrame, "BackdropTemplate")
                 mainFrame:SetBackdrop({
@@ -504,104 +763,38 @@ function BG.DuiZhangUI()
                 t:SetTextColor(1, 0.82, 0)
                 t:SetText(AddTexture("LEFT") .. L["导出名单"])
 
-                local function CreateRaidButton(i)
-                    local bt = CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
-                    bt:SetBackdrop({
-                        bgFile = "Interface/ChatFrame/ChatFrameBackground",
-                        edgeFile = "Interface/ChatFrame/ChatFrameBackground",
-                        edgeSize = 1,
-                    })
-                    bt:SetBackdropColor(0, 0, 0, .2)
-                    bt:SetBackdropBorderColor(1, 1, 1, .2)
-                    bt:SetSize(90, 20)
-                    if i == 1 then
-                        bt:SetPoint("TOPLEFT", 15, -25)
-
-                        local text = bt:CreateFontString()
-                        text:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
-                        text:SetPoint("BOTTOM", bt, "TOP", 0, 2)
-                        text:SetText(1)
-                        text:SetTextColor(.5, .5, .5)
-                    elseif i == 21 then
-                        bt:SetPoint("TOPLEFT", mainFrame.buttons[5], "BOTTOMLEFT", 0, -30)
-
-                        local text = bt:CreateFontString()
-                        text:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
-                        text:SetPoint("BOTTOM", bt, "TOP", 0, 2)
-                        text:SetText((i - 1) / 5 + 1)
-                        text:SetTextColor(.5, .5, .5)
-                    elseif (i - 1) % 5 == 0 then
-                        bt:SetPoint("TOPLEFT", mainFrame.buttons[i - 5], "TOPRIGHT", 5, 0)
-
-                        local text = bt:CreateFontString()
-                        text:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
-                        text:SetPoint("BOTTOM", bt, "TOP", 0, 2)
-                        text:SetText((i - 1) / 5 + 1)
-                        text:SetTextColor(.5, .5, .5)
-                    else
-                        bt:SetPoint("TOPLEFT", mainFrame.buttons[i - 1], "BOTTOMLEFT", 0, -1)
-                    end
-                    tinsert(mainFrame.buttons, bt)
-
-                    local text = bt:CreateFontString()
-                    text:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
-                    text:SetPoint("LEFT", 2, 0)
-                    text:SetWidth(bt:GetWidth() - 5)
-                    text:SetJustifyH("LEFT")
-                    text:SetWordWrap(false)
-                    bt.nameText = text
-
-                    local tex = bt:CreateTexture(nil, "OVERLAY")
-                    tex:SetPoint("CENTER", bt, "TOPLEFT", 2, -2)
-                    tex:SetSize(10, 10)
-                    bt.icon = tex
-
-                    local tex = bt:CreateTexture(nil, "OVERLAY")
-                    tex:SetSize(10, 10)
-                    bt.master = tex
-                end
-
                 for i = 1, 40 do
-                    CreateRaidButton(i)
+                    BuildRaidMemberButton(i, mainFrame)
                 end
             end
             local mainFrame = BG.DuiZhangMainFrame.raidMemberFrame
             mainFrame:Show()
             for i = 1, 40 do
-                local bt = mainFrame.buttons[i]
-                bt.nameText:SetText("")
-                bt.icon:SetTexture(nil)
-                bt.master:SetTexture(nil)
+                local tmpValue = mainFrame.buttons[i]
+                tmpValue.nameText:SetText("")
+                tmpValue.icon:SetTexture(nil)
+                tmpValue.master:SetTexture(nil)
             end
             local num = BG.lastduizhangNum
             if not (BiaoGe.duizhang[num] and BiaoGe.duizhang[num].member) then return end
             for name, v in pairs(BiaoGe.duizhang[num].member) do
-                local team, n = strsplit("-", v.point)
-                team = tonumber(team)
-                n = tonumber(n)
-                local id = (team - 1) * 5 + n
-                local bt = mainFrame.buttons[id]
-                local color = "ffFFFFFF"
-                if v.class then
-                    color = select(4, GetClassColor(v.class))
-                end
-                bt.nameText:SetText("|c" .. color .. name)
-                if v.rank == 2 then
-                    bt.icon:SetTexture("interface/groupframe/ui-group-leadericon")
-                elseif v.role == "MAINTANK" then
-                    bt.icon:SetTexture(132064)
-                elseif v.role == "MAINASSIST" then
-                    bt.icon:SetTexture(132063)
-                elseif v.rank == 1 then
-                    bt.icon:SetTexture("interface/groupframe/ui-group-assistanticon")
+                local groupNo, slotIndex = strsplit("-", v.point)
+                groupNo = tonumber(groupNo)
+                slotIndex = tonumber(slotIndex)
+                local rosterIndex = (groupNo - 1) * 5 + slotIndex
+                local button = mainFrame.buttons[rosterIndex]
+                button.nameText:SetText("|c" .. MemberColor(v.class) .. name)
+                local icon = MemberRankIcon(v)
+                if icon then
+                    button.icon:SetTexture(icon)
                 end
                 if v.isML then
-                    bt.master:SetTexture("Interface/GroupFrame/UI-Group-MasterLooter")
-                    bt.master:ClearAllPoints()
-                    if bt.icon:GetTexture() then
-                        bt.master:SetPoint("LEFT", bt.icon, "RIGHT", 0, 0)
+                    button.master:SetTexture("Interface/GroupFrame/UI-Group-MasterLooter")
+                    button.master:ClearAllPoints()
+                    if button.icon:GetTexture() then
+                        button.master:SetPoint("LEFT", button.icon, "RIGHT", 0, 0)
                     else
-                        bt.master:SetPoint("CENTER", bt, "TOPLEFT", 2, -2)
+                        button.master:SetPoint("CENTER", button, "TOPLEFT", 2, -2)
                     end
                 end
             end
@@ -610,43 +803,43 @@ function BG.DuiZhangUI()
 
     -- 聊天记录
     do
-        local f = CreateFrame("Frame", nil, BG.DuiZhangMainFrame, "BackdropTemplate")
-        f:SetBackdrop({
+        local frame = CreateFrame("Frame", nil, BG.DuiZhangMainFrame, "BackdropTemplate")
+        frame:SetBackdrop({
             bgFile = "Interface/ChatFrame/ChatFrameBackground",
             edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
             edgeSize = 16,
             insets = { left = 3, right = 3, top = 3, bottom = 3 }
         })
-        f:SetBackdropColor(0, 0, 0, 0.6)
-        f:SetSize(335, 190)
-        f:EnableMouse(true)
-        f.offSetY1 = 90
-        f.offSetY2 = 65
-        BG.DuiZhangMainFrame.msgBg = f
+        frame:SetBackdropColor(0, 0, 0, 0.6)
+        frame:SetSize(335, 190)
+        frame:EnableMouse(true)
+        frame.offSetY1 = 90
+        frame.offSetY2 = 65
+        BG.DuiZhangMainFrame.msgBg = frame
 
-        local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate") -- 滚动
-        scroll:SetWidth(f:GetWidth() - 31)
-        scroll:SetHeight(f:GetHeight() - 9)
-        scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 5, -5)
+        local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate") -- 滚动
+        scroll:SetWidth(frame:GetWidth() - 31)
+        scroll:SetHeight(frame:GetHeight() - 9)
+        scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 5, -5)
         scroll.ScrollBar.scrollStep = BG.scrollStep
         BG.CreateSrollBarBackdrop(scroll.ScrollBar)
         BG.HookScrollBarShowOrHide(scroll)
 
-        local child = CreateFrame("EditBox", nil, f) -- 子框架
-        child:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
-        child:SetWidth(scroll:GetWidth())
-        child:SetAutoFocus(false)
-        child:EnableMouse(false)
-        child:SetTextInsets(3, 3, 3, 3)
-        child:SetMultiLine(true)
-        child:SetHyperlinksEnabled(true)
-        child:SetTextColor(RGB("FF7F50"))
-        child.scroll = scroll
-        scroll:SetScrollChild(child)
-        BG.DuiZhangMainFrame.msgFrame = child
+        local chatEdit = CreateFrame("EditBox", nil, frame) -- 子框架
+        chatEdit:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
+        chatEdit:SetWidth(scroll:GetWidth())
+        chatEdit:SetAutoFocus(false)
+        chatEdit:EnableMouse(false)
+        chatEdit:SetTextInsets(3, 3, 3, 3)
+        chatEdit:SetMultiLine(true)
+        chatEdit:SetHyperlinksEnabled(true)
+        chatEdit:SetTextColor(RGB("FF7F50"))
+        chatEdit.scroll = scroll
+        scroll:SetScrollChild(chatEdit)
+        BG.DuiZhangMainFrame.msgFrame = chatEdit
 
-        child:SetScript("OnHyperlinkEnter", function(self, link, text, button)
-            GameTooltip:SetOwner(f, "ANCHOR_TOPRIGHT", 0, 0)
+        chatEdit:SetScript("OnHyperlinkEnter", function(self, link, text, mouseButton)
+            GameTooltip:SetOwner(frame, "ANCHOR_TOPRIGHT", 0, 0)
             GameTooltip:ClearLines()
             local itemID = GetItemInfoInstant(link)
             if itemID then
@@ -654,27 +847,27 @@ function BG.DuiZhangUI()
                 BG.Show_AllHighlight(link)
             end
         end)
-        child:SetScript("OnHyperlinkLeave", function(self, link, text, button)
+        chatEdit:SetScript("OnHyperlinkLeave", function(self, link, text, mouseButton)
             GameTooltip:Hide()
             BG.Hide_AllHighlight()
         end)
-        child:SetScript("OnHyperlinkClick", function(self, link, text, button)
+        chatEdit:SetScript("OnHyperlinkClick", function(self, link, text, mouseButton)
             if (strsub(link, 1, 6) == "player") then
-                local _, name, lineID, chatType = strsplit(":", link)
-                if button == "LeftButton" then
+                local _, name, linkLine, linkChat = strsplit(":", link)
+                if mouseButton == "LeftButton" then
                     ChatFrame_SendTell(name, ChatFrame1)
-                elseif button == "RightButton" then
+                elseif mouseButton == "RightButton" then
                     FriendsFrame_ShowDropdown(name, 1, nil, "RAID", nil)
                 end
             elseif (strsub(link, 1, 4) == "item") then
-                local name, link, quality, level, _, _, _, _, _, Texture, _, typeID = GetItemInfo(link)
+                local name, link, itemQuality, itemLevel, _, _, _, _, _, itemTexture, _, itemType = GetItemInfo(link)
                 if IsShiftKeyDown() then
                     BG.InsertLink(text)
                 elseif IsAltKeyDown() then
                     if BG.IsML then -- 开始拍卖
-                        BG.StartAuction(link, nil, nil, nil, button == "RightButton")
+                        BG.StartAuction(link, nil, nil, nil, mouseButton == "RightButton")
                     else
-                        if button ~= "RightButton" then
+                        if mouseButton ~= "RightButton" then
                             BG.AddGuanZhu(link)
                         end
                     end
@@ -688,9 +881,9 @@ function BG.DuiZhangUI()
             end
         end)
 
-        local t = f:CreateFontString()
+        local t = frame:CreateFontString()
         t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-        t:SetPoint("BOTTOM", f, "TOP", 0, 0)
+        t:SetPoint("BOTTOM", frame, "TOP", 0, 0)
         t:SetText(L["账单聊天记录"])
 
         function BG.DuiZhangMainFrame.msgBg:UpdatePoint(FB)
@@ -701,71 +894,61 @@ function BG.DuiZhangUI()
     end
 end
 
-------------------生成下拉列表可选账单------------------
+------------------构建下拉菜单中的账单候选项------------------
 local function CreateZhangDanTitle(num)
     local zhangdan = BiaoGe.duizhang[num]
-    local FBtext = ""
-    if zhangdan.FB then
-        for i, v in ipairs(BG.FBtable2) do
-            if zhangdan.FB == v.FB then
-                FBtext = L["，"] .. BG.STC_b1(v.shortName or v.localName)
-                break
-            end
-        end
-    end
-    local classtext = "ffFFFFFF"
-    if zhangdan.class then
-        classtext = select(4, GetClassColor(zhangdan.class))
-    end
-    local title = zhangdan.time .. L["，"] .. "|c" .. classtext .. zhangdan.player .. RR
-        .. L["，"] .. L["装备总收入"] .. BG.STC_g1(BG.FormatNumber(zhangdan.sumjine, 5)) .. FBtext
-    return title
+    local raidSuffix = RaidSuffix(zhangdan.FB)
+    local classColor = MemberColor(zhangdan.class)
+    local label = zhangdan.time .. L["，"] .. "|c" .. classColor .. zhangdan.player .. RR
+        .. L["，"] .. L["装备总收入"] .. BG.STC_g1(BG.FormatNumber(zhangdan.sumjine, 5)) .. raidSuffix
+    return label
 end
 
 local function CreateZhangDanMsg(num)
     BG.DuiZhangMainFrame.msgFrame.scroll.ScrollBar:Hide()
     local zhangdan = BiaoGe.duizhang[num]
     if zhangdan.msgTbl then
-        local classtext = "ffFFFFFF"
-        if zhangdan.class then
-            classtext = select(4, GetClassColor(zhangdan.class))
-        end
-        local nameLink = "|Hplayer:" .. zhangdan.player .. "|h[" .. "|c" .. classtext .. zhangdan.player .. RR .. "]|h"
+        local classColor = MemberColor(zhangdan.class)
+        local playerLink = "|Hplayer:" .. zhangdan.player .. "|h[" .. "|c" .. classColor .. zhangdan.player .. RR .. "]|h"
         BG.DuiZhangMainFrame.msgFrame:SetText("")
-        for i, msg in ipairs(zhangdan.msgTbl) do
+        for _, msg in ipairs(zhangdan.msgTbl) do
             msg = BG.GsubRaidTargetingIcons(msg)
-            local text = nameLink .. L["："] .. msg .. NN
+            local text = playerLink .. L["："] .. msg .. NN
             BG.DuiZhangMainFrame.msgFrame:Insert(text)
         end
     end
 end
 
+local function AddBillMenuItem(index)
+    local label = CreateZhangDanTitle(index)
+    local menuItem = LibBG:UIDropDownMenu_CreateInfo()
+    menuItem.text = label
+    menuItem.func = function()
+        BG.FrameHide(0)
+        BG.lastduizhangNum = index
+        BG.DuiZhangSet(index)
+        LibBG:UIDropDownMenu_SetText(BG.DuiZhangDropDown.DropDown, label)
+    end
+    if BG.lastduizhangNum == index then
+        menuItem.checked = true
+    end
+    LibBG:UIDropDownMenu_AddButton(menuItem)
+end
+
 function BG.DuiZhangList()
-    for i, v in ipairs(BiaoGe.duizhang) do
+    for _, v in ipairs(BiaoGe.duizhang) do
         v.sumjine = v.sunjine or v.sumjine or 0
         v.sunjine = nil
     end
 
-    LibBG:UIDropDownMenu_Initialize(BG.DuiZhangDropDown.DropDown, function(self, level)
+    LibBG:UIDropDownMenu_Initialize(BG.DuiZhangDropDown.DropDown, function(self, itemLevel)
         BG.FrameHide(0)
-        for i, v in ipairs(BiaoGe.duizhang) do
-            local title = CreateZhangDanTitle(i)
-            local info = LibBG:UIDropDownMenu_CreateInfo()
-            info.text = title
-            info.func = function()
-                BG.FrameHide(0)
-                BG.lastduizhangNum = i
-                BG.DuiZhangSet(i)
-                LibBG:UIDropDownMenu_SetText(BG.DuiZhangDropDown.DropDown, title)
-            end
-            if BG.lastduizhangNum == i then
-                info.checked = true
-            end
-            LibBG:UIDropDownMenu_AddButton(info)
+        for i in ipairs(BiaoGe.duizhang) do
+            AddBillMenuItem(i)
         end
-        local info = LibBG:UIDropDownMenu_CreateInfo()
-        info.text = L["无"]
-        info.func = function()
+        local menuItem = LibBG:UIDropDownMenu_CreateInfo()
+        menuItem.text = L["无"]
+        menuItem.func = function()
             BG.FrameHide(0)
             BG.lastduizhangNum = nil
             BG.DuiZhang0()
@@ -774,15 +957,15 @@ function BG.DuiZhangList()
             BG.DuiZhangMainFrame.ButtonRaidMember:Disable()
         end
         if not BG.lastduizhangNum then
-            info.checked = true
+            menuItem.checked = true
         end
-        LibBG:UIDropDownMenu_AddButton(info)
+        LibBG:UIDropDownMenu_AddButton(menuItem)
     end)
 end
 
-------------------账单生成函数------------------
+------------------负责生成账单的函数------------------
 function BG.DuiZhangSet(num)
-    local dz = BiaoGe.duizhang[num].zhangdan
+    local billRows = BiaoGe.duizhang[num].zhangdan
     local FB = BG.FB1
     BG.lastduizhangNum = num
     BG.DuiZhangMainFrame.ButtonCopy:Enable()
@@ -794,250 +977,50 @@ function BG.DuiZhangSet(num)
 
     BG.DuiZhang0()
     CreateZhangDanMsg(num)
-    --[[
-        ["tradeTbl"] = {
-            {
-                {
-                    ["maijia"] = "苍刃",
-                    ["itemID"] = 24291,
-                    ["jine"] = "200",
-                }, -- [1]
-                {
-                    ["maijia"] = "苍刃",
-                    ["itemID"] = 27676,
-                    ["jine"] = "t",
-                }, -- [2]
-            }, -- [1]
-        },
 
-        ["tradeTbl"] = {
-            {
-                {
-                    ["i"] = 1,
-                    ["itemID"] = 45087,
-                    ["link"] = "|cff0070dd|Hitem:45087::::::::80:::::::::|h[符文宝珠]|h|r",
-                    ["FB"] = "ULD",
-                    ["b"] = 15,
-                }, -- [1]
-                {
-                    ["i"] = 3,
-                    ["itemID"] = 45291,
-                    ["link"] = "|cffa335ee|Hitem:45291::::::::80:::::::::|h[内燃护腕]|h|r",
-                    ["FB"] = "ULD",
-                    ["b"] = 1,
-                }, -- [2]
-            }, -- [1]
-    ]]
-    for _, v in ipairs(dz) do
-        if v.zhuangbei then
-            local item = v.zhuangbei
-            local jine = v.jine
-            local yes
-            for b = 1, Maxb[FB] - 1 do
-                for i = 1, BG.GetMaxi(FB, b) do
-                    local zhuangbei = BG.DuiZhangFrame[FB]["boss" .. b]["zhuangbei" .. i]
-                    local myjine = BG.DuiZhangFrame[FB]["boss" .. b]["myjine" .. i]
-                    local otherjine = BG.DuiZhangFrame[FB]["boss" .. b]["otherjine" .. i]
-                    local tx = BG.DuiZhangFrame[FB]["boss" .. b]["yes" .. i]
-                    if zhuangbei then
-                        if GetItemID(zhuangbei:GetText()) == GetItemID(item) and otherjine:GetText() == "" then
-                            otherjine:SetText(jine)
-                            BG.DuiZhangFrame[FB]["boss" .. b]["maijia" .. i] = v.maijia
-                            for k in pairs(BG.playerClass) do
-                                BG.DuiZhangFrame[FB]["boss" .. b][k .. i] = v[k]
-                            end
-                            yes = true
-                            break
-                        end
-                    end
-                end
-                if yes then break end
-            end
-            -- 漏记
-            if not yes then
-                local b = Maxb[FB]
-                for i = 1, BG.GetMaxi(FB, b) do
-                    local zhuangbei = BG.DuiZhangFrame[FB]["boss" .. b]["zhuangbei" .. i]
-                    local otherjine = BG.DuiZhangFrame[FB]["boss" .. b]["otherjine" .. i]
-                    if zhuangbei then
-                        if not GetItemID(zhuangbei:GetText()) then
-                            zhuangbei:SetText(item)
-                            otherjine:SetText(jine)
-                            break
-                        end
-                    end
-                end
-            end
+    for _, billRow in ipairs(billRows) do
+        if billRow.zhuangbei then
+            FillBillRow(FB, billRow)
         end
     end
 
-    if BiaoGe.duizhang[num].tradeTbl then
-        for ii in ipairs(BiaoGe.duizhang[num].tradeTbl) do
-            local tbl = {}
-            for _, v in ipairs(BiaoGe.duizhang[num].tradeTbl[ii]) do
-                local yes
-                for b = 1, Maxb[FB] do
-                    for i = 1, BG.GetMaxi(FB, b) do
-                        local otherjine = BG.DuiZhangFrame[FB]["boss" .. b]["otherjine" .. i]
-                        if otherjine and not (otherjine.hasTradeTbl or otherjine.tradeTbl) then
-                            local maijia = BG.DuiZhangFrame[FB]["boss" .. b]["maijia" .. i]
-                            local itemID = GetItemID(BG.DuiZhangFrame[FB]["boss" .. b]["zhuangbei" .. i]:GetText())
-                            local jine = BG.DuiZhangFrame[FB]["boss" .. b]["otherjine" .. i]:GetText()
-                            if jine == L["打包交易"] then jine = "t" end
-                            if maijia == v.maijia and itemID == v.itemID and jine == v.jine then
-                                otherjine.hasTradeTbl = true
-                                tinsert(tbl, { b = b, i = i })
-                                yes = true
-                                break
-                            end
-                        end
-                    end
-                    if yes then break end
-                end
-            end
-            for i, v in ipairs(tbl) do
-                BG.DuiZhangFrame[FB]["boss" .. v.b]["otherjine" .. v.i].hasTradeTbl = nil
-                BG.DuiZhangFrame[FB]["boss" .. v.b]["otherjine" .. v.i].tradeTbl = tbl
-            end
-        end
-    end
+    MarkTradeGroups(FB, num)
 
     -- 设置打钩/叉叉材质
     BG.After(0, function()
-        local errorItems = {}
-        for b = 1, Maxb[FB] + 1 do
-            for i = 1, BG.GetMaxi(FB, b) do
-                local zhuangbei = BG.DuiZhangFrame[FB]["boss" .. b]["zhuangbei" .. i]
-                local myjine = BG.DuiZhangFrame[FB]["boss" .. b]["myjine" .. i]
-                local otherjine = BG.DuiZhangFrame[FB]["boss" .. b]["otherjine" .. i]
-                local tx = BG.DuiZhangFrame[FB]["boss" .. b]["yes" .. i]
-                if zhuangbei and zhuangbei ~= BG.DuiZhangFrame[FB]["boss" .. Maxb[FB] + 1]["zhuangbei2"] then
-                    local mj = myjine:GetText()
-                    local oj = otherjine:GetText()
-                    if not tonumber(mj) or tonumber(mj) == 0 then
-                        mj = ""
-                    end
-                    if not tonumber(oj) or tonumber(oj) == 0 then
-                        oj = ""
-                    end
-                    if (tonumber(mj) or tonumber(oj)) and tonumber(mj) == tonumber(oj) then
-                        tx:SetTexture("interface/raidframe/readycheck-ready")
-                        BG.DuiZhangFrameDs[FB .. 3]["boss" .. b]["ds" .. i]:Hide()
-                    elseif (tonumber(mj) or tonumber(oj)) and tonumber(mj) ~= tonumber(oj) then
-                        tx:SetTexture("interface/raidframe/readycheck-notready")
-                        BG.DuiZhangFrameDs[FB .. 3]["boss" .. b]["ds" .. i]:Show()
-                        if b <= Maxb[FB] - 1 then
-                            local itemID = GetItemID(zhuangbei:GetText())
-                            if itemID then
-                                tinsert(errorItems, {
-                                    itemID = itemID,
-                                    b = b,
-                                    i = i,
-                                    my = tonumber(mj) or 0,
-                                    other = tonumber(oj) or 0,
-                                })
-                            end
-                        end
-                    else
-                        tx:SetTexture(nil)
-                        BG.DuiZhangFrameDs[FB .. 3]["boss" .. b]["ds" .. i]:Hide()
-                    end
-                end
-            end
-        end
-        if next(errorItems) then
-            local sameItem = {}
-            for i, v in ipairs(errorItems) do
-                sameItem[v.itemID] = sameItem[v.itemID] or { gz = {}, my = 0, other = 0, }
-                tinsert(sameItem[v.itemID].gz, { b = v.b, i = v.i })
-                sameItem[v.itemID].my = sameItem[v.itemID].my + v.my
-                sameItem[v.itemID].other = sameItem[v.itemID].other + v.other
-            end
-            for itemID, v in pairs(sameItem) do
-                if v.my == v.other then
-                    for _, vv in ipairs(v.gz) do
-                        local b = vv.b
-                        local i = vv.i
-                        local tx = BG.DuiZhangFrame[FB]["boss" .. b]["yes" .. i]
-                        tx:SetTexture("interface/raidframe/readycheck-ready")
-                        BG.DuiZhangFrameDs[FB .. 3]["boss" .. b]["ds" .. i]:Hide()
-
-                        BG.DuiZhangFrame[FB]["boss" .. b]["zhuangbei" .. i].sameItem = v.gz
-                        BG.DuiZhangFrame[FB]["boss" .. b]["myjine" .. i].sameItem = v.gz
-                        BG.DuiZhangFrame[FB]["boss" .. b]["otherjine" .. i].sameItem = v.gz
-                    end
-                end
-            end
-        end
-
-
-        -- 打包交易的进行合并对账
-        --[[         if BiaoGe.duizhang[num].tradeTbl then
-            BG.After(0, function()
-                for b = 1, Maxb[FB] do
-                    for i = 1, BG.GetMaxi(FB, b) do
-                        local otherjine = BG.DuiZhangFrame[FB]["boss" .. b]["otherjine" .. i]
-                        if otherjine and otherjine.tradeTbl and BG.DuiZhangFrameDs[FB .. 3]["boss" .. b]["ds" .. i]:IsVisible() then
-                            local mySum = 0
-                            local otherSum = 0
-                            for _, v in ipairs(otherjine.tradeTbl) do
-                                local b = v.b
-                                local i = v.i
-                                local mybutton = BG.DuiZhangFrame[FB]["boss" .. b]["myjine" .. i]
-                                local otherbutton = BG.DuiZhangFrame[FB]["boss" .. b]["otherjine" .. i]
-                                mySum = mySum + (tonumber(mybutton:GetText()) or 0)
-                                otherSum = otherSum + (tonumber(otherbutton:GetText()) or 0)
-                            end
-                            if mySum == otherSum then
-                                for _, v in ipairs(otherjine.tradeTbl) do
-                                    local b = v.b
-                                    local i = v.i
-                                    BG.DuiZhangFrame[FB]["boss" .. b]["yes" .. i]:SetTexture("interface/raidframe/readycheck-ready")
-                                    BG.DuiZhangFrameDs[FB .. 3]["boss" .. b]["ds" .. i]:Hide()
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-        end ]]
+        UpdateMarks(FB)
     end)
 end
 
-------------------对账格子清空------------------
+------------------清空对账界面里的格子------------------
 function BG.DuiZhang0()
     local FB = BG.FB1
-    for b = 1, Maxb[FB] + 1 do
-        for i = 1, BG.GetMaxi(FB, b) do
-            local zhuangbei = BG.DuiZhangFrame[FB]["boss" .. b]["zhuangbei" .. i]
-            local myjine = BG.DuiZhangFrame[FB]["boss" .. b]["myjine" .. i]
-            local otherjine = BG.DuiZhangFrame[FB]["boss" .. b]["otherjine" .. i]
-            local tx = BG.DuiZhangFrame[FB]["boss" .. b]["yes" .. i]
-            local ds = BG.DuiZhangFrameDs[FB .. 3]["boss" .. b]["ds" .. i]
-            if zhuangbei then
-                otherjine:SetText("")
-                otherjine.tradeTbl = nil
-                zhuangbei.sameItem = nil
-                myjine.sameItem = nil
-                otherjine.sameItem = nil
-                BG.DuiZhangFrame[FB]["boss" .. b]["maijia" .. i] = nil
-                for k, v in pairs(BG.playerClass) do
-                    BG.DuiZhangFrame[FB]["boss" .. b][k .. i] = nil
-                end
-                tx:SetTexture(nil)
-                ds:Hide()
+    ForEachSlot(FB, Maxb[FB] + 1, function(b, i)
+        local zhuangbei = Cell(BG.DuiZhangFrame, FB, b, "zhuangbei", i)
+        if zhuangbei then
+            local theirAmount = Cell(BG.DuiZhangFrame, FB, b, "otherjine", i)
+            local ourAmount = Cell(BG.DuiZhangFrame, FB, b, "myjine", i)
+            theirAmount:SetText("")
+            theirAmount.tradeTbl = nil
+            zhuangbei.sameItem = nil
+            ourAmount.sameItem = nil
+            theirAmount.sameItem = nil
+            BG.DuiZhangFrame[FB][BOSS_KEY .. b]["maijia" .. i] = nil
+            for k in pairs(BG.playerClass) do
+                BG.DuiZhangFrame[FB][BOSS_KEY .. b][k .. i] = nil
             end
+            Cell(BG.DuiZhangFrame, FB, b, "yes", i):SetTexture(nil)
+            Cell(BG.DuiZhangFrameDs, FB .. 3, b, "ds", i):Hide()
         end
-    end
+    end)
 
     -- 漏记装备
     local b = Maxb[FB]
     for i = 1, BG.GetMaxi(FB, b) do
-        local zhuangbei = BG.DuiZhangFrame[FB]["boss" .. b]["zhuangbei" .. i]
-        local myjine = BG.DuiZhangFrame[FB]["boss" .. b]["myjine" .. i]
+        local zhuangbei = Cell(BG.DuiZhangFrame, FB, b, "zhuangbei", i)
         if zhuangbei then
             zhuangbei:SetText("")
-            myjine:SetText("")
+            Cell(BG.DuiZhangFrame, FB, b, "myjine", i):SetText("")
         end
     end
     BG.DuiZhangMainFrame.msgFrame:SetText("")

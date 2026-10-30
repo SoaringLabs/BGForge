@@ -729,6 +729,9 @@ BG.Init(function()
             end)
         end
     end
+    local function resolveOption(name)
+        BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+    end
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- 表格设置
@@ -789,7 +792,7 @@ BG.Init(function()
         do
             local name = "bg"
             BG.options[name .. "reset"] = "0.01,0.01,0.01,0.8"
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             if BiaoGe.options[name] == "0,0,0,0.8" then
                 BiaoGe.options[name] = "0.01,0.01,0.01,0.8"
             end
@@ -975,7 +978,7 @@ BG.Init(function()
         do
             local name = "mainIcon"
             BG.options[name .. "reset"] = 0
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["显示悬浮框"],
             }
@@ -989,7 +992,7 @@ BG.Init(function()
         do
             local name = "mainIconScale"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             if not tonumber(BiaoGe.options[name]) then
                 BiaoGe.options[name] = BG.options[name .. "reset"]
             end
@@ -1025,7 +1028,7 @@ BG.Init(function()
         do
             local name = "mainIconFrameLevel"
             BG.options[name .. "reset"] = "HIGH"
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
 
             local dropDown = LibBG:Create_UIDropDownMenu(nil, biaoge)
             dropDown:SetPoint("TOPLEFT", 430, height - h - 25)
@@ -1101,10 +1104,10 @@ BG.Init(function()
                 end
             end)
         end
-        -- 装备记录通知显示时长
+        -- 装备记录提示在屏幕上停留多久
         do
             local name = "lootTime"
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["装备记录通知时长"] .. L["|cff808080（右键还原设置）|r"],
                 L["自动记录装备后会在屏幕上方通知记录结果。"],
@@ -1118,11 +1121,11 @@ BG.Init(function()
                 f:Hide()
             end
         end
-        -- 装备记录通知字体大小
+        -- 装备记录提示所使用的字号
         do
             local name = "lootFontSize"
             BG.options[name .. "reset"] = 20
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["装备记录通知字号"] .. L["|cff808080（右键还原设置）|r"],
                 L["调整该字体的大小。"],
@@ -1144,7 +1147,7 @@ BG.Init(function()
         do
             local name = "autolootNotice"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["装备记录通知"],
                 L["自动记录装备后会在屏幕上方显示记录了什么装备、记录在哪个BOSS槽位。"],
@@ -1163,7 +1166,7 @@ BG.Init(function()
         do
             local name = "autolootRemind"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["装备未拾取提醒"],
                 L["击杀BOSS超过30秒装备还没拾取，且你是物品分配者时，屏幕中间红字提醒。"],
@@ -1204,7 +1207,7 @@ BG.Init(function()
         -- 交易通知显示时长
         do
             local name = "tradeTime"
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["交易通知时长"] .. L["|cff808080（右键还原设置）|r"],
                 L["通知显示多久。"],
@@ -1222,7 +1225,7 @@ BG.Init(function()
         do
             local name = "tradeFontSize"
             BG.options[name .. "reset"] = 20
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["交易通知字号"] .. L["|cff808080（右键还原设置）|r"],
                 L["调整该字体的大小。"],
@@ -1277,7 +1280,7 @@ BG.Init(function()
         do
             local name = "tradePreview"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["在交易界面增加以下功能"],
                 " ",
@@ -1311,7 +1314,7 @@ BG.Init(function()
         do
             local name = "isTrading"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["团长是否正在交易"],
                 L["在团长的团队框架显示其是否正在交易。"],
@@ -1322,11 +1325,11 @@ BG.Init(function()
             SetParent(f, "autoTrade")
         end
         h = h + 30
-        -- 禁止NDui插件交易自动打开背包
+        -- 阻止NDui在交易时自动弹出背包
         do
             local name = "NDuiOpenBag"
             BG.options[name .. "reset"] = 0
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["禁止NDui插件交易时自动打开背包"],
             }
@@ -1359,7 +1362,7 @@ BG.Init(function()
         do
             local name = "auctionHigh"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["高亮拍卖装备"],
                 L["当团长或物品分配者贴出装备开始拍卖时，会自动高亮表格里相应的装备。"],
@@ -1381,7 +1384,7 @@ BG.Init(function()
         do
             local name = "auctionHighTime"
             BG.options[name .. "reset"] = 20
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["高亮拍卖装备时长"] .. L["|cff808080（右键还原设置）|r"],
                 L["高亮拍卖装备多久。"],
@@ -1400,7 +1403,7 @@ BG.Init(function()
         do
             local name = "HighOnterItem"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["高亮对应装备"],
                 L["当鼠标悬停在表格装备时，高亮背包里对应的装备。"],
@@ -1422,7 +1425,7 @@ BG.Init(function()
         do
             local name = "auctionChat"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["拍卖聊天记录框"],
                 L["自动记录全团跟拍卖有关的聊天。"],
@@ -1441,11 +1444,11 @@ BG.Init(function()
             end)
         end
         h = h + 30
-        -- 拍卖聊天记录总是保持在最新位置
+        -- 让拍卖聊天记录始终停在最新一条
         do
             local name = "auctionChatHoldNew"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["拍卖聊天记录总是保持在最新位置"],
                 L["每次打开拍卖聊天记录框时，自动回到最新的聊天位置。"],
@@ -1465,7 +1468,7 @@ BG.Init(function()
         do
             local name = "countDown"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["拍卖自动倒数"],
                 L["该功能只有团长或物品分配者可用。"],
@@ -1493,7 +1496,7 @@ BG.Init(function()
         do
             local name = "countDownDuration"
             BG.options[name .. "reset"] = 5
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["拍卖倒数时长"] .. L["|cff808080（右键还原设置）|r"],
                 format(L["拍卖装备倒数多久，默认是%s秒。"], BG.options[name .. "reset"]),
@@ -1511,7 +1514,7 @@ BG.Init(function()
         do
             local name = "countDownStop"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["倒数自动暂停"],
                 L["正在自动倒数时，如果有人出价（在团队频道打出纯数字时），则自动暂停倒数。"],
@@ -1527,7 +1530,7 @@ BG.Init(function()
         do
             local name = "countDownSendChannel"
             BG.options[name .. "reset"] = "RAID"
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
 
             local function RaidText(channel)
                 local text
@@ -1582,7 +1585,7 @@ BG.Init(function()
         do
             local name = "fastCount"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["快速记账"],
                 L["这是一种不用打开表格界面就可以完成记账的方式。"],
@@ -1610,7 +1613,7 @@ BG.Init(function()
         do
             local name = "fastCountMsg"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["记账通知"],
                 L["快速记账完成后会在屏幕中央通知本次记账结果。"],
@@ -1627,7 +1630,7 @@ BG.Init(function()
         do
             local name = "fastCountPreview"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["记账效果预览框"],
                 L["快速记账的时候，可以预览这次的记账效果。"],
@@ -1647,7 +1650,7 @@ BG.Init(function()
         do
             local name = "guoqiRemind"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["装备过期提醒"],
                 L["当装备剩余可交易时间低于一定时（默认是低于30分钟），会有语音+文字提醒。每次提醒的最低间隔是5分钟，避免提醒过于频繁。"],
@@ -1669,7 +1672,7 @@ BG.Init(function()
         do
             local name = "guoqiRemindMinTime"
             BG.options[name .. "reset"] = 30
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["剩余时间低于多少时提醒"] .. L["|cff808080（右键还原设置）|r"],
                 L["当装备剩余可交易时间低于该时间时，会提醒，默认是30分钟。"],
@@ -1738,7 +1741,7 @@ BG.Init(function()
         do
             local name = "retainExpenses"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["清空表格时保留支出补贴名称"],
                 L["只保留补贴名称（例如XX补贴）。支出金额正常清空。"],
@@ -1759,11 +1762,11 @@ BG.Init(function()
             end)
         end
         h = h + 30
-        -- 清空表格时保留支出金额
+        -- 清空表格后仍保留支出的金额
         do
             local name = "retainExpensesMoney"
             BG.options[name .. "reset"] = 0
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["清空表格时保留支出金额"],
                 L["如果你们团每次支出的金额都是固定的，可以勾选此项。"],
@@ -1774,7 +1777,7 @@ BG.Init(function()
                 f:Hide()
             end
         end
-        -- 清空表格时根据副本难度设置分钱人数
+        -- 清空表格时按副本难度决定分钱人数
         if BG.IsTitan then
             h = h + 30
             do
@@ -1782,7 +1785,7 @@ BG.Init(function()
 
                 local name = "QingKongPeople"
                 BG.options[name .. "reset"] = 1
-                BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                resolveOption(name)
                 local ontext = {
                     L["清空表格时自定义分钱人数"],
                     L["表格会按照你设定的人数修改分钱人数。"],
@@ -1817,7 +1820,7 @@ BG.Init(function()
             end
         elseif not BG.onlyOneHard and not BG.IsRetail then
             h = h + 30
-            -- 清空表格时根据副本难度设置分钱人数
+            -- 清空表格时按副本难度决定分钱人数
             do
                 local name = "QingKongPeople"
                 BG.options[name .. "reset"] = 1
@@ -1893,7 +1896,7 @@ BG.Init(function()
         do
             local name = "buttonSound"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["按键交互声音"],
                 L["点击按钮时的声音。"],
@@ -1908,7 +1911,7 @@ BG.Init(function()
         do
             local name = "tipsSound"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["语音提醒"],
                 L["在某些情况下，会有语音提醒，比如：装备快过期、拍卖啦、心愿达成、炼金转化已就绪等等。"],
@@ -2036,7 +2039,7 @@ BG.Init(function()
         do
             local name = "autoAdd0"
             BG.options[name .. "reset"] = 0
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["金额自动加零"],
                 L["输入金额和欠款时自动加两个0，减少记账操作，提高记账效率。"],
@@ -2047,7 +2050,7 @@ BG.Init(function()
             BG.options["button" .. name] = f
         end
 
-        -- 对账单保存时长(小时)
+        -- 对账单可保留的小时数
         do
             local name = "duiZhangTime"
             local ontext = {
@@ -2070,7 +2073,7 @@ BG.Init(function()
         do
             local name = "zhichuPercent"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
 
             local ontext = {
                 L["支出百分比计算"],
@@ -2099,7 +2102,7 @@ BG.Init(function()
         do
             local name = "NumFrame"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
 
             local ontext = {
                 L["数字小键盘"],
@@ -2114,7 +2117,7 @@ BG.Init(function()
         do
             local name = "model"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             if BiaoGe.options["model"] ~= 1 then
                 for i, model in ipairs(BG.bossModels) do
                     model:Hide()
@@ -2147,7 +2150,7 @@ BG.Init(function()
         do
             local name = "ignore"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
 
             local ontext = {
                 L["自动移除屏蔽对象"],
@@ -2160,11 +2163,11 @@ BG.Init(function()
         end
         h = h + 30
 
-        -- 鼠标提示对方的欠款和罚款
+        -- 悬停他人时显示其欠款与罚款
         do
             local name = "mouseFK"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
 
             local ontext = {
                 L["鼠标提示对方的欠款和罚款"],
@@ -2179,7 +2182,7 @@ BG.Init(function()
         do
             local name = "miniMap"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["小地图图标"],
                 L["显示小地图图标。"],
@@ -2205,7 +2208,7 @@ BG.Init(function()
         do
             local name = "addonsOutTime"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
 
             local ontext = {
                 L["插件过期提醒"],
@@ -2224,7 +2227,7 @@ BG.Init(function()
         do
             local name = "autoAuctionScale"
             BG.options[name .. "reset"] = 0.9
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             if not tonumber(BiaoGe.options[name]) then
                 BiaoGe.options[name] = BG.options[name .. "reset"]
             end
@@ -2262,7 +2265,7 @@ BG.Init(function()
         do
             local name = "autoAuctionFrameLevel"
             BG.options[name .. "reset"] = "HIGH"
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
 
             local dropDown = LibBG:Create_UIDropDownMenu(nil, autoAuction)
             dropDown:SetPoint("TOPLEFT", 220, height - h - 2)
@@ -2496,7 +2499,7 @@ BG.Init(function()
 
             local name = "fastMoney"
             BG.options[name .. "reset"] = 1
-            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+            resolveOption(name)
             local ontext = {
                 L["快速开拍"],
                 L["在团长拍卖面板里，增加多个价格按钮，点击后直接按该价格开始拍卖。"],
@@ -2545,7 +2548,7 @@ BG.Init(function()
         end
         h = h + 30
         h = h + 30
-        -- 数据驱动：两列布局创建选项
+        -- 以数据驱动的方式按两列布局生成选项
         do
             local MAX_LEFT_ROWS = 9 -- 左列最大行数，可自行调整
             local RIGHT_COL_X = 320 -- 右列起始X坐标
@@ -2681,7 +2684,7 @@ BG.Init(function()
                 end
             end
 
-            -- 将分配信息复制到子项
+            -- 把分配到的列信息同步给子项
             for idx, opt in ipairs(auctionCheckButtons) do
                 if opt.parent and not opt._col then
                     local parentOpt
@@ -2692,7 +2695,7 @@ BG.Init(function()
                     end
                     if parentOpt and parentOpt._col then
                         opt._col = parentOpt._col
-                        -- 行号需要重新计算：找到该列中该父项后的偏移
+                        -- 行号必须重算：先数出该父项之后在该列中的偏移
                         local offset = 0
                         for j = idx - 1, 1, -1 do
                             local prev = auctionCheckButtons[j]
@@ -2722,15 +2725,15 @@ BG.Init(function()
                 if isConditionMet(opt) then
                     local name = opt.name
                     BG.options[name .. "reset"] = opt.default or 1
-                    BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                    resolveOption(name)
 
                     local colX = (opt._col == 1) and 15 or RIGHT_COL_X
                     local rowY = height - h_start - opt._row * ROW_H
 
-                    -- 计算 ontext（都从 ontextDB 获取）
+                    -- 求出 ontext 的值，数据统一取自 ontextDB
                     local ontext = ontextDB[name]
 
-                    -- 按钮文本：从 ontextDB 获取标题
+                    -- 按钮标题同样取自 ontextDB
                     local buttonText = ontextDB[name][1]
                     if opt.isnew then
                         buttonText = AddTexture("QUEST") .. buttonText
@@ -2749,7 +2752,7 @@ BG.Init(function()
                 end
             end
 
-            -- 更新总高度（取两列中较高的一列）
+            -- 重算整体高度，以较高那一列为准
             h = h_start + math.max(leftCount, rightCount) * ROW_H
         end
     end
@@ -2808,7 +2811,7 @@ BG.Init(function()
                 h = h + 30
                 local name = "autoAllLootToMe"
                 BG.options[name .. "reset"] = 0
-                BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                resolveOption(name)
                 local ontext
                 ontext = {
                     L["自动点击一键分配"],
@@ -2824,7 +2827,7 @@ BG.Init(function()
                     h = h + 30
                     local name = "autoSetLootNum"
                     BG.options[name .. "reset"] = 1
-                    BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                    resolveOption(name)
                     local ontext
                     ontext = {
                         L["部分Boss自动切换分配品质"],
@@ -2855,12 +2858,12 @@ BG.Init(function()
                 local f = O.CreateCheckButton(name, L["牌子拾取增强"], others, 15, height - h, ontext, true)
                 BG.options["button" .. name] = f
             end
-            -- 屏蔽发送受限的系统消息
+            -- 过滤掉发送受限时出现的系统提示
             do
                 h = h + 30
                 local name = "ERR_CHAT_THROTTLED"
                 BG.options[name .. "reset"] = 1
-                BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                resolveOption(name)
                 local ontext = {
                     L["屏蔽发送受限的系统消息"],
                     L["自动屏蔽该系统消息\"可发送的信息数量受限，请稍候再发送下一条信息。\"。"],
@@ -2873,7 +2876,7 @@ BG.Init(function()
                 h = h + 30
                 local name = "enableSendMail"
                 BG.options[name .. "reset"] = 1
-                BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                resolveOption(name)
                 local ontext = {
                     L["启用批量邮寄工资"] .. L["（需重载）"],
                 }
@@ -2898,7 +2901,7 @@ BG.Init(function()
             do
                 local name = "tradeSuccessSound"
                 BG.options[name .. "reset"] = 0
-                BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                resolveOption(name)
                 local ontext = {
                     L["交易成功时语音提醒"],
                 }
@@ -2911,7 +2914,7 @@ BG.Init(function()
             do
                 local name = "tradeFalseSound"
                 BG.options[name .. "reset"] = 0
-                BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                resolveOption(name)
                 local ontext = {
                     L["交易失败时语音提醒"],
                 }
@@ -2924,7 +2927,7 @@ BG.Init(function()
             do
                 local name = "tradeMSG"
                 BG.options[name .. "reset"] = 0
-                BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                resolveOption(name)
                 local ontext = {
                     L["交易通报"],
                     L["交易后把结果通报至指定频道。"],
@@ -2936,7 +2939,7 @@ BG.Init(function()
             do
                 local name = "tradeMSG_channel"
                 BG.options[name .. "reset"] = "WHISPER"
-                BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                resolveOption(name)
                 if BiaoGe.options[name] ~= "WHISPER" and BiaoGe.options[name] ~= "RAID" then
                     BiaoGe.options[name] = BG.options[name .. "reset"]
                 end
@@ -2982,7 +2985,7 @@ BG.Init(function()
             do
                 local name = "tradeMSG_success"
                 BG.options[name .. "reset"] = 1
-                BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                resolveOption(name)
                 local ontext = {
                     L["交易成功时通报"],
                 }
@@ -2996,7 +2999,7 @@ BG.Init(function()
             do
                 local name = "tradeMSG_false"
                 BG.options[name .. "reset"] = 0
-                BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+                resolveOption(name)
                 local ontext = {
                     L["交易失败时通报"],
                 }
@@ -3010,6 +3013,4 @@ BG.Init(function()
     end)
 
 -- debug
--- BG.Init2(function(self, event, ...)
---     BG.OpenOption()
 -- end)

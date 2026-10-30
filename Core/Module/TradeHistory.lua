@@ -4,6 +4,7 @@ local AddonName, ns = ...
 local LibBG = ns.LibBG
 local L = ns.L
 
+local SendGateway = ns.SendGateway
 local Size = ns.Size
 local RGB = ns.RGB
 local RGB_16 = ns.RGB_16
@@ -16,7 +17,6 @@ local ver = ns.ver
 local After = C_Timer.After
 local player = UnitName("player")
 local realmID = GetRealmID()
-local pt = print
 
 local tradeFrameMaxButton = 15
 local tradeFrameButtonHeight = 32
@@ -35,6 +35,487 @@ local SendSystemMessage = BG.SendSystemMessage
 local function AddIconByLink(link)
     local icon = select(5, GetItemInfoInstant(link))
     return AddTexture(icon)
+end
+
+local FONT_FLAGS = "OUTLINE"
+local CHATFRAME_BG = "Interface/ChatFrame/ChatFrameBackground"
+local FRAME_TEMPLATE = "BackdropTemplate"
+local TRADE_LOG_PREFIX = "BGForge: "
+local TRADE_COLUMN_FONT_SIZE = 14
+
+local BACKDROP_EDGED = { bgFile = CHATFRAME_BG, edgeFile = CHATFRAME_BG, edgeSize = 1 }
+local BACKDROP_FLAT = { bgFile = CHATFRAME_BG }
+
+local TRADE_COLUMNS = {
+    { name = L["序号"], width = 40, color = "808080", JustifyH = "CENTER", Enable = false, fontSize = 12 },
+    { name = L["时间"], width = 70, color = "FFFFFF", JustifyH = "CENTER", Enable = true, fontSize = 12 },
+    { name = L["地点"], width = 70, color = "FFFFFF", JustifyH = "CENTER", Enable = true, fontSize = 13 },
+    { name = L["角色"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false },
+    { name = L["交易对象"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false },
+    { name = L["交出"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = 13 },
+    { name = L["收到"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = 13 },
+    { name = L["交易前财产"], width = 100, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = 13 },
+    { name = L["交易后财产"], width = 100, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = 13 },
+}
+
+local TRADE_TITLE_WIDTH = 0
+for _, column in ipairs(TRADE_COLUMNS) do
+    TRADE_TITLE_WIDTH = TRADE_TITLE_WIDTH + column.width
+end
+
+local TRADE_SIDE_ORDER = { "player", "target" }
+local TRADE_SIDE_LAYOUT = {
+    player = { x = 10, y = -10 },
+    target = { x = 10, y = 0, anchor = "playerNameText" },
+}
+
+local function SetOutlineFont(fontString, size)
+    fontString:SetFont(BIAOGE_TEXT_FONT, size, FONT_FLAGS)
+end
+
+local function ApplyPanel(frame, backdrop, r, g, b, a)
+    frame:SetBackdrop(backdrop)
+    frame:SetBackdropColor(r, g, b, a)
+end
+
+local function ResolveTradeMessageChannel()
+    local channel = BiaoGe.options["tradeMSG_channel"]
+    if channel == "WHISPER" then
+        return channel
+    end
+    if IsInRaid(1) then
+        return "RAID"
+    end
+    if IsInGroup(1) then
+        return "PARTY"
+    end
+end
+
+local function BuildTradeSideText(items, amount, label)
+    local money = floor(amount / 1e4)
+    local moneyText = money ~= 0 and (money .. "g") or ""
+    local itemText = ""
+    for i = 1, 6 do
+        local v = items[i]
+        if v then
+            itemText = itemText .. v.item
+            if v.count > 1 then
+                itemText = itemText .. "x" .. v.count
+            end
+        end
+    end
+    local text = moneyText
+    if moneyText ~= "" and itemText ~= "" then
+        text = moneyText .. " "
+    end
+    text = text .. itemText
+    if text ~= "" then
+        text = label .. text
+    end
+    return text
+end
+
+local function BuildTradeItemSummary(items, amount)
+    local itemText = ""
+    local count = 0
+    local item
+    for i = 1, 6 do
+        local v = items[i]
+        if v then
+            count = count + 1
+            item = AddIconByLink(v.item) .. v.item
+        end
+    end
+    if count == 1 then
+        itemText = item
+    elseif count > 1 then
+        itemText = "|A:ParagonReputation_Bag:0:0|a" .. "x" .. count
+    end
+    local moneyText = ""
+    if amount > 0 then
+        moneyText = GetMoneyString(amount, true)
+    end
+    local split = ""
+    if itemText ~= "" and moneyText ~= "" then
+        split = ", "
+    end
+    return itemText .. split .. moneyText
+end
+
+local function TradeFieldOrder(a, b, key)
+    if BiaoGe.tradeHistory.Order == 1 then
+        return a[key] > b[key]
+    end
+    return b[key] > a[key]
+end
+
+local function TradeFrameOnShow(self)
+    local ctx = self.tradeUI
+    ctx.UpdateScrollFrame()
+    ctx.UpdateButtons()
+end
+
+local function TradeBarOnUpdate(self, t)
+    local ctx = self.tradeUI
+    ctx.UpdateButtons()
+    ctx.UpdateScrollButtonState()
+    ctx.mainFrame.infoFrame:Hide()
+    self:SetScript("OnUpdate", nil)
+end
+
+local function TradeBarOnValueChanged(self)
+    self:SetScript("OnUpdate", TradeBarOnUpdate)
+end
+
+local function TradeCellOnEnter(self)
+    local ctx = self.tradeUI
+    local buttons = ctx.buttons
+    local num = self.num
+    ctx.mainFrame.frame.lastButtonNum = num
+    for _, row in ipairs(buttons) do
+        row[1].ds:Hide()
+    end
+    buttons[num][1].ds:Show()
+    if self.onenter then
+        GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0)
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine(self.onenter, 1, 1, 1, true)
+        GameTooltip:Show()
+    end
+    BG.ShowTradeHistoryInfo(self)
+    ctx.StopTime()
+end
+
+local function TradeCellOnLeave(self)
+    local ctx = self.tradeUI
+    ctx.buttons[self.num][1].ds:Hide()
+    GameTooltip:Hide()
+    ctx.StartTime()
+end
+
+local function TradeCellOnMouseUp(self, button)
+    if button ~= "RightButton" then return end
+    local ctx = self.tradeUI
+    local num = (floor(ctx.bar:GetValue()) or 0) + self.num
+    local info = ctx.GetButtonInfo(num)
+    local menu = {
+        {
+            text = info[4],
+            isTitle = true,
+            notCheckable = true,
+        },
+        {
+            text = "   ",
+            isTitle = true,
+            notCheckable = true,
+        },
+        {
+            text = L["删除该条记录"],
+            notCheckable = true,
+            func = function()
+                local record = ctx.db[num]
+                tremove(BiaoGe.tradeHistory[ctx.choose.realmID][record.player].info, record.i)
+                ctx.UpdateScrollFrame()
+                ctx.UpdateButtons()
+                BG.PlaySound(1)
+            end
+        },
+        {
+            text = CANCEL,
+            notCheckable = true,
+            func = LibBG.CloseDropDownMenus,
+        }
+    }
+    LibBG:EasyMenu(menu, BG.dropDown, "cursor", 0, 0, "MENU", 2)
+    BG.PlaySound(1)
+end
+
+local function TradeHeaderOnClick(self)
+    local ctx = self.tradeUI
+    BG.PlaySound(1)
+    ctx.mainFrame.isnewsorter = nil
+    if BiaoGe.tradeHistory.OrderButtonID ~= self.id then
+        ctx.mainFrame.isnewsorter = true
+    end
+    if not ctx.mainFrame.isnewsorter then
+        BiaoGe.tradeHistory.Order = BiaoGe.tradeHistory.Order == 1 and 0 or 1
+    end
+    BiaoGe.tradeHistory.OrderButtonID = self.id
+    ctx.UpdateScrollFrame()
+    ctx.UpdateButtons()
+end
+
+local function TradeInfoOnEnter(self)
+    local ctx = self.tradeUI
+    ctx.StopTime()
+    ctx.buttons[ctx.mainFrame.frame.lastButtonNum][1].ds:Show()
+end
+
+local function TradeInfoOnLeave(self)
+    self.tradeUI.StartTime()
+end
+
+local function TradeInfoOnHide(self)
+    local ctx = self.tradeUI
+    ctx.buttons[ctx.mainFrame.frame.lastButtonNum][1].ds:Hide()
+end
+
+local function TradeItemOnEnter(self)
+    local ctx = self.tradeUI
+    ctx.StopTime()
+    ctx.buttons[ctx.mainFrame.frame.lastButtonNum][1].ds:Show()
+    if self.link then
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT", 0, 0)
+        GameTooltip:ClearLines()
+        GameTooltip:SetHyperlink(self.link)
+    end
+end
+
+local function TradeItemOnLeave(self)
+    GameTooltip:Hide()
+    self.tradeUI.StartTime()
+end
+
+local function TradeNameOnEnter(self)
+    local ctx = self.tradeUI
+    ctx.StopTime()
+    ctx.buttons[ctx.mainFrame.frame.lastButtonNum][1].ds:Show()
+end
+
+local function TradeNameOnLeave(self)
+    self.tradeUI.StartTime()
+end
+
+local function NewDropDownInfo(text, checked, func)
+    local info = LibBG:UIDropDownMenu_CreateInfo()
+    info.text = text
+    if checked then
+        info.checked = true
+    end
+    info.func = func
+    return info
+end
+
+local function PlayerMenuColorName(v)
+    return "|c" .. select(4, GetClassColor(v.class)) .. v.name
+end
+
+local function PlayerMenuLabel(v)
+    return "  " .. PlayerMenuColorName(v) .. (v.level and (" (" .. v.level .. ")") or "")
+end
+
+local function TradePlayerMenuInit(self, level)
+    local dropDown = self
+    local ctx = self.tradeUI
+    local choose = ctx.choose
+    for _realmID, realmTable in pairs(BiaoGe.tradeHistory) do
+        if type(realmTable) == "table" then
+            if next(realmTable) then
+                local realmLabel = BG.STC_y2(BiaoGe.realmName[_realmID] or _realmID)
+                local info = NewDropDownInfo(realmLabel, not choose.player and _realmID == choose.realmID, function()
+                    choose.realmID = _realmID
+                    choose.player = nil
+                    BiaoGe.tradeHistory.isChooseRealm = 1
+                    LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[_realmID] or _realmID) .. " - " .. L["全部角色"]))
+                    ctx.UpdateScrollFrame()
+                    ctx.UpdateButtons()
+                end)
+                LibBG:UIDropDownMenu_AddButton(info)
+            end
+            for _, v in pairs(realmTable) do
+                local playerName = PlayerMenuColorName(v)
+                local realmName = BiaoGe.realmName[_realmID] or _realmID
+                local info = NewDropDownInfo(PlayerMenuLabel(v), v.name == choose.player and v.realmID == choose.realmID, function()
+                    choose.realmID = v.realmID
+                    choose.player = v.name
+                    BiaoGe.tradeHistory.isChooseRealm = 0
+                    LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[v.realmID] or v.realmID) .. " - ") .. playerName)
+                    ctx.UpdateScrollFrame()
+                    ctx.UpdateButtons()
+                end)
+                info.arg1 = v.realmID .. "-" .. v.name
+                info.arg2 = "|cffFFD100" .. realmName .. "-|r|c" .. select(4, GetClassColor(v.class)) .. v.name .. "|r"
+                LibBG:UIDropDownMenu_AddButton(info)
+            end
+        end
+    end
+end
+
+local function TradePlayerButtonOnEnter(button)
+    if L_DropDownList1.dropdown ~= button.tradeMainFrame.dropDown then return end
+    if not button.deleteTradePlayer then
+        local bt = CreateFrame("Button", nil, button)
+        bt:SetSize(15, 15)
+        bt:SetPoint("RIGHT", -2, 0)
+        bt:SetNormalTexture("interface/raidframe/readycheck-notready")
+        bt:SetHighlightTexture("interface/raidframe/readycheck-notready")
+        bt:RegisterForClicks("AnyUp")
+        bt.num = button.tradeIndex
+        bt:Hide()
+        button.deleteTradePlayer = bt
+        bt:SetScript("OnClick", function(self)
+            local dropDown = button.tradeMainFrame.dropDown
+            dropDown.realmID, dropDown.player = strsplit("-", button.arg1)
+            dropDown.realmID = tonumber(dropDown.realmID)
+            dropDown.colorPlayer = button.arg2
+            LibBG:CloseDropDownMenus()
+            StaticPopup_Show("BiaoGe_DeleteTradeHistoryPlayer", dropDown.colorPlayer)
+        end)
+        bt:SetScript("OnEnter", function(self)
+            button.isOnEnter = true
+            LibBG:UIDropDownMenu_StopCounting(self:GetParent():GetParent())
+            button.Highlight:Show()
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 0, 0)
+            GameTooltip:ClearLines()
+            GameTooltip:AddLine(L["删除该角色"], 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        bt:SetScript("OnLeave", function(self)
+            LibBG:UIDropDownMenu_StartCounting(self:GetParent():GetParent())
+            button.Highlight:Hide()
+            GameTooltip:Hide()
+        end)
+        bt:SetScript("OnHide", function(self)
+            self:Hide()
+        end)
+    end
+    button.isOnEnter = true
+    for ii = 1, _G['L_DropDownList1'].numButtons do
+        local bt = _G["L_DropDownList1Button" .. ii]
+        if bt.deleteTradePlayer then
+            bt.deleteTradePlayer:Hide()
+        end
+    end
+    if button.arg1 then
+        button.deleteTradePlayer:Show()
+    end
+end
+
+local function TradePlayerButtonOnLeave(button)
+    if L_DropDownList1.dropdown ~= button.tradeMainFrame.dropDown then return end
+    button.isOnEnter = false
+    After(0, function()
+        if not button.isOnEnter then
+            button.deleteTradePlayer:Hide()
+        end
+    end)
+end
+
+local function CreateTradeSidePanel(frame, side, width, iconWidth, ctx)
+    local layout = TRADE_SIDE_LAYOUT[side]
+    local nameText = frame:CreateFontString()
+    SetOutlineFont(nameText, 16)
+    if layout.anchor then
+        nameText:SetPoint("TOPLEFT", frame[layout.anchor], "TOPRIGHT", layout.x, layout.y)
+    else
+        nameText:SetPoint("TOPLEFT", layout.x, layout.y)
+    end
+    nameText:SetWidth(width)
+    nameText:SetJustifyH("LEFT")
+    nameText:SetWordWrap(false)
+    frame[side .. "NameText"] = nameText
+
+    local moneyFrame = CreateFrame("Frame", nil, frame, FRAME_TEMPLATE)
+    ApplyPanel(moneyFrame, BACKDROP_FLAT, 0, 0, 0, 0.5)
+    moneyFrame:SetSize(width, 22)
+    moneyFrame:SetPoint("TOPLEFT", frame[side .. "NameText"], "BOTTOMLEFT", 0, -5)
+    local moneyText = moneyFrame:CreateFontString()
+    SetOutlineFont(moneyText, 13)
+    moneyText:SetAllPoints()
+    moneyText:SetJustifyH("LEFT")
+    frame[side .. "MoneyText"] = moneyText
+
+    for i = 1, 7 do
+        local itemFrame = CreateFrame("Frame", nil, frame, FRAME_TEMPLATE)
+        ApplyPanel(itemFrame, BACKDROP_EDGED, 0, 0, 0, 0)
+        itemFrame:SetBackdropBorderColor(1, 1, 1, .4)
+        itemFrame:SetSize(iconWidth, iconWidth)
+        if i == 1 then
+            itemFrame:SetPoint("TOPLEFT", frame[side .. "MoneyText"], "BOTTOMLEFT", 0, -10)
+        else
+            itemFrame:SetPoint("TOPLEFT", frame[side .. "item" .. (i - 1)], "BOTTOMLEFT", 0, i == 7 and -15 or -2)
+        end
+        frame[side .. "item" .. i] = itemFrame
+        itemFrame.tradeUI = ctx
+        itemFrame:HookScript("OnEnter", TradeItemOnEnter)
+        itemFrame:HookScript("OnLeave", TradeItemOnLeave)
+
+        itemFrame.icon = itemFrame:CreateTexture(nil, "BACKGROUND")
+        itemFrame.icon:SetAllPoints()
+        itemFrame.icon:SetTexCoord(.07, .93, .07, .93)
+
+        itemFrame.count = itemFrame:CreateFontString()
+        SetOutlineFont(itemFrame.count, 13)
+        itemFrame.count:SetPoint("BOTTOMRIGHT", -1, 1)
+
+        itemFrame.level = itemFrame:CreateFontString()
+        SetOutlineFont(itemFrame.level, 11)
+        itemFrame.level:SetPoint("BOTTOM", 1, 1)
+
+        local nameFrame = CreateFrame("Frame", nil, frame, FRAME_TEMPLATE)
+        ApplyPanel(nameFrame, BACKDROP_FLAT, .5, .5, .5, 0.1)
+        nameFrame:SetSize(width - iconWidth - 2, iconWidth)
+        nameFrame:SetPoint("LEFT", itemFrame, "RIGHT", 2, 0)
+        nameFrame.tradeUI = ctx
+        itemFrame.name = nameFrame:CreateFontString()
+        SetOutlineFont(itemFrame.name, 14)
+        itemFrame.name:SetAllPoints()
+        itemFrame.name:SetJustifyH("LEFT")
+        nameFrame:HookScript("OnEnter", TradeNameOnEnter)
+        nameFrame:HookScript("OnLeave", TradeNameOnLeave)
+    end
+end
+
+local function FillTradeSide(frame, side, v)
+    local nameText = frame[side .. "NameText"]
+    nameText:SetText(v[side .. "Name"])
+    local r, g, b = .5, .5, .5
+    if v[side .. "Class"] then
+        r, g, b = GetClassColor(v[side .. "Class"])
+    end
+    nameText:SetTextColor(r, g, b)
+    local moneyText = frame[side .. "MoneyText"]
+    if v[side .. "money"] == 0 then
+        moneyText:SetText("")
+    else
+        moneyText:SetText(GetMoneyString(v[side .. "money"], true))
+    end
+    for i = 1, 7 do
+        local vv = v[side .. "items"][i]
+        local itemFrame = frame[side .. "item" .. i]
+        if vv then
+            local qr, qg, qb = GetItemQualityColor(vv.quality)
+            local iconID, typeID = select(5, GetItemInfoInstant(vv.item))
+            itemFrame.link = vv.item
+            itemFrame.itemID = GetItemID(vv.item)
+            itemFrame:SetBackdropBorderColor(qr, qg, qb, 1)
+            itemFrame.icon:SetTexture(iconID)
+            itemFrame.count:SetText(vv.count > 1 and vv.count or "")
+            itemFrame.name:SetText(vv.name)
+            itemFrame.name:SetTextColor(qr, qg, qb)
+            itemFrame.level:SetText("")
+            if typeID == 2 or typeID == 4 then
+                local link = vv.item
+                local item = Item:CreateFromItemLink(link)
+                item:ContinueOnItemLoad(function()
+                    if itemFrame.link == link then
+                        local level = select(4, GetItemInfo(link))
+                        if level then
+                            itemFrame.level:SetText(level)
+                        end
+                    end
+                end)
+            end
+        else
+            itemFrame.link = nil
+            itemFrame.itemID = nil
+            itemFrame:SetBackdropBorderColor(1, 1, 1, .4)
+            itemFrame.icon:SetTexture(nil)
+            itemFrame.name:SetText("")
+            itemFrame.count:SetText("")
+            itemFrame.level:SetText("")
+        end
+    end
 end
 
 local function EnsureCurrentCharacter()
@@ -86,8 +567,8 @@ local function RoadTrade()
 
         local target
         local success
-        -- Lite: 密语前缀品牌化（原版 "BiaoGe: " 玩家可见，外显品牌约束要求改）
-        local logo = "BGForge: "
+        -- 密语前缀（自定义前缀，避免使用其它插件的）
+        local logo = TRADE_LOG_PREFIX
         local f = CreateFrame("Frame")
         f:RegisterEvent("TRADE_ACCEPT_UPDATE")
         f:RegisterEvent("UI_INFO_MESSAGE")
@@ -119,75 +600,18 @@ local function RoadTrade()
                         BG.PlaySound("tradeSuccess")
                     end
                     if BiaoGe.options.tradeMSG == 1 and BiaoGe.options.tradeMSG_success == 1 then
-                        local channel = BiaoGe.options["tradeMSG_channel"]
-                        if channel ~= "WHISPER" then
-                            if IsInRaid(1) then
-                                channel = "RAID"
-                            elseif IsInGroup(1) then
-                                channel = "PARTY"
+                        local channel = ResolveTradeMessageChannel()
+                        if channel then
+                            local giveText = BuildTradeSideText(trade.playeritems, trade.playermoney, L["(交出)"])
+                            local getText = BuildTradeSideText(trade.targetitems, trade.targetmoney, L["(收到)"])
+                            local msg
+                            if giveText ~= "" and getText ~= "" then
+                                msg = giveText .. L["，"] .. getText
                             else
-                                return
+                                msg = giveText .. getText
                             end
+                            SendGateway.Chat(logo .. format(L["与<%s>交易成功！%s"], channel == "WHISPER" and L["你"] or target, msg), channel, nil, target)
                         end
-
-                        local msg = ""
-                        local giveText = ""
-                        local playermoneyText = ""
-                        local playeritemText = ""
-                        local money = floor(trade.playermoney / 1e4)
-                        if money ~= 0 then
-                            playermoneyText = money .. "g"
-                        end
-                        for i = 1, 6 do
-                            local v = trade.playeritems[i]
-                            if v then
-                                local countText = ""
-                                if v.count > 1 then
-                                    countText = "x" .. v.count
-                                end
-                                playeritemText = playeritemText .. v.item .. countText
-                            end
-                        end
-                        if playermoneyText ~= "" and playeritemText ~= "" then
-                            playermoneyText = playermoneyText .. " "
-                        end
-                        giveText = playermoneyText .. playeritemText
-                        if giveText ~= "" then
-                            giveText = L["(交出)"] .. giveText
-                        end
-
-                        local getText = ""
-                        local targetmoneyText = ""
-                        local targetitemText = ""
-                        local money = floor(trade.targetmoney / 1e4)
-                        if money ~= 0 then
-                            targetmoneyText = money .. "g"
-                        end
-                        for i = 1, 6 do
-                            local v = trade.targetitems[i]
-                            if v then
-                                local countText = ""
-                                if v.count > 1 then
-                                    countText = "x" .. v.count
-                                end
-                                targetitemText = targetitemText .. v.item .. countText
-                            end
-                        end
-                        if targetmoneyText ~= "" and targetitemText ~= "" then
-                            targetmoneyText = targetmoneyText .. " "
-                        end
-                        getText = targetmoneyText .. targetitemText
-                        if getText ~= "" then
-                            getText = L["(收到)"] .. getText
-                        end
-
-                        if giveText ~= "" and getText ~= "" then
-                            msg = giveText .. L["，"] .. getText
-                        else
-                            msg = giveText .. getText
-                        end
-
-                        SendChatMessage(logo .. format(L["与<%s>交易成功！%s"], channel == "WHISPER" and L["你"] or target, msg), channel, nil, target)
                     end
                 elseif text == ERR_TRADE_CANCELLED or text == ERR_TRADE_BAG_FULL or text == ERR_TRADE_TARGET_BAG_FULL then
                 end
@@ -201,18 +625,11 @@ local function RoadTrade()
                             BG.PlaySound("tradeFalse")
                         end
                         if BiaoGe.options.tradeMSG == 1 and BiaoGe.options.tradeMSG_false == 1 then
-                            local channel = BiaoGe.options["tradeMSG_channel"]
-                            if channel ~= "WHISPER" then
-                                if IsInRaid(1) then
-                                    channel = "RAID"
-                                elseif IsInGroup(1) then
-                                    channel = "PARTY"
-                                else
-                                    return
-                                end
+                            local channel = ResolveTradeMessageChannel()
+                            if channel then
+                                SendGateway.Chat(logo .. format(L["与<%s>交易失败！"], channel == "WHISPER" and L["你"] or target),
+                                    channel, nil, target)
                             end
-                            SendChatMessage(logo .. format(L["与<%s>交易失败！"], channel == "WHISPER" and L["你"] or target),
-                                channel, nil, target)
                         end
                     end
                 end)
@@ -229,54 +646,38 @@ local function RoadTrade()
             realmID = realmID,
             player = player,
         }
-        if BiaoGe.tradeHistory.isChooseRealm == 1 then choose = { realmID = realmID, } end
+        if BiaoGe.tradeHistory.isChooseRealm == 1 then choose.player = nil end
         local BUTTONHEIGHT = tradeFrameButtonHeight
         local MAXBUTTONS = tradeFrameMaxButton
-        local WIDTH = 10 + 27
+        local WIDTH = 10 + 27 + TRADE_TITLE_WIDTH
         local HEIGHT = (MAXBUTTONS + 1) * BUTTONHEIGHT + 15
-        local FONTSIZE = 14
-        local titleWidth = 0
+        local titleWidth = TRADE_TITLE_WIDTH
         local db = {}
         local titlebuttons = {}
         local buttons = {}
         local dropDown
-        local titleTbl = {
-            { name = L["序号"], width = 40, color = "808080", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 2, },
-            { name = L["时间"], width = 70, color = "FFFFFF", JustifyH = "CENTER", Enable = true, fontSize = FONTSIZE - 2, },
-            { name = L["地点"], width = 70, color = "FFFFFF", JustifyH = "CENTER", Enable = true, fontSize = FONTSIZE - 1, },
-            { name = L["角色"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false },
-            { name = L["交易对象"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false },
-            { name = L["交出"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 1, },
-            { name = L["收到"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 1, },
-            { name = L["交易前财产"], width = 100, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 1, },
-            { name = L["交易后财产"], width = 100, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 1, },
+        local titleTbl = TRADE_COLUMNS
+        local tradeCtx = {
+            mainFrame = mainFrame,
+            choose = choose,
+            db = db,
+            buttons = buttons,
         }
-        for i, v in ipairs(titleTbl) do
-            WIDTH = WIDTH + v.width
-            titleWidth = titleWidth + v.width
-        end
 
         local f, scroll, child, bar
         local GetDB, UpdateScrollFrame, UpdateScrollButtonState, GetButtonInfo, UpdateButtons
         local updateFrame = CreateFrame("Frame")
         local StartTime, StopTime
         do
-            f = CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
-            f:SetBackdrop({
-                bgFile = "Interface/ChatFrame/ChatFrameBackground",
-                edgeFile = "Interface/ChatFrame/ChatFrameBackground",
-                edgeSize = 1,
-            })
-            f:SetBackdropColor(0, 0, 0, 0.4)
+            f = CreateFrame("Frame", nil, mainFrame, FRAME_TEMPLATE)
+            ApplyPanel(f, BACKDROP_EDGED, 0, 0, 0, 0.4)
             f:SetBackdropBorderColor(1, 1, 1, .8)
             f:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 10, -65 - (BG.MainNavigationHeight or 0))
             f:SetSize(WIDTH + 5, HEIGHT)
             f:EnableMouse(true)
             mainFrame.frame = f
-            f:SetScript("OnShow", function(self)
-                UpdateScrollFrame()
-                UpdateButtons()
-            end)
+            f.tradeUI = tradeCtx
+            f:SetScript("OnShow", TradeFrameOnShow)
 
             scroll = CreateFrame("ScrollFrame", nil, f, BG.scrollTemplate) -- 滚动
             scroll:SetWidth(WIDTH - 27 + 5)
@@ -284,15 +685,10 @@ local function RoadTrade()
             scroll:SetPoint("TOPLEFT", 0, -12 - BUTTONHEIGHT)
             bar = scroll.ScrollBar
             bar.scrollStep = 5
+            bar.tradeUI = tradeCtx
+            tradeCtx.bar = bar
             BG.CreateSrollBarBackdrop(bar)
-            bar:HookScript("OnValueChanged", function(self)
-                self:SetScript("OnUpdate", function(self, t)
-                    UpdateButtons()
-                    UpdateScrollButtonState()
-                    mainFrame.infoFrame:Hide()
-                    self:SetScript("OnUpdate", nil)
-                end)
-            end)
+            bar:HookScript("OnValueChanged", TradeBarOnValueChanged)
 
             child = CreateFrame("Frame", nil, f) -- 子框架
             child:SetWidth(scroll:GetWidth())
@@ -302,113 +698,60 @@ local function RoadTrade()
             for ii = 1, MAXBUTTONS do
                 buttons[ii] = {}
                 for i = 1, #titleTbl do
-                    local f = CreateFrame("Frame", nil, scroll)
-                    f:SetSize(titleTbl[i].width, BUTTONHEIGHT)
+                    local cell = CreateFrame("Frame", nil, scroll)
+                    cell:SetSize(titleTbl[i].width, BUTTONHEIGHT)
                     if ii == 1 and i == 1 then
-                        f:SetPoint("TOPLEFT", scroll, 10, 0)
-                        f:SetParent(scroll)
+                        cell:SetPoint("TOPLEFT", scroll, 10, 0)
+                        cell:SetParent(scroll)
                     elseif i == 1 then
-                        f:SetPoint("TOPLEFT", buttons[(ii - 1)][1], "BOTTOMLEFT", 0, 0)
-                        f:SetParent(scroll)
+                        cell:SetPoint("TOPLEFT", buttons[(ii - 1)][1], "BOTTOMLEFT", 0, 0)
+                        cell:SetParent(scroll)
                     else
-                        f:SetPoint("LEFT", buttons[ii][i - 1], "RIGHT", 0, 0)
-                        f:SetParent(buttons[ii][1])
+                        cell:SetPoint("LEFT", buttons[ii][i - 1], "RIGHT", 0, 0)
+                        cell:SetParent(buttons[ii][1])
                     end
-                    f.num = ii
-                    buttons[ii][i] = f
+                    cell.num = ii
+                    cell.tradeUI = tradeCtx
+                    buttons[ii][i] = cell
 
-                    f.Text = f:CreateFontString()
-                    f.Text:SetFont(BIAOGE_TEXT_FONT, titleTbl[i].fontSize or FONTSIZE, "OUTLINE")
-                    f.Text:SetPoint("CENTER")
-                    f.Text:SetTextColor(RGB(titleTbl[i].color))
-                    f.Text:SetJustifyH(titleTbl[i].JustifyH)
-                    f.Text:SetWidth(f:GetWidth() - 2)
-                    f.Text:SetHeight(f:GetHeight())
+                    cell.Text = cell:CreateFontString()
+                    SetOutlineFont(cell.Text, titleTbl[i].fontSize or TRADE_COLUMN_FONT_SIZE)
+                    cell.Text:SetPoint("CENTER")
+                    cell.Text:SetTextColor(RGB(titleTbl[i].color))
+                    cell.Text:SetJustifyH(titleTbl[i].JustifyH)
+                    cell.Text:SetWidth(cell:GetWidth() - 2)
+                    cell.Text:SetHeight(cell:GetHeight())
 
-                    f:SetScript("OnEnter", function(self)
-                        mainFrame.frame.lastButtonNum = self.num
-                        for _ii, v in ipairs(buttons) do
-                            buttons[_ii][1].ds:Hide()
-                        end
-
-                        buttons[ii][1].ds:Show()
-                        if self.onenter then
-                            GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0)
-                            GameTooltip:ClearLines()
-                            GameTooltip:AddLine(self.onenter, 1, 1, 1, true)
-                            GameTooltip:Show()
-                        end
-                        BG.ShowTradeHistoryInfo(self)
-                        StopTime()
-                    end)
-                    f:SetScript("OnLeave", function(self)
-                        buttons[ii][1].ds:Hide()
-                        GameTooltip:Hide()
-                        StartTime()
-                    end)
-                    f:SetScript("OnMouseUp", function(self, button)
-                        if button ~= "RightButton" then return end
-                        local value = floor(bar:GetValue()) or 0
-                        local num = value + ii
-                        local tbl = GetButtonInfo(num)
-
-                        local menu = {
-                            {
-                                text = tbl[4],
-                                -- text = BG.STC_dis("(" .. tbl[1] .. ")") .. " " .. tbl[4],
-                                isTitle = true,
-                                notCheckable = true,
-                            },
-                            {
-                                text = "   ",
-                                isTitle = true,
-                                notCheckable = true,
-                            },
-                            {
-                                text = L["删除该条记录"],
-                                notCheckable = true,
-                                func = function()
-                                    local i = db[num].i
-                                    local player = db[num].player
-                                    local realmID = choose.realmID
-                                    tremove(BiaoGe.tradeHistory[realmID][player].info, i)
-                                    UpdateScrollFrame()
-                                    UpdateButtons()
-                                    BG.PlaySound(1)
-                                end
-                            },
-                            {
-                                text = CANCEL,
-                                notCheckable = true,
-                                func = LibBG.CloseDropDownMenus,
-                            }
-                        }
-                        LibBG:EasyMenu(menu, BG.dropDown, "cursor", 0, 0, "MENU", 2)
-                        BG.PlaySound(1)
-                    end)
+                    cell:SetScript("OnEnter", TradeCellOnEnter)
+                    cell:SetScript("OnLeave", TradeCellOnLeave)
+                    cell:SetScript("OnMouseUp", TradeCellOnMouseUp)
                 end
                 CreateLine(buttons[ii][1], 0, titleWidth, 1, nil, 0.2)
 
                 -- 底色材质
-                local f = buttons[ii][1]
-                f.ds = f:CreateTexture()
-                f.ds:SetPoint("TOPLEFT", 0, 0)
-                f.ds:SetPoint("BOTTOMRIGHT", buttons[ii][#titleTbl], "BOTTOMRIGHT", 0, 0)
-                f.ds:SetColorTexture(1, 1, 1, 0.1)
-                f.ds:Hide()
+                local cell = buttons[ii][1]
+                cell.ds = cell:CreateTexture()
+                cell.ds:SetPoint("TOPLEFT", 0, 0)
+                cell.ds:SetPoint("BOTTOMRIGHT", buttons[ii][#titleTbl], "BOTTOMRIGHT", 0, 0)
+                cell.ds:SetColorTexture(1, 1, 1, 0.1)
+                cell.ds:Hide()
             end
         end
         -- 删除记录
         do
             local function DeleteTradeData()
-                local time = GetServerTime()
-                for realmID in pairs(BiaoGe.tradeHistory) do
-                    if type(BiaoGe.tradeHistory[realmID]) == "table" then
-                        for player in pairs(BiaoGe.tradeHistory[realmID]) do
-                            for i = #BiaoGe.tradeHistory[realmID][player].info, 1, -1 do
-                                local v = BiaoGe.tradeHistory[realmID][player].info[i]
-                                if BiaoGe.tradeHistory.saveDuration > 0 and time - (v.time or 0) > 86400 * BiaoGe.tradeHistory.saveDuration then
-                                    tremove(BiaoGe.tradeHistory[realmID][player].info, i)
+                local now = GetServerTime()
+                local saveDuration = BiaoGe.tradeHistory.saveDuration
+                if saveDuration > 0 then
+                    local cutoff = now - 86400 * saveDuration
+                    for _, realmTable in pairs(BiaoGe.tradeHistory) do
+                        if type(realmTable) == "table" then
+                            for _, charTable in pairs(realmTable) do
+                                local info = charTable.info
+                                for i = #info, 1, -1 do
+                                    if (info[i].time or 0) < cutoff then
+                                        tremove(info, i)
+                                    end
                                 end
                             end
                         end
@@ -419,7 +762,7 @@ local function RoadTrade()
 
             local text = mainFrame:CreateFontString()
             text:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 260, 10)
-            text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            SetOutlineFont(text, 15)
             text:SetTextColor(RGB(BG.y2))
             text:SetText(L["保存时长："])
             local dropDown = LibBG:Create_UIDropDownMenu(nil, mainFrame)
@@ -455,7 +798,7 @@ local function RoadTrade()
         do
             local text = mainFrame:CreateFontString()
             text:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 0, 10)
-            text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            SetOutlineFont(text, 15)
             text:SetTextColor(RGB(BG.y2))
             text:SetText(L["角色："])
             dropDown = LibBG:Create_UIDropDownMenu(nil, mainFrame)
@@ -470,114 +813,16 @@ local function RoadTrade()
                 LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[realmID] or realmID) .. " - ") .. SetClassCFF(player, "player"))
             end
 
-            LibBG:UIDropDownMenu_Initialize(dropDown, function(self, level)
-                for _realmID, v in pairs(BiaoGe.tradeHistory) do
-                    if type(v) == "table" then
-                        if next(BiaoGe.tradeHistory[_realmID]) then
-                            local info = LibBG:UIDropDownMenu_CreateInfo()
-                            info.text = BG.STC_y2(BiaoGe.realmName[_realmID] or _realmID)
-                            if not choose.player and _realmID == choose.realmID then
-                                info.checked = true
-                            end
-                            info.func = function()
-                                choose = {
-                                    realmID = _realmID,
-                                    player = nil,
-                                }
-                                BiaoGe.tradeHistory.isChooseRealm = 1
-                                LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[_realmID] or _realmID) .. " - " .. L["全部角色"]))
-                                UpdateScrollFrame()
-                                UpdateButtons()
-                            end
-                            LibBG:UIDropDownMenu_AddButton(info)
-                        end
-
-                        for _, v in pairs(BiaoGe.tradeHistory[_realmID]) do
-                            local info = LibBG:UIDropDownMenu_CreateInfo()
-                            local playerName = "|c" .. select(4, GetClassColor(v.class)) .. v.name
-                            info.text = "  " .. playerName .. (v.level and " (" .. v.level .. ")" or "")
-                            info.arg1 = v.realmID .. "-" .. v.name
-                            info.arg2 = "|cffFFD100" .. (BiaoGe.realmName[_realmID] or _realmID)
-                                .. "-|r|c" .. select(4, GetClassColor(v.class)) .. v.name .. "|r"
-                            if v.name == choose.player and v.realmID == choose.realmID then
-                                info.checked = true
-                            end
-                            info.func = function()
-                                choose = {
-                                    realmID = v.realmID,
-                                    player = v.name,
-                                }
-                                BiaoGe.tradeHistory.isChooseRealm = 0
-                                LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[v.realmID] or v.realmID) .. " - ") .. playerName)
-                                UpdateScrollFrame()
-                                UpdateButtons()
-                            end
-                            LibBG:UIDropDownMenu_AddButton(info)
-                        end
-                    end
-                end
-            end)
+            dropDown.tradeUI = tradeCtx
+            LibBG:UIDropDownMenu_Initialize(dropDown, TradePlayerMenuInit)
 
             -- 删除角色
             for i = 1, L_UIDROPDOWNMENU_MAXBUTTONS do
                 local button = _G["L_DropDownList1Button" .. i]
-                button:HookScript("OnEnter", function()
-                    if L_DropDownList1.dropdown ~= mainFrame.dropDown then return end
-                    if not button.deleteTradePlayer then
-                        local bt = CreateFrame("Button", nil, button)
-                        bt:SetSize(15, 15)
-                        bt:SetPoint("RIGHT", -2, 0)
-                        bt:SetNormalTexture("interface/raidframe/readycheck-notready")
-                        bt:SetHighlightTexture("interface/raidframe/readycheck-notready")
-                        bt:RegisterForClicks("AnyUp")
-                        bt.num = i
-                        bt:Hide()
-                        button.deleteTradePlayer = bt
-                        bt:SetScript("OnClick", function(self)
-                            dropDown.realmID, dropDown.player = strsplit("-", button.arg1)
-                            dropDown.realmID = tonumber(dropDown.realmID)
-                            dropDown.colorPlayer = button.arg2
-                            LibBG:CloseDropDownMenus()
-                            StaticPopup_Show("BiaoGe_DeleteTradeHistoryPlayer", dropDown.colorPlayer)
-                        end)
-                        bt:SetScript("OnEnter", function(self)
-                            button.isOnEnter = true
-                            LibBG:UIDropDownMenu_StopCounting(self:GetParent():GetParent())
-                            button.Highlight:Show()
-                            GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 0, 0)
-                            GameTooltip:ClearLines()
-                            GameTooltip:AddLine(L["删除该角色"], 1, 1, 1, true)
-                            GameTooltip:Show()
-                        end)
-                        bt:SetScript("OnLeave", function(self)
-                            LibBG:UIDropDownMenu_StartCounting(self:GetParent():GetParent())
-                            button.Highlight:Hide()
-                            GameTooltip:Hide()
-                        end)
-                        bt:SetScript("OnHide", function(self)
-                            self:Hide()
-                        end)
-                    end
-                    button.isOnEnter = true
-                    for ii = 1, _G['L_DropDownList1'].numButtons do
-                        local bt = _G["L_DropDownList1Button" .. ii]
-                        if bt.deleteTradePlayer then
-                            bt.deleteTradePlayer:Hide()
-                        end
-                    end
-                    if button.arg1 then
-                        button.deleteTradePlayer:Show()
-                    end
-                end)
-                button:HookScript("OnLeave", function()
-                    if L_DropDownList1.dropdown ~= mainFrame.dropDown then return end
-                    button.isOnEnter = false
-                    After(0, function()
-                        if not button.isOnEnter then
-                            button.deleteTradePlayer:Hide()
-                        end
-                    end)
-                end)
+                button.tradeMainFrame = mainFrame
+                button.tradeIndex = i
+                button:HookScript("OnEnter", TradePlayerButtonOnEnter)
+                button:HookScript("OnLeave", TradePlayerButtonOnLeave)
             end
             StaticPopupDialogs["BiaoGe_DeleteTradeHistoryPlayer"] = {
                 text = L["确认删除%s的交易记录？"],
@@ -635,7 +880,7 @@ local function RoadTrade()
         -- 标题
         do
             for i, v in ipairs(titleTbl) do
-                local bt = CreateFrame("Button", nil, f, "BackdropTemplate")
+                local bt = CreateFrame("Button", nil, f, FRAME_TEMPLATE)
                 bt:SetSize(titleTbl[i].width, BUTTONHEIGHT)
                 if i == 1 then
                     bt:SetPoint("TOPLEFT", 10, -10)
@@ -643,12 +888,13 @@ local function RoadTrade()
                     bt:SetPoint("LEFT", titlebuttons[i - 1], "RIGHT", 0, 0)
                     bt:SetParent(titlebuttons[i - 1])
                 end
-                bt:SetNormalFontObject(BG["FontWhite" .. FONTSIZE])
+                bt:SetNormalFontObject(BG["FontWhite" .. TRADE_COLUMN_FONT_SIZE])
                 bt:SetText(titleTbl[i].name)
                 bt.textwidth = bt:GetFontString():GetStringWidth()
                 bt.textJustifyH = titleTbl[i].JustifyH
                 bt.sortOrder = 1
                 bt.id = i
+                bt.tradeUI = tradeCtx
                 bt:SetHighlightTexture("Interface/PaperDollInfoFrame/UI-Character-Tab-Highlight")
                 bt:SetEnabled(v.Enable)
                 tinsert(titlebuttons, bt)
@@ -658,20 +904,7 @@ local function RoadTrade()
                 bt.Text:SetWidth(bt:GetWidth())
                 bt.Text:SetWordWrap(false)
 
-                bt:SetScript("OnClick", function(self)
-                    BG.PlaySound(1)
-                    mainFrame.isnewsorter = nil
-                    if BiaoGe.tradeHistory.OrderButtonID ~= self.id then
-                        mainFrame.isnewsorter = true
-                    end
-                    if not mainFrame.isnewsorter then
-                        BiaoGe.tradeHistory.Order = BiaoGe.tradeHistory.Order == 1 and 0 or 1
-                    end
-                    BiaoGe.tradeHistory.OrderButtonID = self.id
-
-                    UpdateScrollFrame()
-                    UpdateButtons()
-                end)
+                bt:SetScript("OnClick", TradeHeaderOnClick)
             end
             CreateLine(titlebuttons[1], 0, titleWidth)
             -- 排序材质
@@ -681,7 +914,7 @@ local function RoadTrade()
             mainFrame.sorter = sorter
             -- 提示
             local t = scroll:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            SetOutlineFont(t, 15)
             t:SetPoint("TOP", 0, -5)
             t:SetTextColor(.5, .5, .5)
             t:SetText(L["该角色没有交易记录。"])
@@ -721,37 +954,18 @@ local function RoadTrade()
             end
 
             sort(db, function(a, b)
-                if BiaoGe.tradeHistory.OrderButtonID == 2 then -- 按时间
-                    local key = "time"
-                    if a[key] and b[key] then
-                        if a[key] ~= b[key] then
-                            if BiaoGe.tradeHistory.Order == 1 then
-                                return a[key] > b[key]
-                            else
-                                return b[key] > a[key]
-                            end
-                        end
+                local orderId = BiaoGe.tradeHistory.OrderButtonID
+                if orderId == 2 then -- 按时间
+                    if a.time and b.time and a.time ~= b.time then
+                        return TradeFieldOrder(a, b, "time")
                     end
-                elseif BiaoGe.tradeHistory.OrderButtonID == 3 then -- 按地点
-                    local key = "zone"
-                    if a[key] and b[key] then
-                        if a[key] ~= b[key] then
-                            if BiaoGe.tradeHistory.Order == 1 then
-                                return a[key] > b[key]
-                            else
-                                return b[key] > a[key]
-                            end
-                        else
-                            local key = "time"
-                            if a[key] and b[key] then
-                                if a[key] ~= b[key] then
-                                    if BiaoGe.tradeHistory.Order == 1 then
-                                        return a[key] > b[key]
-                                    else
-                                        return b[key] > a[key]
-                                    end
-                                end
-                            end
+                elseif orderId == 3 then -- 按地点
+                    if a.zone and b.zone then
+                        if a.zone ~= b.zone then
+                            return TradeFieldOrder(a, b, "zone")
+                        end
+                        if a.time and b.time and a.time ~= b.time then
+                            return TradeFieldOrder(a, b, "time")
                         end
                     end
                 end
@@ -813,63 +1027,14 @@ local function RoadTrade()
             local v = db[num]
             if not v then return end
 
-            local playerItemText = ""
-            local count = 0
-            local item
-            for i = 1, 6 do
-                if v.playeritems[i] then
-                    count = count + 1
-                    local countText = ""
-                    item = AddIconByLink(v.playeritems[i].item) .. v.playeritems[i].item .. countText
-                end
-            end
-            if count == 1 then
-                playerItemText = item
-            elseif count > 1 then
-                playerItemText = "|A:ParagonReputation_Bag:0:0|a" .. "x" .. count
-            end
-            local playerMoneyText = ""
-            local money = v.playermoney
-            if money > 0 then
-                playerMoneyText = GetMoneyString(money, true)
-            end
-            local playerSplit = ""
-            if playerItemText ~= "" and playerMoneyText ~= "" then
-                playerSplit = ", "
-            end
-
-            local targetItemText = ""
-            local count = 0
-            local item
-            for i = 1, 6 do
-                if v.targetitems[i] then
-                    count = count + 1
-                    local countText = ""
-                    item = AddIconByLink(v.targetitems[i].item) .. v.targetitems[i].item .. countText
-                end
-            end
-            if count == 1 then
-                targetItemText = item
-            elseif count > 1 then
-                targetItemText = "|A:ParagonReputation_Bag:0:0|a" .. "x" .. count
-            end
-            local targetMoneyText = ""
-            local money = v.targetmoney
-            if money > 0 then
-                targetMoneyText = GetMoneyString(money, true)
-            end
-            local targetSplit = ""
-            if targetItemText ~= "" and targetMoneyText ~= "" then
-                targetSplit = ", "
-            end
             return {
                 num, -- 序号
                 date("%m-%d\n%H:%M", v.time), -- 时间
                 v.zone, -- 地点
                 "|c" .. select(4, GetClassColor(v.playerClass)) .. v.playerName .. "|r", -- 角色
                 "|c" .. select(4, GetClassColor(v.targetClass)) .. v.targetName .. "|r", -- 交易对象
-                playerItemText .. playerSplit .. playerMoneyText, -- 交出
-                targetItemText .. targetSplit .. targetMoneyText, -- 收到
+                BuildTradeItemSummary(v.playeritems, v.playermoney), -- 交出
+                BuildTradeItemSummary(v.targetitems, v.targetmoney), -- 收到
                 GetMoneyString(floor(v.beforeMoney / 1e4) * 10000, true), -- 交易前财产
                 v.afterMoney and GetMoneyString(floor(v.afterMoney / 1e4) * 10000, true) or L["读取中"], -- 交易后财产
             }
@@ -898,6 +1063,11 @@ local function RoadTrade()
             GameTooltip:Hide()
         end
 
+        tradeCtx.GetButtonInfo = GetButtonInfo
+        tradeCtx.UpdateScrollFrame = UpdateScrollFrame
+        tradeCtx.UpdateScrollButtonState = UpdateScrollButtonState
+        tradeCtx.UpdateButtons = UpdateButtons
+
         function BG.UpdateTradeHistoryScrollFrame()
             UpdateScrollFrame()
             UpdateButtons()
@@ -921,130 +1091,34 @@ local function RoadTrade()
                 updateFrame:SetScript("OnUpdate", nil)
             end
 
+            tradeCtx.StartTime = StartTime
+            tradeCtx.StopTime = StopTime
+
             -- UI
             do
                 local WIDTH = 120
                 local ICON_WIDTH = 30
 
-                local frame = CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
-                frame:SetBackdrop({
-                    bgFile = "Interface/ChatFrame/ChatFrameBackground",
-                    edgeFile = "Interface/ChatFrame/ChatFrameBackground",
-                    edgeSize = 1,
-                })
-                frame:SetBackdropColor(0, 0, 0, 0.4)
+                local frame = CreateFrame("Frame", nil, mainFrame, FRAME_TEMPLATE)
+                ApplyPanel(frame, BACKDROP_EDGED, 0, 0, 0, 0.4)
                 frame:SetBackdropBorderColor(1, 1, 1, .8)
                 frame:SetPoint("TOPLEFT", mainFrame.frame, "TOPRIGHT", 2, 0)
                 frame:SetSize(WIDTH * 2 + 30, 310)
                 frame:Hide()
                 mainFrame.infoFrame = frame
-                frame:HookScript("OnEnter", function(self)
-                    StopTime()
-                    local num = mainFrame.frame.lastButtonNum
-                    buttons[num][1].ds:Show()
-                end)
-                frame:HookScript("OnLeave", StartTime)
-                frame:HookScript("OnHide", function(self)
-                    local num = mainFrame.frame.lastButtonNum
-                    buttons[num][1].ds:Hide()
-                end)
+                frame.tradeUI = tradeCtx
+                frame:HookScript("OnEnter", TradeInfoOnEnter)
+                frame:HookScript("OnLeave", TradeInfoOnLeave)
+                frame:HookScript("OnHide", TradeInfoOnHide)
 
                 frame.timeText = frame:CreateFontString()
-                frame.timeText:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
+                SetOutlineFont(frame.timeText, 13)
                 frame.timeText:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 2, 2)
                 frame.timeText:SetTextColor(1, 1, 1)
 
-                local function CreateButton(type)
-                    -- 名字
-                    local t = frame:CreateFontString()
-                    t:SetFont(BIAOGE_TEXT_FONT, 16, "OUTLINE")
-                    if type == "player" then
-                        t:SetPoint("TOPLEFT", 10, -10)
-                    else
-                        t:SetPoint("TOPLEFT", frame.playerNameText, "TOPRIGHT", 10, 0)
-                    end
-                    t:SetWidth(WIDTH)
-                    t:SetJustifyH("LEFT")
-                    t:SetWordWrap(false)
-                    frame[type .. "NameText"] = t
-                    -- 金钱
-                    local f = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-                    f:SetBackdrop({
-                        bgFile = "Interface/ChatFrame/ChatFrameBackground",
-                    })
-                    f:SetBackdropColor(0, 0, 0, 0.5)
-                    f:SetSize(WIDTH, 22)
-                    f:SetPoint("TOPLEFT", frame[type .. "NameText"], "BOTTOMLEFT", 0, -5)
-                    local t = f:CreateFontString()
-                    t:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
-                    t:SetAllPoints()
-                    t:SetJustifyH("LEFT")
-                    frame[type .. "MoneyText"] = t
-                    -- 物品
-                    for i = 1, 7 do
-                        local itemFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-                        itemFrame:SetBackdrop({
-                            bgFile = "Interface/ChatFrame/ChatFrameBackground",
-                            edgeFile = "Interface/ChatFrame/ChatFrameBackground",
-                            edgeSize = 1,
-                        })
-                        itemFrame:SetBackdropColor(0, 0, 0, 0)
-                        itemFrame:SetBackdropBorderColor(1, 1, 1, .4)
-                        itemFrame:SetSize(ICON_WIDTH, ICON_WIDTH)
-                        if i == 1 then
-                            itemFrame:SetPoint("TOPLEFT", frame[type .. "MoneyText"], "BOTTOMLEFT", 0, -10)
-                        else
-                            itemFrame:SetPoint("TOPLEFT", frame[type .. "item" .. (i - 1)], "BOTTOMLEFT", 0, i == 7 and -15 or -2)
-                        end
-                        frame[type .. "item" .. i] = itemFrame
-                        itemFrame:HookScript("OnEnter", function(self)
-                            StopTime()
-                            local num = mainFrame.frame.lastButtonNum
-                            buttons[num][1].ds:Show()
-                            if itemFrame.link then
-                                GameTooltip:SetOwner(self, "ANCHOR_LEFT", 0, 0)
-                                GameTooltip:ClearLines()
-                                GameTooltip:SetHyperlink(itemFrame.link)
-                            end
-                        end)
-                        itemFrame:HookScript("OnLeave", function(self)
-                            GameTooltip:Hide()
-                            StartTime()
-                        end)
-
-                        itemFrame.icon = itemFrame:CreateTexture(nil, "BACKGROUND")
-                        itemFrame.icon:SetAllPoints()
-                        itemFrame.icon:SetTexCoord(.07, .93, .07, .93)
-
-                        itemFrame.count = itemFrame:CreateFontString()
-                        itemFrame.count:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
-                        itemFrame.count:SetPoint("BOTTOMRIGHT", -1, 1)
-
-                        itemFrame.level = itemFrame:CreateFontString()
-                        itemFrame.level:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-                        itemFrame.level:SetPoint("BOTTOM", 1, 1)
-
-                        local nameFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-                        nameFrame:SetBackdrop({
-                            bgFile = "Interface/ChatFrame/ChatFrameBackground",
-                        })
-                        nameFrame:SetBackdropColor(.5, .5, .5, 0.1)
-                        nameFrame:SetSize(WIDTH - ICON_WIDTH - 2, ICON_WIDTH)
-                        nameFrame:SetPoint("LEFT", itemFrame, "RIGHT", 2, 0)
-                        itemFrame.name = nameFrame:CreateFontString()
-                        itemFrame.name:SetFont(BIAOGE_TEXT_FONT, 14, "OUTLINE")
-                        itemFrame.name:SetAllPoints()
-                        itemFrame.name:SetJustifyH("LEFT")
-                        nameFrame:HookScript("OnEnter", function(self)
-                            StopTime()
-                            local num = mainFrame.frame.lastButtonNum
-                            buttons[num][1].ds:Show()
-                        end)
-                        nameFrame:HookScript("OnLeave", StartTime)
-                    end
+                for _, side in ipairs(TRADE_SIDE_ORDER) do
+                    CreateTradeSidePanel(frame, side, WIDTH, ICON_WIDTH, tradeCtx)
                 end
-                CreateButton("player")
-                CreateButton("target")
             end
 
             function BG.ShowTradeHistoryInfo(self)
@@ -1052,58 +1126,8 @@ local function RoadTrade()
                 local v = db[num]
                 local frame = mainFrame.infoFrame
                 frame.timeText:SetText(date("%y/%m/%d %H:%M", v.time))
-                local function Set(type, num)
-                    local v = db[num]
-                    frame[type .. "NameText"]:SetText(v[type .. "Name"])
-                    local r, g, b = .5, .5, .5
-                    if v[type .. "Class"] then
-                        r, g, b = GetClassColor(v[type .. "Class"])
-                    end
-                    frame[type .. "NameText"]:SetTextColor(r, g, b)
-                    if v[type .. "money"] == 0 then
-                        frame[type .. "MoneyText"]:SetText("")
-                    else
-                        frame[type .. "MoneyText"]:SetText(GetMoneyString(v[type .. "money"], true))
-                    end
-                    for i = 1, 7 do
-                        local vv = v[type .. "items"][i]
-                        local itemFrame = frame[type .. "item" .. i]
-                        if vv then
-                            local r, g, b = GetItemQualityColor(vv.quality)
-                            local iconID, typeID = select(5, GetItemInfoInstant(vv.item))
-                            itemFrame.link = vv.item
-                            itemFrame.itemID = GetItemID(vv.item)
-                            itemFrame:SetBackdropBorderColor(r, g, b, 1)
-                            itemFrame.icon:SetTexture(iconID)
-                            itemFrame.count:SetText(vv.count > 1 and vv.count or "")
-                            itemFrame.name:SetText(vv.name)
-                            itemFrame.name:SetTextColor(r, g, b)
-                            itemFrame.level:SetText("")
-                            if typeID == 2 or typeID == 4 then
-                                local link = vv.item
-                                local item = Item:CreateFromItemLink(link)
-                                item:ContinueOnItemLoad(function()
-                                    if itemFrame.link == link then
-                                        local level = select(4, GetItemInfo(link))
-                                        if level then
-                                            itemFrame.level:SetText(level)
-                                        end
-                                    end
-                                end)
-                            end
-                        else
-                            itemFrame.link = nil
-                            itemFrame.itemID = nil
-                            itemFrame:SetBackdropBorderColor(1, 1, 1, .4)
-                            itemFrame.icon:SetTexture(nil)
-                            itemFrame.name:SetText("")
-                            itemFrame.count:SetText("")
-                            itemFrame.level:SetText("")
-                        end
-                    end
-                end
-                Set("player", num)
-                Set("target", num)
+                FillTradeSide(frame, "player", v)
+                FillTradeSide(frame, "target", v)
                 mainFrame.infoFrame:Show()
             end
         end

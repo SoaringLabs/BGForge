@@ -3,7 +3,6 @@ local AddonName, ns = ...
 if (GetLocale() ~= "zhTW") then return end
 
 local L = ns.L
-local c1 = ns.c1
 L["今日"] = "今日"
 L["今日任务"] = "今日任務"
 L["每日任务"] = "每日任務"
@@ -49,9 +48,6 @@ do --繁体说明书
         " ",
     }
     ns.updateText_now = {
-
-    }
-    ns.updateText_before = {
 
     }
 

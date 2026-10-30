@@ -5,7 +5,6 @@ local _, ns = ...
 local LibBG = ns.LibBG
 local L = ns.L
 
-local pt = print
 
 -- 副本掉落
 do

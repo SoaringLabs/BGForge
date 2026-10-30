@@ -15,7 +15,6 @@ local BossNum = ns.BossNum
 local AddTexture = ns.AddTexture
 local GetItemID = ns.GetItemID
 
-local pt = print
 
 local p = {}
 local preWidget
@@ -184,7 +183,7 @@ function BG.DuiZhangZhuangBeiUI(FB, t, b, bb, i, ii)
 
     -- 内容改变时
     bt:SetScript("OnTextChanged", OnTextChanged)
-    -- 发送装备到聊天输入框
+    -- 把装备链接填进聊天输入框
     bt:SetScript("OnMouseDown", function(self, enter)
         if IsShiftKeyDown() then
             BG.InsertLink(self:GetText())

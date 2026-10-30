@@ -6,7 +6,8 @@ local ldb = LibStub:GetLibrary("LibDataBroker-1.1", true)
 if not ldb then return end
 
 
-local plugin = ldb:NewDataObject(AddonName, { text = "BGForge", type = "data source", icon = "Interface\\AddOns\\BGForge\\Media\\icon\\icon-128.tga" })
+local plugin = ldb:NewDataObject(AddonName, { text = "BGForge", type = "data source",
+    icon = format("Interface\\AddOns\\%s\\Media\\icon\\icon-128.tga", AddonName) })
 
 function plugin:OnClick(button) --function plugin.OnClick(self, button)
     if BG.HideRaidLockoutHover then

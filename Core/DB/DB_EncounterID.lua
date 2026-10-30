@@ -3,7 +3,6 @@ local _, ns = ...
 local LibBG = ns.LibBG
 local L = ns.L
 
-local pt = print
 
 BG.Loot.encounterID = {}
 
@@ -567,6 +566,5 @@ if BG.IsRetail then
         { 3421 }, -- 双子毒牙
         { 3429 }, -- 盘卷祭坛
         { 3492 }, -- 乌拉特克
-        -- { 3379 }, -- 尼姆瑞莎·唤波者
     }
 end

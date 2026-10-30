@@ -1,7 +1,5 @@
 local AddonName, ns = ...
 
-local pt = print
-
 local L = setmetatable({}, {
     __index = function(table, key)
         return tostring(key)
@@ -35,14 +33,6 @@ L["查看背包"] = "查看背包"
 L["每日事项已完成"] = "每日事项已完成"
 L["数据快照"] = "数据快照"
 
-local c1 = "|cff" .. "ffff66"
-ns.c1 = c1
-
-local ver = select(4, GetBuildInfo())
-if ver < 20000 or ver >= 100000 then
-    ns.notShowAIText = true
-end
-
 -- if true then return end
 -- ○
 local l = GetLocale()
@@ -66,8 +56,6 @@ do --简体说明书
         " ",
     }
     ns.updateText_now = {
-    }
-    ns.updateText_before = {
     }
 end
 

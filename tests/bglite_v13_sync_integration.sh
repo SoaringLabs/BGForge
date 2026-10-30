@@ -11,7 +11,7 @@ auction_log="Core/Module/AuctionLog.lua"
 history_store="Core/Module/HistoryStore.lua"
 utf8_data="Libs/UTF8/utf8data.lua"
 
-rg -q $'^## Version: 1\\.5\\.1\\r?$' "$toc"
+rg -q $'^## Version: 1\\.6\\.0\\r?$' "$toc"
 rg -q $'^## X-Upstream-Version: 2\\.4\\.4\\r?$' "$toc"
 rg -q $'^Core\\\\Module\\\\CharacterDetails\\.lua\\r?$' "$toc"
 [[ ! -e addon_version.txt ]]
@@ -39,15 +39,15 @@ if rg -n 'auctionMSGhistory' "$auction_msg"; then
     echo "Auction chat is still persisted across sessions" >&2
     exit 1
 fi
-rg -q 'BG\.FrameAuctionMSG:AddMessage\(msg\)' "$auction_msg"
+rg -q 'frame:AddMessage\(msg\)' "$auction_msg"
 
 rg -q 'if db and db\[index\] and db\[index\]\.type == 2 then' "$auction_log"
-rg -q 'for index, v in ipairs\(tbl or \{\}\) do' "$auction_log"
+rg -q 'for position, v in ipairs\(tableRef or \{\}\) do' "$auction_log"
 if [[ "$(rg -c $'^\\s*if not BiaoGe\\[FB\\]\\.auctionLog then return end\\r?$' "$auction_log")" -lt 2 ]]; then
     echo "Auction log is missing upstream nil-table guards" >&2
     exit 1
 fi
-rg -q 'if not BiaoGe\[FB\]\.auctionLog or not BiaoGe\[FB\]\.auctionLog\[i\] then return end' "$auction_log"
+rg -q 'if not BiaoGe\[raidKey\]\.auctionLog or not BiaoGe\[raidKey\]\.auctionLog\[i\] then return end' "$auction_log"
 
 if rg -n 'autoQingKongSaveHistory' "$clear_module" "$options" "$history_store"; then
     echo "Automatic history backup coupling was not fully removed" >&2

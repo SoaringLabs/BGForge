@@ -1,0 +1,154 @@
+{
+  "date": "2026-10-31",
+  "lua_version": "5.1.5",
+  "result": "29/29 passed",
+  "compiled_core_and_locale_files": 62,
+  "tests": [
+    {
+      "test": "tests/addon_conflict_dialog_integration.sh",
+      "exit": 0,
+      "output": "Addon conflict dialog integration checks passed"
+    },
+    {
+      "test": "tests/auction_version_ui_regression.sh",
+      "exit": 0,
+      "output": "Auction version UI regression checks passed"
+    },
+    {
+      "test": "tests/auto_clear_phase_regression.lua",
+      "exit": 0,
+      "output": "Stage-level automatic clear regression tests passed"
+    },
+    {
+      "test": "tests/bglite_v13_sync_integration.sh",
+      "exit": 0,
+      "output": "BGLite v1.3 synchronization integration checks passed"
+    },
+    {
+      "test": "tests/bglite_v15_sync_regression.lua",
+      "exit": 0,
+      "output": "BGLite v1.5 Titan data, wishlist and expanded-ledger clearing regression tests passed"
+    },
+    {
+      "test": "tests/bglite_v16_migration_regression.lua",
+      "exit": 0,
+      "output": "BGLite v1.6 protocol, lifecycle and auction migration behavior passed\nBGLite v1.6 preview, filtering, incoming auction and control packets passed\nBGLite v1.6 table framing, chunk assembly and decoded fields passed\nBGLite v1.6 countdown and fresh/legacy database initialization passed\nBGLite v1.6 world-boss save and wishlist regression passed"
+    },
+    {
+      "test": "tests/bglite_v16_sync_integration.sh",
+      "exit": 0,
+      "output": "BGLite v1.6 loading, provenance, transport and privacy integration passed"
+    },
+    {
+      "test": "tests/character_details_integration.sh",
+      "exit": 0,
+      "output": "Character details navigation, performance, and privacy integration tests passed"
+    },
+    {
+      "test": "tests/character_details_render_regression.lua",
+      "exit": 0,
+      "output": "Character details runtime navigation, search, selection, empty snapshots and partial raid tests passed"
+    },
+    {
+      "test": "tests/character_overview_alpha_integration.sh",
+      "exit": 0,
+      "output": "Character overview background opacity integration checks passed"
+    },
+    {
+      "test": "tests/character_overview_reset_visibility_integration.sh",
+      "exit": 0,
+      "output": "Character overview reset visibility integration checks passed"
+    },
+    {
+      "test": "tests/character_overview_status_visual_integration.sh",
+      "exit": 0,
+      "output": "Character overview status visual integration checks passed"
+    },
+    {
+      "test": "tests/chat_yy_link_integration.sh",
+      "exit": 0,
+      "output": "Chat YY link integration and privacy checks passed"
+    },
+    {
+      "test": "tests/chat_yy_link_regression.lua",
+      "exit": 0,
+      "output": "Chat YY link regression tests passed"
+    },
+    {
+      "test": "tests/design_system_integration.sh",
+      "exit": 0,
+      "output": "BGForge design-system integration and privacy regression tests passed"
+    },
+    {
+      "test": "tests/design_system_regression.lua",
+      "exit": 0,
+      "output": "BGForge design-system regression tests passed"
+    },
+    {
+      "test": "tests/history_integration.sh",
+      "exit": 0,
+      "output": "History soft-disable, integration, and privacy regression tests passed"
+    },
+    {
+      "test": "tests/history_store_regression.lua",
+      "exit": 0,
+      "output": "History store regression tests passed"
+    },
+    {
+      "test": "tests/lua51_compile_regression.sh",
+      "exit": 0,
+      "output": "Lua 5.1 compile regression tests passed"
+    },
+    {
+      "test": "tests/minimap_hover_click_regression.sh",
+      "exit": 0,
+      "output": "minimap hover click regression tests passed"
+    },
+    {
+      "test": "tests/raid_lockout_overview_regression.lua",
+      "exit": 0,
+      "output": "raid lockout overview regression tests passed"
+    },
+    {
+      "test": "tests/rurutia_gold_ledger_compat_regression.lua",
+      "exit": 0,
+      "output": "RurutiaSuite gold-ledger compatibility regression tests passed"
+    },
+    {
+      "test": "tests/rurutia_gold_ledger_legacy_regression.lua",
+      "exit": 0,
+      "output": "Legacy RurutiaSuite compatibility regression tests passed"
+    },
+    {
+      "test": "tests/rurutia_gold_ledger_runtime_regression.lua",
+      "exit": 0,
+      "output": "RurutiaSuite Runtime gold-ledger compatibility regression tests passed"
+    },
+    {
+      "test": "tests/spec_gear_filter_privacy.sh",
+      "exit": 0,
+      "output": "SpecGearFilter privacy and scope checks passed"
+    },
+    {
+      "test": "tests/spec_gear_filter_regression.lua",
+      "exit": 0,
+      "output": "SpecGearFilter regression tests passed"
+    },
+    {
+      "test": "tests/wishlist_integration.sh",
+      "exit": 0,
+      "output": "Wishlist integration and privacy regression tests passed"
+    },
+    {
+      "test": "tests/wishlist_regression.lua",
+      "exit": 0,
+      "output": "Wishlist regression tests passed"
+    },
+    {
+      "test": "tests/wishlist_ui_render_regression.lua",
+      "exit": 0,
+      "output": "已移除心愿：|Hitem:100|h[Item 100]|h\nWishlist UI render regression tests passed"
+    }
+  ],
+  "bgforge_target_version": "1.6.0"
+}

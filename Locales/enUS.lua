@@ -5,7 +5,6 @@ if (GetLocale() ~= "enUS") then return end
 ns.enUS = true
 
 local L = ns.L
-local c1 = ns.c1
 L["今日"] = "Today"
 L["今日任务"] = "Today's tasks"
 L["每日任务"] = "Daily tasks"
@@ -51,9 +50,6 @@ do --英语说明书
         " ",
     }
     ns.updateText_now = {
-
-    }
-    ns.updateText_before = {
 
     }
 end

@@ -3,43 +3,45 @@ local AddonName, ns = ...
 local LibBG = ns.LibBG
 local L = ns.L
 
+local CHANNEL_ORDER = { "RAID", "GUILD", "SAY", "YELL" }
 
+local function AddChannelButton(menu, channelName, current)
+    local menuItem = LibBG:UIDropDownMenu_CreateInfo()
+    menuItem.text = _G[channelName]
+    menuItem.func = function()
+        BiaoGe.NotifyChannel = channelName
+        LibBG:UIDropDownMenu_SetText(menu, _G[BiaoGe.NotifyChannel])
+    end
+    if current == channelName then
+        menuItem.checked = true
+    end
+    LibBG:UIDropDownMenu_AddButton(menuItem)
+end
 
+local function InitChannelMenu(menu, title, current)
+    local menuItem = LibBG:UIDropDownMenu_CreateInfo()
+    menuItem.text = title
+    menuItem.isTitle = true
+    menuItem.notCheckable = true
+    LibBG:UIDropDownMenu_AddButton(menuItem)
+    for _, channelName in ipairs(CHANNEL_ORDER) do
+        AddChannelButton(menu, channelName, current)
+    end
+end
 
-function BG.NotifyChannelUI(lastbt)
+function BG.NotifyChannelUI(previousButton)
     BiaoGe.NotifyChannel = BiaoGe.NotifyChannel or "RAID"
     if not _G[BiaoGe.NotifyChannel] then
         BiaoGe.NotifyChannel = "RAID"
     end
 
-    local function AddButton(dropDown, channel)
-        local info = LibBG:UIDropDownMenu_CreateInfo()
-        info.text = _G[channel]
-        info.func = function()
-            BiaoGe.NotifyChannel = channel
-            LibBG:UIDropDownMenu_SetText(dropDown, _G[BiaoGe.NotifyChannel])
-        end
-        if BiaoGe.NotifyChannel == channel then
-            info.checked = true
-        end
-        LibBG:UIDropDownMenu_AddButton(info)
-    end
-
-    local dropDown = LibBG:Create_UIDropDownMenu(nil, BG.ButtonZhangDan)
-    BG.dropDownToggle(dropDown)
-    dropDown:SetPoint("LEFT", lastbt, "RIGHT", -5, -3)
-    LibBG:UIDropDownMenu_SetWidth(dropDown, 50)
-    LibBG:UIDropDownMenu_SetAnchor(dropDown, 0, 0, "BOTTOM", dropDown, "TOP")
-    LibBG:UIDropDownMenu_SetText(dropDown, _G[BiaoGe.NotifyChannel])
-    LibBG:UIDropDownMenu_Initialize(dropDown, function(self, level, menuList)
-        local info = LibBG:UIDropDownMenu_CreateInfo()
-        info.text = L["通报频道"]
-        info.isTitle = true
-        info.notCheckable = true
-        LibBG:UIDropDownMenu_AddButton(info)
-        AddButton(dropDown, "RAID")
-        AddButton(dropDown, "GUILD")
-        AddButton(dropDown, "SAY")
-        AddButton(dropDown, "YELL")
+    local menu = LibBG:Create_UIDropDownMenu(nil, BG.ButtonZhangDan)
+    BG.dropDownToggle(menu)
+    menu:SetPoint("LEFT", previousButton, "RIGHT", -5, -3)
+    LibBG:UIDropDownMenu_SetWidth(menu, 50)
+    LibBG:UIDropDownMenu_SetAnchor(menu, 0, 0, "BOTTOM", menu, "TOP")
+    LibBG:UIDropDownMenu_SetText(menu, _G[BiaoGe.NotifyChannel])
+    LibBG:UIDropDownMenu_Initialize(menu, function(tmpValue, itemLevel, tmpValue2)
+        InitChannelMenu(menu, L["通报频道"], BiaoGe.NotifyChannel)
     end)
 end

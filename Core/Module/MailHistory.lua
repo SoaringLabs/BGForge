@@ -14,21 +14,144 @@ local AddTexture = ns.AddTexture
 local GetItemID = ns.GetItemID
 local ver = ns.ver
 local After = C_Timer.After
-local player = UnitName("player")
+local K = {
+    player = "player",
+    N_15 = 15,
+    N_32 = 32,
+    S_4 = "808080",
+    BOTTOMLEFT = "BOTTOMLEFT",
+    N_0 = 0,
+    N_1_5 = 1.5,
+    CheckButton = "CheckButton",
+    ChatConfigCheckButtonTemplate = "ChatConfigCheckButtonTemplate",
+    N_30 = 30,
+    OUTLINE = "OUTLINE",
+    OnClick = "OnClick",
+    OnEnter = "OnEnter",
+    ANCHOR_TOPLEFT = "ANCHOR_TOPLEFT",
+    table = "table",
+    OnLeave = "OnLeave",
+    OnShow = "OnShow",
+    N_2 = 2,
+    send1 = "send1",
+    send2 = "send2",
+    Frame = "Frame",
+    MAIL_SEND_INFO_UPDATE = "MAIL_SEND_INFO_UPDATE",
+    UI_INFO_MESSAGE = "UI_INFO_MESSAGE",
+    MAIL_SHOW = "MAIL_SHOW",
+    OnEvent = "OnEvent",
+    PLAYER_MONEY = "PLAYER_MONEY",
+    EMPTY = "",
+    S_28 = "(",
+    S_29 = ")",
+    buyer = "buyer",
+    S_31 = " ",
+    S_32 = "  ",
+    S_33 = "\n",
+    seller = "seller",
+    S_35 = " + ",
+    S_36 = " - ",
+    x = "x",
+    take2 = "take2",
+    take1 = "take1",
+    N_10 = 10,
+    N_27 = 27,
+    N_14 = 14,
+    N_40 = 40,
+    CENTER = "CENTER",
+    N_70 = 70,
+    FFFFFF = "FFFFFF",
+    N_90 = 90,
+    N_100 = 100,
+    BackdropTemplate = "BackdropTemplate",
+    TEX_CHATFRAMEBACKGROUND = "Interface/ChatFrame/ChatFrameBackground",
+    N_0_4 = 0.4,
+    TOPLEFT = "TOPLEFT",
+    N_65 = 65,
+    ScrollFrame = "ScrollFrame",
+    N_12 = 12,
+    OnValueChanged = "OnValueChanged",
+    OnUpdate = "OnUpdate",
+    LEFT = "LEFT",
+    RIGHT = "RIGHT",
+    OnMouseUp = "OnMouseUp",
+    RightButton = "RightButton",
+    S_62 = "   ",
+    cursor = "cursor",
+    MENU = "MENU",
+    N_0_2 = 0.2,
+    BOTTOMRIGHT = "BOTTOMRIGHT",
+    N_0_1 = 0.1,
+    N_86400 = 86400,
+    N_260 = 260,
+    N_3 = 3,
+    N_80 = 80,
+    TOP = "TOP",
+    BOTTOM = "BOTTOM",
+    N_180 = 180,
+    TXT_C = "|c",
+    S_76 = " (",
+    S_77 = "-",
+    COLOR_FFD100 = "|cffFFD100",
+    TXT_R_C = "-|r|c",
+    TXT_R = "|r",
+    Button = "Button",
+    TXT_INTERFACE_RAIDFRAME_READ = "interface/raidframe/readycheck-notready",
+    AnyUp = "AnyUp",
+    ANCHOR_RIGHT = "ANCHOR_RIGHT",
+    OnHide = "OnHide",
+    TOPRIGHT = "TOPRIGHT",
+    N_120 = 120,
+    S_88 = "  (",
+    all = "all",
+    FontWhite = "FontWhite",
+    TEX_UI_CHARACTER_TAB_HIGHLIGHT = "Interface/PaperDollInfoFrame/UI-Character-Tab-Highlight",
+    OVERLAY = "OVERLAY",
+    TEX_UI_SORTARROW = "Interface/Buttons/ui-sortarrow",
+    time = "time",
+    title = "title",
+    N_0_5 = 0.5,
+    TXT_A_PARAGONREPUTATION_BAG = "|A:ParagonReputation_Bag:0:0|a",
+    S_98 = ", ",
+    TXT_M_D_H_M = "%m-%d %H:%M",
+    N_1e4 = 1e4,
+    N_10000 = 10000,
+    N_320 = 320,
+    N_350 = 350,
+    N_13 = 13,
+    N_23 = 23,
+    N_35 = 35,
+    N_20 = 20,
+    N_0_82 = 0.82,
+    N_0_6 = 0.6,
+    N_215 = 215,
+    EditBox = "EditBox",
+    N_85 = 85,
+    send = "send",
+    take = "take",
+    TXT_Y_M_D_H_M = "%y/%m/%d %H:%M",
+    N_0_05 = 0.05,
+    N_6 = 6,
+    ANCHOR_LEFT = "ANCHOR_LEFT",
+    BACKGROUND = "BACKGROUND",
+    N_11 = 11,
+    N_7 = 7,
+}
+
+local player = UnitName(K.player)
 local realmID = GetRealmID()
 local realmName = BG.realmName
 local SendSystemMessage = BG.SendSystemMessage
-local pt = print
 
-local mailFrameMaxButton = 15
-local mailFrameButtonHeight = 32
+local mailFrameMaxButton = K.N_15
+local mailFrameButtonHeight = K.N_32
 
 local function CreateLine(parent, y, width, height, color, alpha)
     local line = parent:CreateLine()
-    line:SetColorTexture(RGB(color or "808080", alpha or 1))
-    line:SetStartPoint("BOTTOMLEFT", 0, y)
-    line:SetEndPoint("BOTTOMLEFT", width, y)
-    line:SetThickness(height or 1.5)
+    line:SetColorTexture(RGB(color or K.S_4, alpha or 1))
+    line:SetStartPoint(K.BOTTOMLEFT, K.N_0, y)
+    line:SetEndPoint(K.BOTTOMLEFT, width, y)
+    line:SetThickness(height or K.N_1_5)
     return line
 end
 
@@ -38,29 +161,29 @@ local function AddIconByLink(link)
 end
 
 local function CreateCheckButton(name, text, parent, ontext)
-    local button = CreateFrame("CheckButton", nil, parent, "ChatConfigCheckButtonTemplate")
-    button:SetSize(30, 30)
-    button.Text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+    local button = CreateFrame(K.CheckButton, nil, parent, K.ChatConfigCheckButtonTemplate)
+    button:SetSize(K.N_30, K.N_30)
+    button.Text:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
     button.Text:SetText(text)
-    button:SetHitRectInsets(0, -button.Text:GetWidth(), 0, 0)
+    button:SetHitRectInsets(K.N_0, -button.Text:GetWidth(), K.N_0, K.N_0)
     button.name = name
     button.ontext = ontext
     BG.options["button" .. name] = button
     button:SetChecked(BiaoGe.options[name] == 1)
-    button:SetScript("OnClick", function(self)
-        BiaoGe.options[self.name] = self:GetChecked() and 1 or 0
+    button:SetScript(K.OnClick, function(self)
+        BiaoGe.options[self.name] = self:GetChecked() and 1 or K.N_0
         BG.PlaySound(1)
     end)
-    button:SetScript("OnEnter", function(self)
+    button:SetScript(K.OnEnter, function(self)
         if not self.ontext then return end
-        GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0)
+        GameTooltip:SetOwner(self, K.ANCHOR_TOPLEFT, K.N_0, K.N_0)
         GameTooltip:ClearLines()
-        if type(self.ontext) == "table" then
+        if type(self.ontext) == K.table then
             for i, tipText in ipairs(self.ontext) do
                 if i == 1 then
                     GameTooltip:AddLine(tipText, 1, 1, 1, true)
                 else
-                    GameTooltip:AddLine(tipText, 1, .82, 0, true)
+                    GameTooltip:AddLine(tipText, 1, .82, K.N_0, true)
                 end
             end
             GameTooltip:Show()
@@ -68,8 +191,8 @@ local function CreateCheckButton(name, text, parent, ontext)
             GameTooltip:SetText(self.ontext)
         end
     end)
-    button:SetScript("OnLeave", GameTooltip_Hide)
-    button:SetScript("OnShow", function(self)
+    button:SetScript(K.OnLeave, GameTooltip_Hide)
+    button:SetScript(K.OnShow, function(self)
         self:SetChecked(BiaoGe.options[self.name] == 1)
     end)
     return button
@@ -83,8 +206,8 @@ local function EnsureCurrentCharacter()
         realmID = realmID,
         info = {},
     }
-    mailHistory[realmID][player].class = select(2, UnitClass("player"))
-    mailHistory[realmID][player].level = UnitLevel("player")
+    mailHistory[realmID][player].class = select(K.N_2, UnitClass(K.player))
+    mailHistory[realmID][player].level = UnitLevel(K.player)
 end
 
 local function RoadMail()
@@ -98,33 +221,33 @@ local function RoadMail()
             local sentRecord
             local function Reset()
                 info = {
-                    giveMoney = 0,
-                    getMoney = 0,
+                    giveMoney = K.N_0,
+                    getMoney = K.N_0,
                     giveItem = {},
                     getItem = {},
-                    type = "send1",
+                    type = K.send1,
                 }
             end
             Reset()
 
             hooksecurefunc("SetSendMailMoney", function(money)
-                info.type = "send1"
+                info.type = K.send1
                 if GetMoney() >= money then
                     info.giveMoney = money
                 else
-                    info.giveMoney = 0
+                    info.giveMoney = K.N_0
                 end
             end)
             hooksecurefunc("SetSendMailCOD", function(money)
-                if money > 0 then
-                    info.type = "send2"
+                if money > K.N_0 then
+                    info.type = K.send2
                     if GetMoney() >= money then
                         info.giveMoney = money
                     else
-                        info.giveMoney = 0
+                        info.giveMoney = K.N_0
                     end
                 else
-                    info.type = "send1"
+                    info.type = K.send1
                 end
             end)
             hooksecurefunc("SendMail", function(name, title, text)
@@ -134,12 +257,12 @@ local function RoadMail()
                 info.beforeMoney = GetMoney()
             end)
 
-            local f = CreateFrame("Frame")
-            f:RegisterEvent("MAIL_SEND_INFO_UPDATE")
-            f:RegisterEvent("UI_INFO_MESSAGE")
-            f:RegisterEvent("MAIL_SHOW")
-            f:SetScript("OnEvent", function(self, event, ...)
-                if event == "MAIL_SEND_INFO_UPDATE" then
+            local f = CreateFrame(K.Frame)
+            f:RegisterEvent(K.MAIL_SEND_INFO_UPDATE)
+            f:RegisterEvent(K.UI_INFO_MESSAGE)
+            f:RegisterEvent(K.MAIL_SHOW)
+            f:SetScript(K.OnEvent, function(self, event, ...)
+                if event == K.MAIL_SEND_INFO_UPDATE then
                     wipe(info.giveItem)
                     for i = 1, ATTACHMENTS_MAX_SEND do
                         local name, itemID, texture, count, quality = GetSendMailItem(i)
@@ -152,10 +275,10 @@ local function RoadMail()
                             })
                         end
                     end
-                elseif event == "UI_INFO_MESSAGE" then
+                elseif event == K.UI_INFO_MESSAGE then
                     local _, message = ...
                     if message == ERR_MAIL_SENT then
-                        self:RegisterEvent("PLAYER_MONEY")
+                        self:RegisterEvent(K.PLAYER_MONEY)
                         info.time = GetServerTime()
                         sentRecord = BG.Copy(info)
                         tinsert(BiaoGe.mailHistory[realmID][player].info, sentRecord)
@@ -180,7 +303,7 @@ local function RoadMail()
                                 for i, v in ipairs(info.giveItem) do
                                     local itemID = v.itemID
                                     BiaoGe.bag[realmID][player].mail[itemID] =
-                                        (BiaoGe.bag[realmID][player].mail[itemID] or 0) + v.count
+                                        (BiaoGe.bag[realmID][player].mail[itemID] or K.N_0) + v.count
                                 end
                             end
                         end
@@ -188,10 +311,10 @@ local function RoadMail()
                         Reset()
                         mainFrame:UpdateAllFrame()
                     end
-                elseif event == "MAIL_SHOW" then
+                elseif event == K.MAIL_SHOW then
                     Reset()
-                elseif event == "PLAYER_MONEY" then
-                    self:UnregisterEvent("PLAYER_MONEY")
+                elseif event == K.PLAYER_MONEY then
+                    self:UnregisterEvent(K.PLAYER_MONEY)
                     if sentRecord then
                         sentRecord.afterMoney = GetMoney()
                         sentRecord = nil
@@ -212,27 +335,27 @@ local function RoadMail()
                     local invoiceType, itemName, playerName, bid, buyout, deposit, consignment,
                     moneyDelay, etaHour, etaMin, count, commerceAuction = GetInboxInvoiceInfo(mailIndex)
                     if not (playerName) then return bodyText end
-                    local t = ""
+                    local t = K.EMPTY
                     local buyMode;
                     if (bid == buyout) then
-                        buyMode = "(" .. BUYOUT .. ")";
+                        buyMode = K.S_28 .. BUYOUT .. K.S_29;
                     else
-                        buyMode = "(" .. HIGH_BIDDER .. ")";
+                        buyMode = K.S_28 .. HIGH_BIDDER .. K.S_29;
                     end
                     if (count and count > 1) then
                         itemName = format(AUCTION_MAIL_ITEM_STACK, itemName, count);
                     end
-                    if (invoiceType == "buyer") then
-                        t = t .. BG.STC_y2(ITEM_PURCHASED_COLON) .. " " .. itemName .. "  " .. buyMode .. "\n"
-                        t = t .. BG.STC_y2(SOLD_BY_COLON) .. " " .. playerName .. "\n"
-                        t = t .. BG.STC_y2(AMOUNT_PAID_COLON) .. GetMoneyString(bid) .. "\n"
-                    elseif (invoiceType == "seller") then
-                        t = t .. BG.STC_y2(ITEM_SOLD_COLON) .. " " .. itemName .. "\n"
-                        t = t .. BG.STC_y2(PURCHASED_BY_COLON) .. " " .. playerName .. "  " .. buyMode .. "\n"
-                        t = t .. BG.STC_y2(SALE_PRICE_COLON) .. GetMoneyString(bid) .. "\n"                                    -- 售价
-                        t = t .. BG.STC_y2(DEPOSIT_COLON) .. BG.STC_g1(" + ") .. GetMoneyString(deposit) .. "\n"               -- 保管费
-                        t = t .. BG.STC_y2(AUCTION_HOUSE_CUT_COLON) .. BG.STC_r1(" - ") .. GetMoneyString(consignment) .. "\n" -- 拍卖费
-                        t = t .. BG.STC_y2(AMOUNT_RECEIVED_COLON) .. GetMoneyString(bid + deposit - consignment) .. "\n"       -- 收款金额
+                    if (invoiceType == K.buyer) then
+                        t = t .. BG.STC_y2(ITEM_PURCHASED_COLON) .. K.S_31 .. itemName .. K.S_32 .. buyMode .. K.S_33
+                        t = t .. BG.STC_y2(SOLD_BY_COLON) .. K.S_31 .. playerName .. K.S_33
+                        t = t .. BG.STC_y2(AMOUNT_PAID_COLON) .. GetMoneyString(bid) .. K.S_33
+                    elseif (invoiceType == K.seller) then
+                        t = t .. BG.STC_y2(ITEM_SOLD_COLON) .. K.S_31 .. itemName .. K.S_33
+                        t = t .. BG.STC_y2(PURCHASED_BY_COLON) .. K.S_31 .. playerName .. K.S_32 .. buyMode .. K.S_33
+                        t = t .. BG.STC_y2(SALE_PRICE_COLON) .. GetMoneyString(bid) .. K.S_33                                    -- 售价
+                        t = t .. BG.STC_y2(DEPOSIT_COLON) .. BG.STC_g1(K.S_35) .. GetMoneyString(deposit) .. K.S_33               -- 保管费
+                        t = t .. BG.STC_y2(AUCTION_HOUSE_CUT_COLON) .. BG.STC_r1(K.S_36) .. GetMoneyString(consignment) .. K.S_33 -- 拍卖费
+                        t = t .. BG.STC_y2(AMOUNT_RECEIVED_COLON) .. GetMoneyString(bid + deposit - consignment) .. K.S_33       -- 收款金额
                     end
                     return t
                 else
@@ -241,14 +364,14 @@ local function RoadMail()
             end
 
             local function GetMailInfo(mailIndex, wasRead, hasItem, daysLeft, sender, subject, money, CODAmount)
-                local bodyText = ""
+                local bodyText = K.EMPTY
                 local _, isInvoice
                 if wasRead then
                     bodyText, _, _, _, isInvoice = GetInboxText(mailIndex)
                     bodyText = GetBodyText(mailIndex, bodyText, isInvoice)
                 end
                 local getItem = {}
-                local itemText = ""
+                local itemText = K.EMPTY
                 if hasItem then
                     for itemIndex = 1, ATTACHMENTS_MAX_RECEIVE do
                         local name, itemID, texture, count, quality = GetInboxItem(mailIndex, itemIndex)
@@ -259,7 +382,7 @@ local function RoadMail()
                                 count = count,
                                 quality = quality,
                             })
-                            itemText = itemText .. itemID .. "x" .. count .. " "
+                            itemText = itemText .. itemID .. K.x .. count .. K.S_31
                         end
                     end
                 end
@@ -269,7 +392,7 @@ local function RoadMail()
                     name = sender,
                     title = subject,
                     text = bodyText,
-                    type = CODAmount > 0 and "take2" or "take1",
+                    type = CODAmount > K.N_0 and K.take2 or K.take1,
                     getMoney = money,
                     giveMoney = CODAmount,
                     getItem = getItem,
@@ -316,7 +439,7 @@ local function RoadMail()
                         tinsert(tbl_noRead, GetMailInfo(mailIndex, wasRead, hasItem, daysLeft, sender, subject, money, CODAmount))
                     end
                 end
-                -- 检查当前已读邮件和上一次未读邮件，如果有相同的邮件，则保存
+                -- 拿当前已读邮件与上一批未读邮件比对，出现重复的就记录下来
                 if last then
                     for _, vv in ipairs(last) do
                         for i = #tbl_isRead, 1, -1 do
@@ -338,7 +461,7 @@ local function RoadMail()
 
     -- UI
     local db = {}
-    local updateFrame = CreateFrame("Frame")
+    local updateFrame = CreateFrame(K.Frame)
     local StartTime, StopTime, ShowInfo
     do
         mainFrame.typeTbl = {
@@ -355,21 +478,21 @@ local function RoadMail()
         if BiaoGe.mailHistory.isChooseRealm == 1 then choose = { realmID = realmID, } end
         local BUTTONHEIGHT = mailFrameButtonHeight
         local MAXBUTTONS = mailFrameMaxButton
-        local WIDTH = 10 + 27
-        local HEIGHT = (MAXBUTTONS + 1) * BUTTONHEIGHT + 15
-        local FONTSIZE = 14
-        local titleWidth = 0
+        local WIDTH = K.N_10 + K.N_27
+        local HEIGHT = (MAXBUTTONS + 1) * BUTTONHEIGHT + K.N_15
+        local FONTSIZE = K.N_14
+        local titleWidth = K.N_0
         local titleTbl = {
-            { name = L["序号"], width = 40, color = "808080", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 2, },
-            { name = L["时间"], width = 70, color = "FFFFFF", JustifyH = "CENTER", Enable = true, fontSize = FONTSIZE - 2, },
-            { name = L["类型"], width = 70, color = "FFFFFF", JustifyH = "CENTER", Enable = false },
-            { name = L["角色"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false },
-            { name = L["邮件对象"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false },
-            { name = L["主题"], width = 100, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 1, },
-            { name = L["发送"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 1, },
-            { name = L["收到"], width = 90, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 1, },
-            { name = L["邮寄前财产"], width = 100, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 1, },
-            { name = L["邮寄后财产"], width = 100, color = "FFFFFF", JustifyH = "CENTER", Enable = false, fontSize = FONTSIZE - 1, },
+            { name = L["序号"], width = K.N_40, color = K.S_4, JustifyH = K.CENTER, Enable = false, fontSize = FONTSIZE - K.N_2, },
+            { name = L["时间"], width = K.N_70, color = K.FFFFFF, JustifyH = K.CENTER, Enable = true, fontSize = FONTSIZE - K.N_2, },
+            { name = L["类型"], width = K.N_70, color = K.FFFFFF, JustifyH = K.CENTER, Enable = false },
+            { name = L["角色"], width = K.N_90, color = K.FFFFFF, JustifyH = K.CENTER, Enable = false },
+            { name = L["邮件对象"], width = K.N_90, color = K.FFFFFF, JustifyH = K.CENTER, Enable = false },
+            { name = L["主题"], width = K.N_100, color = K.FFFFFF, JustifyH = K.CENTER, Enable = false, fontSize = FONTSIZE - 1, },
+            { name = L["发送"], width = K.N_90, color = K.FFFFFF, JustifyH = K.CENTER, Enable = false, fontSize = FONTSIZE - 1, },
+            { name = L["收到"], width = K.N_90, color = K.FFFFFF, JustifyH = K.CENTER, Enable = false, fontSize = FONTSIZE - 1, },
+            { name = L["邮寄前财产"], width = K.N_100, color = K.FFFFFF, JustifyH = K.CENTER, Enable = false, fontSize = FONTSIZE - 1, },
+            { name = L["邮寄后财产"], width = K.N_100, color = K.FFFFFF, JustifyH = K.CENTER, Enable = false, fontSize = FONTSIZE - 1, },
         }
         for i, v in ipairs(titleTbl) do
             WIDTH = WIDTH + v.width
@@ -381,39 +504,39 @@ local function RoadMail()
         local GetDB, UpdateScrollFrame, UpdateScrollButtonState, GetButtonInfo, UpdateButtons
         -- 框体
         do
-            f = CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
+            f = CreateFrame(K.Frame, nil, mainFrame, K.BackdropTemplate)
             f:SetBackdrop({
-                bgFile = "Interface/ChatFrame/ChatFrameBackground",
-                edgeFile = "Interface/ChatFrame/ChatFrameBackground",
+                bgFile = K.TEX_CHATFRAMEBACKGROUND,
+                edgeFile = K.TEX_CHATFRAMEBACKGROUND,
                 edgeSize = 1,
             })
-            f:SetBackdropColor(0, 0, 0, 0.4)
+            f:SetBackdropColor(K.N_0, K.N_0, K.N_0, K.N_0_4)
             f:SetBackdropBorderColor(1, 1, 1, .8)
-            f:SetPoint("TOPLEFT", BG.MainFrame, "TOPLEFT", 10, -65 - (BG.MainNavigationHeight or 0))
+            f:SetPoint(K.TOPLEFT, BG.MainFrame, K.TOPLEFT, K.N_10, -K.N_65 - (BG.MainNavigationHeight or 0))
             f:SetSize(WIDTH + 5, HEIGHT)
             f:EnableMouse(true)
             mainFrame.frame = f
-            f:SetScript("OnShow", function(self)
+            f:SetScript(K.OnShow, function(self)
                 mainFrame:UpdateAllFrame()
             end)
 
-            scroll = CreateFrame("ScrollFrame", nil, f, BG.scrollTemplate) -- 滚动
-            scroll:SetWidth(WIDTH - 27 + 5)
+            scroll = CreateFrame(K.ScrollFrame, nil, f, BG.scrollTemplate) -- 滚动
+            scroll:SetWidth(WIDTH - K.N_27 + 5)
             scroll:SetHeight(BUTTONHEIGHT * MAXBUTTONS)
-            scroll:SetPoint("TOPLEFT", 0, -12 - BUTTONHEIGHT)
+            scroll:SetPoint(K.TOPLEFT, K.N_0, -K.N_12 - BUTTONHEIGHT)
             bar = scroll.ScrollBar
             bar.scrollStep = 5
             BG.CreateSrollBarBackdrop(bar)
-            bar:HookScript("OnValueChanged", function(self)
-                self:SetScript("OnUpdate", function(self, t)
+            bar:HookScript(K.OnValueChanged, function(self)
+                self:SetScript(K.OnUpdate, function(self, t)
                     UpdateButtons()
                     UpdateScrollButtonState()
                     mainFrame.infoFrame:Hide()
-                    self:SetScript("OnUpdate", nil)
+                    self:SetScript(K.OnUpdate, nil)
                 end)
             end)
 
-            child = CreateFrame("Frame", nil, f) -- 子框架
+            child = CreateFrame(K.Frame, nil, f) -- 子框架
             child:SetWidth(scroll:GetWidth())
             child:SetHeight(scroll:GetHeight())
             scroll:SetScrollChild(child)
@@ -421,31 +544,31 @@ local function RoadMail()
             for ii = 1, MAXBUTTONS do
                 mainFrame.buttons[ii] = {}
                 for i = 1, #titleTbl do
-                    local f = CreateFrame("Frame", nil, scroll)
+                    local f = CreateFrame(K.Frame, nil, scroll)
                     f:SetSize(titleTbl[i].width, BUTTONHEIGHT)
                     if ii == 1 and i == 1 then
-                        f:SetPoint("TOPLEFT", scroll, 10, 0)
+                        f:SetPoint(K.TOPLEFT, scroll, K.N_10, K.N_0)
                         f:SetParent(scroll)
                     elseif i == 1 then
-                        f:SetPoint("TOPLEFT", mainFrame.buttons[(ii - 1)][1], "BOTTOMLEFT", 0, 0)
+                        f:SetPoint(K.TOPLEFT, mainFrame.buttons[(ii - 1)][1], K.BOTTOMLEFT, K.N_0, K.N_0)
                         f:SetParent(scroll)
                     else
-                        f:SetPoint("LEFT", mainFrame.buttons[ii][i - 1], "RIGHT", 0, 0)
+                        f:SetPoint(K.LEFT, mainFrame.buttons[ii][i - 1], K.RIGHT, K.N_0, K.N_0)
                         f:SetParent(mainFrame.buttons[ii][1])
                     end
                     f.num = ii
                     mainFrame.buttons[ii][i] = f
 
                     f.Text = f:CreateFontString()
-                    f.Text:SetFont(BIAOGE_TEXT_FONT, titleTbl[i].fontSize or FONTSIZE, "OUTLINE")
-                    f.Text:SetPoint("CENTER")
+                    f.Text:SetFont(BIAOGE_TEXT_FONT, titleTbl[i].fontSize or FONTSIZE, K.OUTLINE)
+                    f.Text:SetPoint(K.CENTER)
                     f.Text:SetTextColor(RGB(titleTbl[i].color))
                     f.Text:SetJustifyH(titleTbl[i].JustifyH)
-                    f.Text:SetWidth(f:GetWidth() - 2)
+                    f.Text:SetWidth(f:GetWidth() - K.N_2)
                     f.Text:SetHeight(f:GetHeight())
                     -- f.Text:SetWordWrap(false)
 
-                    f:SetScript("OnEnter", function(self)
+                    f:SetScript(K.OnEnter, function(self)
                         mainFrame.frame.lastButtonNum = self.num
                         for _ii, v in ipairs(mainFrame.buttons) do
                             mainFrame.buttons[_ii][1].ds:Hide()
@@ -453,7 +576,7 @@ local function RoadMail()
 
                         mainFrame.buttons[ii][1].ds:Show()
                         if self.onenter then
-                            GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", 0, 0)
+                            GameTooltip:SetOwner(self, K.ANCHOR_TOPLEFT, K.N_0, K.N_0)
                             GameTooltip:ClearLines()
                             GameTooltip:AddLine(self.onenter, 1, 1, 1, true)
                             GameTooltip:Show()
@@ -461,14 +584,14 @@ local function RoadMail()
                         ShowInfo(self)
                         StopTime()
                     end)
-                    f:SetScript("OnLeave", function(self)
+                    f:SetScript(K.OnLeave, function(self)
                         mainFrame.buttons[ii][1].ds:Hide()
                         GameTooltip:Hide()
                         StartTime()
                     end)
-                    f:SetScript("OnMouseUp", function(self, button)
-                        if button ~= "RightButton" then return end
-                        local value = floor(bar:GetValue()) or 0
+                    f:SetScript(K.OnMouseUp, function(self, button)
+                        if button ~= K.RightButton then return end
+                        local value = floor(bar:GetValue()) or K.N_0
                         local num = value + ii
                         local tbl = GetButtonInfo(num)
 
@@ -479,7 +602,7 @@ local function RoadMail()
                                 notCheckable = true,
                             },
                             {
-                                text = "   ",
+                                text = K.S_62,
                                 isTitle = true,
                                 notCheckable = true,
                             },
@@ -501,18 +624,18 @@ local function RoadMail()
                                 func = LibBG.CloseDropDownMenus,
                             }
                         }
-                        LibBG:EasyMenu(menu, BG.dropDown, "cursor", 0, 0, "MENU", 2)
+                        LibBG:EasyMenu(menu, BG.dropDown, K.cursor, K.N_0, K.N_0, K.MENU, K.N_2)
                         BG.PlaySound(1)
                     end)
                 end
-                CreateLine(mainFrame.buttons[ii][1], 0, titleWidth, 1, nil, 0.2)
+                CreateLine(mainFrame.buttons[ii][1], K.N_0, titleWidth, 1, nil, K.N_0_2)
 
                 -- 底色材质
                 local f = mainFrame.buttons[ii][1]
                 f.ds = f:CreateTexture()
-                f.ds:SetPoint("TOPLEFT", 0, 0)
-                f.ds:SetPoint("BOTTOMRIGHT", mainFrame.buttons[ii][#titleTbl], "BOTTOMRIGHT", 0, 0)
-                f.ds:SetColorTexture(1, 1, 1, 0.1)
+                f.ds:SetPoint(K.TOPLEFT, K.N_0, K.N_0)
+                f.ds:SetPoint(K.BOTTOMRIGHT, mainFrame.buttons[ii][#titleTbl], K.BOTTOMRIGHT, K.N_0, K.N_0)
+                f.ds:SetColorTexture(1, 1, 1, K.N_0_1)
                 f.ds:Hide()
             end
         end
@@ -521,11 +644,11 @@ local function RoadMail()
             local function DeleteTradeData()
                 local time = GetServerTime()
                 for realmID in pairs(BiaoGe.mailHistory) do
-                    if type(BiaoGe.mailHistory[realmID]) == "table" then
+                    if type(BiaoGe.mailHistory[realmID]) == K.table then
                         for player in pairs(BiaoGe.mailHistory[realmID]) do
                             for i = #BiaoGe.mailHistory[realmID][player].info, 1, -1 do
                                 local v = BiaoGe.mailHistory[realmID][player].info[i]
-                                if BiaoGe.mailHistory.saveDuration > 0 and time - (v.time or 0) > 86400 * BiaoGe.mailHistory.saveDuration then
+                                if BiaoGe.mailHistory.saveDuration > K.N_0 and time - (v.time or K.N_0) > K.N_86400 * BiaoGe.mailHistory.saveDuration then
                                     tremove(BiaoGe.mailHistory[realmID][player].info, i)
                                 end
                             end
@@ -536,14 +659,14 @@ local function RoadMail()
             DeleteTradeData()
 
             local text = mainFrame:CreateFontString()
-            text:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 260, 10)
-            text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            text:SetPoint(K.BOTTOMLEFT, f, K.TOPLEFT, K.N_260, K.N_10)
+            text:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
             text:SetTextColor(RGB(BG.y2))
             text:SetText(L["保存时长："])
             local dropDown = LibBG:Create_UIDropDownMenu(nil, mainFrame)
-            dropDown:SetPoint("LEFT", text, "RIGHT", -15, -3)
-            LibBG:UIDropDownMenu_SetWidth(dropDown, 80)
-            LibBG:UIDropDownMenu_SetAnchor(dropDown, 0, 0, "TOP", dropDown, "BOTTOM")
+            dropDown:SetPoint(K.LEFT, text, K.RIGHT, -K.N_15, -K.N_3)
+            LibBG:UIDropDownMenu_SetWidth(dropDown, K.N_80)
+            LibBG:UIDropDownMenu_SetAnchor(dropDown, K.N_0, K.N_0, K.TOP, dropDown, K.BOTTOM)
             for i, v in ipairs(BG.saveDays) do
                 if v.day == BiaoGe.mailHistory.saveDuration then
                     LibBG:UIDropDownMenu_SetText(dropDown, v.text)
@@ -572,25 +695,25 @@ local function RoadMail()
         -- 选择角色
         do
             local text = mainFrame:CreateFontString()
-            text:SetPoint("BOTTOMLEFT", f, "TOPLEFT", 0, 10)
-            text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            text:SetPoint(K.BOTTOMLEFT, f, K.TOPLEFT, K.N_0, K.N_10)
+            text:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
             text:SetTextColor(RGB(BG.y2))
             text:SetText(L["角色："])
             local dropDown = LibBG:Create_UIDropDownMenu(nil, mainFrame)
-            dropDown:SetPoint("LEFT", text, "RIGHT", -15, -3)
-            LibBG:UIDropDownMenu_SetWidth(dropDown, 180)
-            LibBG:UIDropDownMenu_SetAnchor(dropDown, 0, 0, "TOP", dropDown, "BOTTOM")
+            dropDown:SetPoint(K.LEFT, text, K.RIGHT, -K.N_15, -K.N_3)
+            LibBG:UIDropDownMenu_SetWidth(dropDown, K.N_180)
+            LibBG:UIDropDownMenu_SetAnchor(dropDown, K.N_0, K.N_0, K.TOP, dropDown, K.BOTTOM)
             BG.dropDownToggle(dropDown)
             mainFrame.dropDown1 = dropDown
             if BiaoGe.mailHistory.isChooseRealm == 1 then
-                LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[realmID] or realmID) .. " - " .. L["全部角色"]))
+                LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[realmID] or realmID) .. K.S_36 .. L["全部角色"]))
             else
-                LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[realmID] or realmID) .. " - ") .. SetClassCFF(player, "player"))
+                LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[realmID] or realmID) .. K.S_36) .. SetClassCFF(player, K.player))
             end
 
             LibBG:UIDropDownMenu_Initialize(dropDown, function(self, level)
                 for _realmID, v in pairs(BiaoGe.mailHistory) do
-                    if type(v) == "table" then
+                    if type(v) == K.table then
                         if next(BiaoGe.mailHistory[_realmID]) then
                             local info = LibBG:UIDropDownMenu_CreateInfo()
                             info.text = BG.STC_y2(BiaoGe.realmName[_realmID] or _realmID)
@@ -603,7 +726,7 @@ local function RoadMail()
                                     player = nil,
                                 }
                                 BiaoGe.mailHistory.isChooseRealm = 1
-                                LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[_realmID] or _realmID) .. " - " .. L["全部角色"]))
+                                LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[_realmID] or _realmID) .. K.S_36 .. L["全部角色"]))
                                 UpdateScrollFrame()
                                 UpdateButtons()
                             end
@@ -612,11 +735,11 @@ local function RoadMail()
 
                         for _, v in pairs(BiaoGe.mailHistory[_realmID]) do
                             local info = LibBG:UIDropDownMenu_CreateInfo()
-                            local playerName = "|c" .. select(4, GetClassColor(v.class)) .. v.name
-                            info.text = "  " .. playerName .. (v.level and " (" .. v.level .. ")" or "")
-                            info.arg1 = v.realmID .. "-" .. v.name
-                            info.arg2 = "|cffFFD100" .. (BiaoGe.realmName[_realmID] or _realmID)
-                                .. "-|r|c" .. select(4, GetClassColor(v.class)) .. v.name .. "|r"
+                            local playerName = K.TXT_C .. select(4, GetClassColor(v.class)) .. v.name
+                            info.text = K.S_32 .. playerName .. (v.level and K.S_76 .. v.level .. K.S_29 or K.EMPTY)
+                            info.arg1 = v.realmID .. K.S_77 .. v.name
+                            info.arg2 = K.COLOR_FFD100 .. (BiaoGe.realmName[_realmID] or _realmID)
+                                .. K.TXT_R_C .. select(4, GetClassColor(v.class)) .. v.name .. K.TXT_R
                             if v.name == choose.player and v.realmID == choose.realmID then
                                 info.checked = true
                             end
@@ -625,8 +748,8 @@ local function RoadMail()
                                     realmID = v.realmID,
                                     player = v.name,
                                 }
-                                BiaoGe.mailHistory.isChooseRealm = 0
-                                LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[v.realmID] or v.realmID) .. " - ") .. playerName)
+                                BiaoGe.mailHistory.isChooseRealm = K.N_0
+                                LibBG:UIDropDownMenu_SetText(dropDown, BG.STC_y2((BiaoGe.realmName[v.realmID] or v.realmID) .. K.S_36) .. playerName)
                                 UpdateScrollFrame()
                                 UpdateButtons()
                             end
@@ -639,40 +762,40 @@ local function RoadMail()
             -- 删除角色
             for i = 1, L_UIDROPDOWNMENU_MAXBUTTONS do
                 local button = _G["L_DropDownList1Button" .. i]
-                button:HookScript("OnEnter", function()
+                button:HookScript(K.OnEnter, function()
                     if L_DropDownList1.dropdown ~= mainFrame.dropDown1 then return end
                     if not button.deleteMailPlayer then
-                        local bt = CreateFrame("Button", nil, button)
-                        bt:SetSize(15, 15)
-                        bt:SetPoint("RIGHT", -2, 0)
-                        bt:SetNormalTexture("interface/raidframe/readycheck-notready")
-                        bt:SetHighlightTexture("interface/raidframe/readycheck-notready")
-                        bt:RegisterForClicks("AnyUp")
+                        local bt = CreateFrame(K.Button, nil, button)
+                        bt:SetSize(K.N_15, K.N_15)
+                        bt:SetPoint(K.RIGHT, -K.N_2, K.N_0)
+                        bt:SetNormalTexture(K.TXT_INTERFACE_RAIDFRAME_READ)
+                        bt:SetHighlightTexture(K.TXT_INTERFACE_RAIDFRAME_READ)
+                        bt:RegisterForClicks(K.AnyUp)
                         bt.num = i
                         bt:Hide()
                         button.deleteMailPlayer = bt
-                        bt:SetScript("OnClick", function(self)
-                            dropDown.realmID, dropDown.player = strsplit("-", button.arg1)
+                        bt:SetScript(K.OnClick, function(self)
+                            dropDown.realmID, dropDown.player = strsplit(K.S_77, button.arg1)
                             dropDown.realmID = tonumber(dropDown.realmID)
                             dropDown.colorPlayer = button.arg2
                             LibBG:CloseDropDownMenus()
                             StaticPopup_Show("BiaoGe_DeleteMailHistoryPlayer", dropDown.colorPlayer)
                         end)
-                        bt:SetScript("OnEnter", function(self)
+                        bt:SetScript(K.OnEnter, function(self)
                             button.isOnEnter = true
                             LibBG:UIDropDownMenu_StopCounting(self:GetParent():GetParent())
                             button.Highlight:Show()
-                            GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 0, 0)
+                            GameTooltip:SetOwner(self, K.ANCHOR_RIGHT, K.N_0, K.N_0)
                             GameTooltip:ClearLines()
                             GameTooltip:AddLine(L["删除该角色"], 1, 1, 1, true)
                             GameTooltip:Show()
                         end)
-                        bt:SetScript("OnLeave", function(self)
+                        bt:SetScript(K.OnLeave, function(self)
                             LibBG:UIDropDownMenu_StartCounting(self:GetParent():GetParent())
                             button.Highlight:Hide()
                             GameTooltip:Hide()
                         end)
-                        bt:SetScript("OnHide", function(self)
+                        bt:SetScript(K.OnHide, function(self)
                             self:Hide()
                         end)
                     end
@@ -687,10 +810,10 @@ local function RoadMail()
                         button.deleteMailPlayer:Show()
                     end
                 end)
-                button:HookScript("OnLeave", function()
+                button:HookScript(K.OnLeave, function()
                     if L_DropDownList1.dropdown ~= mainFrame.dropDown1 then return end
                     button.isOnEnter = false
-                    After(0, function()
+                    After(K.N_0, function()
                         if not button.isOnEnter then
                             button.deleteMailPlayer:Hide()
                         end
@@ -706,7 +829,7 @@ local function RoadMail()
                     for i = 1, _G['L_DropDownList1'].numButtons do
                         local button = _G["L_DropDownList1Button" .. i]
                         if button.arg1 then
-                            local _realmID, _player = strsplit("-", button.arg1)
+                            local _realmID, _player = strsplit(K.S_77, button.arg1)
                             _realmID = tonumber(_realmID)
                             if _realmID == realmID and _player == player then
                                 button:Click()
@@ -724,7 +847,7 @@ local function RoadMail()
                 end,
                 OnCancel = function()
                 end,
-                timeout = 0,
+                timeout = K.N_0,
                 whileDead = true,
                 hideOnEscape = true,
             }
@@ -732,21 +855,21 @@ local function RoadMail()
         -- 邮件类型
         do
             local dropDown = LibBG:Create_UIDropDownMenu(nil, mainFrame)
-            dropDown:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 14, -2)
-            LibBG:UIDropDownMenu_SetWidth(dropDown, 120)
-            LibBG:UIDropDownMenu_SetAnchor(dropDown, 0, 0, "TOP", dropDown, "BOTTOM")
+            dropDown:SetPoint(K.BOTTOMRIGHT, f, K.TOPRIGHT, K.N_14, -K.N_2)
+            LibBG:UIDropDownMenu_SetWidth(dropDown, K.N_120)
+            LibBG:UIDropDownMenu_SetAnchor(dropDown, K.N_0, K.N_0, K.TOP, dropDown, K.BOTTOM)
             BG.dropDownToggle(dropDown)
             mainFrame.dropDown2 = dropDown
             local text = dropDown:CreateFontString()
-            text:SetPoint("RIGHT", dropDown, "LEFT", 15, 3)
-            text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+            text:SetPoint(K.RIGHT, dropDown, K.LEFT, K.N_15, K.N_3)
+            text:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
             text:SetTextColor(RGB(BG.y2))
             text:SetText(L["邮件类型："])
             LibBG:UIDropDownMenu_SetText(dropDown, mainFrame.typeTbl[BiaoGe.mailHistory.type])
 
             local function Init(type, count)
                 local info = LibBG:UIDropDownMenu_CreateInfo()
-                info.text = mainFrame.typeTbl[type] .. BG.STC_dis("  (" .. count .. ")")
+                info.text = mainFrame.typeTbl[type] .. BG.STC_dis(K.S_88 .. count .. K.S_29)
                 info.checked = BiaoGe.mailHistory.type == type
                 info.func = function()
                     BiaoGe.mailHistory.type = type
@@ -757,10 +880,10 @@ local function RoadMail()
             end
             LibBG:UIDropDownMenu_Initialize(dropDown, function(self, level)
                 local tbl = {
-                    send1 = 0,
-                    send2 = 0,
-                    take1 = 0,
-                    take2 = 0,
+                    send1 = K.N_0,
+                    send2 = K.N_0,
+                    take1 = K.N_0,
+                    take2 = K.N_0,
                 }
                 local realmID = choose.realmID
                 local playerTbl = {}
@@ -778,31 +901,31 @@ local function RoadMail()
                         end
                     end
                 end
-                Init("all", tbl.send1 + tbl.send2 + tbl.take1 + tbl.take2)
-                Init("send1", tbl.send1)
-                Init("send2", tbl.send2)
-                Init("take1", tbl.take1)
-                Init("take2", tbl.take2)
+                Init(K.all, tbl.send1 + tbl.send2 + tbl.take1 + tbl.take2)
+                Init(K.send1, tbl.send1)
+                Init(K.send2, tbl.send2)
+                Init(K.take1, tbl.take1)
+                Init(K.take2, tbl.take2)
             end)
         end
         -- 标题
         do
             for i, v in ipairs(titleTbl) do
-                local bt = CreateFrame("Button", nil, f, "BackdropTemplate")
+                local bt = CreateFrame(K.Button, nil, f, K.BackdropTemplate)
                 bt:SetSize(titleTbl[i].width, BUTTONHEIGHT)
                 if i == 1 then
-                    bt:SetPoint("TOPLEFT", 10, -10)
+                    bt:SetPoint(K.TOPLEFT, K.N_10, -K.N_10)
                 else
-                    bt:SetPoint("LEFT", mainFrame.titlebuttons[i - 1], "RIGHT", 0, 0)
+                    bt:SetPoint(K.LEFT, mainFrame.titlebuttons[i - 1], K.RIGHT, K.N_0, K.N_0)
                     bt:SetParent(mainFrame.titlebuttons[i - 1])
                 end
-                bt:SetNormalFontObject(BG["FontWhite" .. FONTSIZE])
+                bt:SetNormalFontObject(BG[K.FontWhite .. FONTSIZE])
                 bt:SetText(titleTbl[i].name)
                 bt.textwidth = bt:GetFontString():GetStringWidth()
                 bt.textJustifyH = titleTbl[i].JustifyH
                 bt.sortOrder = 1
                 bt.id = i
-                bt:SetHighlightTexture("Interface/PaperDollInfoFrame/UI-Character-Tab-Highlight")
+                bt:SetHighlightTexture(K.TEX_UI_CHARACTER_TAB_HIGHLIGHT)
                 bt:SetEnabled(v.Enable)
                 tinsert(mainFrame.titlebuttons, bt)
 
@@ -811,30 +934,30 @@ local function RoadMail()
                 bt.Text:SetWidth(bt:GetWidth())
                 bt.Text:SetWordWrap(false)
 
-                bt:SetScript("OnClick", function(self)
+                bt:SetScript(K.OnClick, function(self)
                     BG.PlaySound(1)
                     mainFrame.isnewsorter = nil
                     if BiaoGe.mailHistory.OrderButtonID ~= self.id then
                         mainFrame.isnewsorter = true
                     end
                     if not mainFrame.isnewsorter then
-                        BiaoGe.mailHistory.Order = BiaoGe.mailHistory.Order == 1 and 0 or 1
+                        BiaoGe.mailHistory.Order = BiaoGe.mailHistory.Order == 1 and K.N_0 or 1
                     end
                     BiaoGe.mailHistory.OrderButtonID = self.id
                     UpdateScrollFrame()
                     UpdateButtons()
                 end)
             end
-            CreateLine(mainFrame.titlebuttons[1], 0, titleWidth)
+            CreateLine(mainFrame.titlebuttons[1], K.N_0, titleWidth)
             -- 排序材质
-            local sorter = mainFrame:CreateTexture(nil, "OVERLAY")
+            local sorter = mainFrame:CreateTexture(nil, K.OVERLAY)
             sorter:SetSize(8, 8)
-            sorter:SetTexture("Interface/Buttons/ui-sortarrow")
+            sorter:SetTexture(K.TEX_UI_SORTARROW)
             mainFrame.sorter = sorter
             -- 提示
             local t = scroll:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            t:SetPoint("TOP", 0, -5)
+            t:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
+            t:SetPoint(K.TOP, K.N_0, -5)
             t:SetTextColor(.5, .5, .5)
             t:SetText(L["该角色没有该类型的邮件记录。"])
             mainFrame.notText = t
@@ -860,9 +983,9 @@ local function RoadMail()
                         if not v.name then
                             v.name = UNKNOWN
                         end
-                        if type == "all" or v.type == type then
+                        if type == K.all or v.type == type then
                             if BiaoGe.options["showEmptyMail"] == 1 or
-                                not (v.getMoney == 0 and v.giveMoney == 0 and not next(v.getItem) and not next(v.giveItem))
+                                not (v.getMoney == K.N_0 and v.giveMoney == K.N_0 and not next(v.getItem) and not next(v.giveItem))
                             then
                                 if v.name:find(BUTTON_LAG_AUCTIONHOUSE) then
                                     if BiaoGe.options["showAuctionMail"] == 1 then
@@ -870,14 +993,14 @@ local function RoadMail()
                                         tinsert(db, BG.Copy(v))
                                         db[#db].i = i
                                         db[#db].player = tbl.name
-                                        db[#db].colorplayer = "|c" .. select(4, GetClassColor(tbl.class)) .. tbl.name .. "|r"
+                                        db[#db].colorplayer = K.TXT_C .. select(4, GetClassColor(tbl.class)) .. tbl.name .. K.TXT_R
                                     end
                                 else
                                     local tbl = BiaoGe.mailHistory[realmID][player]
                                     tinsert(db, BG.Copy(v))
                                     db[#db].i = i
                                     db[#db].player = tbl.name
-                                    db[#db].colorplayer = "|c" .. select(4, GetClassColor(tbl.class)) .. tbl.name .. "|r"
+                                    db[#db].colorplayer = K.TXT_C .. select(4, GetClassColor(tbl.class)) .. tbl.name .. K.TXT_R
                                 end
                             end
                         end
@@ -897,9 +1020,9 @@ local function RoadMail()
                     else
                         if v.name:find(BUTTON_LAG_AUCTIONHOUSE) and v.player == tbl.player then
                             if not tbl.text:find(MAIL_SUBJECT_LABEL) then
-                                tbl.text = BG.STC_y2(MAIL_SUBJECT_LABEL) .. tbl.title .. "\n" .. tbl.text
+                                tbl.text = BG.STC_y2(MAIL_SUBJECT_LABEL) .. tbl.title .. K.S_33 .. tbl.text
                             end
-                            tbl.text = tbl.text .. "\n" .. BG.STC_y2(MAIL_SUBJECT_LABEL) .. v.title .. "\n" .. v.text
+                            tbl.text = tbl.text .. K.S_33 .. BG.STC_y2(MAIL_SUBJECT_LABEL) .. v.title .. K.S_33 .. v.text
                             local count = tbl.title:match(L["%((%d+)个邮件合并%)"]) or 1
                             tbl.title = format(BG.STC_y1(L["(%s个邮件合并)"]), count + 1)
                             tbl.getMoney = tbl.getMoney + v.getMoney
@@ -919,8 +1042,8 @@ local function RoadMail()
             end
 
             sort(db, function(a, b)
-                if BiaoGe.mailHistory.OrderButtonID == 2 then -- 按时间
-                    local key = "time"
+                if BiaoGe.mailHistory.OrderButtonID == K.N_2 then -- 按时间
+                    local key = K.time
                     if a[key] and b[key] then
                         if a[key] ~= b[key] then
                             if BiaoGe.mailHistory.Order == 1 then
@@ -931,7 +1054,7 @@ local function RoadMail()
                         end
                     end
                 end
-                local key = "title"
+                local key = K.title
                 if a[key] and b[key] then
                     if a[key] ~= b[key] then
                         if BiaoGe.mailHistory.Order == 1 then
@@ -952,27 +1075,27 @@ local function RoadMail()
             local bt = mainFrame.titlebuttons[BiaoGe.mailHistory.OrderButtonID]
             sorter:SetParent(bt)
             sorter:ClearAllPoints()
-            if bt.textJustifyH == "CENTER" then
-                sorter:SetPoint("LEFT", bt, "CENTER", bt.textwidth / 2, 0)
+            if bt.textJustifyH == K.CENTER then
+                sorter:SetPoint(K.LEFT, bt, K.CENTER, bt.textwidth / K.N_2, K.N_0)
             else
-                sorter:SetPoint("LEFT", bt, "LEFT", bt.textwidth, 0)
+                sorter:SetPoint(K.LEFT, bt, K.LEFT, bt.textwidth, K.N_0)
             end
             if not mainFrame.isnewsorter then
                 if BiaoGe.mailHistory.Order == 1 then
-                    sorter:SetTexCoord(0, 0.5, 0, 1)
+                    sorter:SetTexCoord(K.N_0, K.N_0_5, K.N_0, 1)
                 else
-                    sorter:SetTexCoord(0, 0.5, 1, 0)
+                    sorter:SetTexCoord(K.N_0, K.N_0_5, 1, K.N_0)
                 end
             end
 
             local m = #db - MAXBUTTONS
-            bar:SetMinMaxValues(0, max(0, m))
+            bar:SetMinMaxValues(K.N_0, max(K.N_0, m))
             if scroll.SetScrollExtent then
                 scroll:SetScrollExtent(MAXBUTTONS, #db)
             end
             UpdateScrollButtonState()
 
-            mainFrame.notText:SetShown(#db == 0)
+            mainFrame.notText:SetShown(#db == K.N_0)
         end
 
         function UpdateScrollButtonState()
@@ -1004,56 +1127,56 @@ local function RoadMail()
                 targetText = BG.STC_y1(targetText)
             end
 
-            local giveItemText = ""
+            local giveItemText = K.EMPTY
             local count = #v.giveItem
             if count == 1 then
                 giveItemText = AddIconByLink(v.giveItem[1].link) .. v.giveItem[1].link
             elseif count > 1 then
-                giveItemText = "|A:ParagonReputation_Bag:0:0|a" .. "x" .. count
+                giveItemText = K.TXT_A_PARAGONREPUTATION_BAG .. K.x .. count
             end
-            local giveMoneyText = ""
+            local giveMoneyText = K.EMPTY
             local money = v.giveMoney
-            if money > 0 then
+            if money > K.N_0 then
                 giveMoneyText = GetMoneyString(money, true)
             end
-            local giveSplit = ""
-            if giveItemText ~= "" and giveMoneyText ~= "" then
-                giveSplit = ", "
+            local giveSplit = K.EMPTY
+            if giveItemText ~= K.EMPTY and giveMoneyText ~= K.EMPTY then
+                giveSplit = K.S_98
             end
 
-            local getItemText = ""
+            local getItemText = K.EMPTY
             local count = #v.getItem
             if count == 1 then
                 getItemText = AddIconByLink(v.getItem[1].link) .. v.getItem[1].link
             elseif count > 1 then
-                getItemText = "|A:ParagonReputation_Bag:0:0|a" .. "x" .. count
+                getItemText = K.TXT_A_PARAGONREPUTATION_BAG .. K.x .. count
             end
-            local getMoneyText = ""
+            local getMoneyText = K.EMPTY
             local money = v.getMoney
-            if money > 0 then
+            if money > K.N_0 then
                 getMoneyText = GetMoneyString(money, true)
             end
-            local getSplit = ""
-            if getItemText ~= "" and getMoneyText ~= "" then
-                getSplit = ", "
+            local getSplit = K.EMPTY
+            if getItemText ~= K.EMPTY and getMoneyText ~= K.EMPTY then
+                getSplit = K.S_98
             end
 
             return {
                 num,                                                                              -- 序号
-                date("%m-%d %H:%M", v.time),                                                      -- 时间
+                date(K.TXT_M_D_H_M, v.time),                                                      -- 时间
                 mainFrame.typeTbl[v.type],                                                        -- 类型
                 v.colorplayer,                                                                    -- 角色
                 targetText,                                                                       -- 邮寄对象
                 v.title,                                                                          -- 主题
                 giveItemText .. giveSplit .. giveMoneyText,                                       -- 发送
                 getItemText .. getSplit .. getMoneyText,                                          -- 收到
-                v.beforeMoney and GetMoneyString(floor(v.beforeMoney / 1e4) * 10000, true) or "", -- 邮寄前财产
-                v.afterMoney and GetMoneyString(floor(v.afterMoney / 1e4) * 10000, true) or "",   -- 邮寄后财产
+                v.beforeMoney and GetMoneyString(floor(v.beforeMoney / K.N_1e4) * K.N_10000, true) or K.EMPTY, -- 邮寄前财产
+                v.afterMoney and GetMoneyString(floor(v.afterMoney / K.N_1e4) * K.N_10000, true) or K.EMPTY,   -- 邮寄后财产
             }
         end
 
         function UpdateButtons()
-            local value = floor(bar:GetValue()) or 0
+            local value = floor(bar:GetValue()) or K.N_0
             for ii = 1, MAXBUTTONS do
                 local num = value + ii
                 local tbl = GetButtonInfo(num)
@@ -1085,133 +1208,133 @@ local function RoadMail()
     -- 邮件详细框
     do
         function StartTime()
-            updateFrame.elapsed = 0
-            updateFrame:SetScript("OnUpdate", function(self, elapsed)
+            updateFrame.elapsed = K.N_0
+            updateFrame:SetScript(K.OnUpdate, function(self, elapsed)
                 self.elapsed = self.elapsed + elapsed
                 if self.elapsed >= .5 then
-                    self:SetScript("OnUpdate", nil)
+                    self:SetScript(K.OnUpdate, nil)
                     mainFrame.infoFrame:Hide()
                 end
             end)
         end
 
         function StopTime()
-            updateFrame.elapsed = 0
-            updateFrame:SetScript("OnUpdate", nil)
+            updateFrame.elapsed = K.N_0
+            updateFrame:SetScript(K.OnUpdate, nil)
         end
 
-        local frame = CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
+        local frame = CreateFrame(K.Frame, nil, mainFrame, K.BackdropTemplate)
         frame:SetBackdrop({
-            bgFile = "Interface/ChatFrame/ChatFrameBackground",
-            edgeFile = "Interface/ChatFrame/ChatFrameBackground",
+            bgFile = K.TEX_CHATFRAMEBACKGROUND,
+            edgeFile = K.TEX_CHATFRAMEBACKGROUND,
             edgeSize = 1,
         })
-        frame:SetBackdropColor(0, 0, 0, 0.4)
+        frame:SetBackdropColor(K.N_0, K.N_0, K.N_0, K.N_0_4)
         frame:SetBackdropBorderColor(1, 1, 1, .8)
-        frame:SetPoint("TOPLEFT", mainFrame.frame, "TOPRIGHT", 2, 0)
-        frame:SetSize(320, 350)
+        frame:SetPoint(K.TOPLEFT, mainFrame.frame, K.TOPRIGHT, K.N_2, K.N_0)
+        frame:SetSize(K.N_320, K.N_350)
         frame:Hide()
         mainFrame.infoFrame = frame
-        frame:HookScript("OnEnter", function(self)
+        frame:HookScript(K.OnEnter, function(self)
             StopTime()
             local num = mainFrame.frame.lastButtonNum
             mainFrame.buttons[num][1].ds:Show()
         end)
-        frame:HookScript("OnLeave", StartTime)
-        frame:HookScript("OnHide", function(self)
+        frame:HookScript(K.OnLeave, StartTime)
+        frame:HookScript(K.OnHide, function(self)
             local num = mainFrame.frame.lastButtonNum
             mainFrame.buttons[num][1].ds:Hide()
         end)
 
         frame.timeText = frame:CreateFontString()
-        frame.timeText:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
-        frame.timeText:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 2, 2)
+        frame.timeText:SetFont(BIAOGE_TEXT_FONT, K.N_13, K.OUTLINE)
+        frame.timeText:SetPoint(K.BOTTOMLEFT, frame, K.TOPLEFT, K.N_2, K.N_2)
         frame.timeText:SetTextColor(1, 1, 1)
 
         -- 各种文本
         do
             local t = frame:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            t:SetPoint("TOP", 0, -5)
-            t:SetJustifyH("RIGHT")
+            t:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
+            t:SetPoint(K.TOP, K.N_0, -5)
+            t:SetJustifyH(K.RIGHT)
             frame.typeText = t
             frame.line = frame:CreateLine()
             frame.line:SetColorTexture(1, 1, 1, .8)
-            frame.line:SetStartPoint("TOPLEFT", 1, -23)
-            frame.line:SetEndPoint("TOPRIGHT", -1, -23)
+            frame.line:SetStartPoint(K.TOPLEFT, 1, -K.N_23)
+            frame.line:SetEndPoint(K.TOPRIGHT, -1, -K.N_23)
             frame.line:SetThickness(1)
 
             local t = frame:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            t:SetPoint("TOPRIGHT", frame, "TOPLEFT", 80, -35)
-            t:SetJustifyH("RIGHT")
-            t:SetTextColor(1, .82, 0)
+            t:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
+            t:SetPoint(K.TOPRIGHT, frame, K.TOPLEFT, K.N_80, -K.N_35)
+            t:SetJustifyH(K.RIGHT)
+            t:SetTextColor(1, .82, K.N_0)
             frame.nameText1 = t
             local t = frame:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            t:SetPoint("LEFT", frame.nameText1, "RIGHT", 5, -0)
-            t:SetJustifyH("LEFT")
+            t:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
+            t:SetPoint(K.LEFT, frame.nameText1, K.RIGHT, 5, -K.N_0)
+            t:SetJustifyH(K.LEFT)
             frame.nameText2 = t
             local t = frame:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            t:SetPoint("TOPRIGHT", frame.nameText1, "BOTTOMRIGHT", 0, -10)
-            t:SetJustifyH("RIGHT")
+            t:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
+            t:SetPoint(K.TOPRIGHT, frame.nameText1, K.BOTTOMRIGHT, K.N_0, -K.N_10)
+            t:SetJustifyH(K.RIGHT)
             t:SetText(MAIL_SUBJECT_LABEL)
-            t:SetTextColor(1, .82, 0)
+            t:SetTextColor(1, .82, K.N_0)
             frame.titleText1 = t
             local t = frame:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            t:SetPoint("LEFT", frame.titleText1, "RIGHT", 5, -0)
-            t:SetJustifyH("LEFT")
-            t:SetWidth(frame:GetWidth() - select(4, frame.nameText1:GetPoint()) - 20)
+            t:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
+            t:SetPoint(K.LEFT, frame.titleText1, K.RIGHT, 5, -K.N_0)
+            t:SetJustifyH(K.LEFT)
+            t:SetWidth(frame:GetWidth() - select(4, frame.nameText1:GetPoint()) - K.N_20)
             t:SetWordWrap(false)
             frame.titleText2 = t
 
             local t = frame:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            t:SetPoint("TOPRIGHT", frame.titleText1, "BOTTOMRIGHT", 0, -10)
-            t:SetTextColor(1, 0.82, 0)
+            t:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
+            t:SetPoint(K.TOPRIGHT, frame.titleText1, K.BOTTOMRIGHT, K.N_0, -K.N_10)
+            t:SetTextColor(1, K.N_0_82, K.N_0)
             t:SetText(L["内容："])
-            t:SetJustifyH("RIGHT")
+            t:SetJustifyH(K.RIGHT)
             frame.textText1 = t
-            local f = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+            local f = CreateFrame(K.Frame, nil, frame, K.BackdropTemplate)
             f:SetBackdrop({
-                bgFile = "Interface/ChatFrame/ChatFrameBackground",
-                edgeFile = "Interface/ChatFrame/ChatFrameBackground",
+                bgFile = K.TEX_CHATFRAMEBACKGROUND,
+                edgeFile = K.TEX_CHATFRAMEBACKGROUND,
                 edgeSize = 1,
             })
-            f:SetBackdropColor(0, 0, 0, 0.5)
-            f:SetBackdropBorderColor(1, 1, 1, 0.6)
-            f:SetSize(215, 120)
-            f:SetPoint("TOPLEFT", frame.textText1, "TOPRIGHT", 5, 0)
+            f:SetBackdropColor(K.N_0, K.N_0, K.N_0, K.N_0_5)
+            f:SetBackdropBorderColor(1, 1, 1, K.N_0_6)
+            f:SetSize(K.N_215, K.N_120)
+            f:SetPoint(K.TOPLEFT, frame.textText1, K.TOPRIGHT, 5, K.N_0)
             frame.textbg = f
-            local scroll = CreateFrame("ScrollFrame", nil, f, BG.scrollTemplate)
-            scroll:SetWidth(f:GetWidth() - 10)
-            scroll:SetHeight(f:GetHeight() - 10)
-            scroll:SetPoint("CENTER")
+            local scroll = CreateFrame(K.ScrollFrame, nil, f, BG.scrollTemplate)
+            scroll:SetWidth(f:GetWidth() - K.N_10)
+            scroll:SetHeight(f:GetHeight() - K.N_10)
+            scroll:SetPoint(K.CENTER)
             BG.CreateSrollBarBackdrop(scroll.ScrollBar)
             BG.HookScrollBarShowOrHide(scroll, true)
-            local edit = CreateFrame("EditBox", nil, f)
+            local edit = CreateFrame(K.EditBox, nil, f)
             edit:SetWidth(scroll:GetWidth())
             edit:SetAutoFocus(false)
             edit:EnableMouse(false)
-            edit:SetTextInsets(0, 0, 0, 0)
+            edit:SetTextInsets(K.N_0, K.N_0, K.N_0, K.N_0)
             edit:SetMultiLine(true)
-            edit:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
+            edit:SetFont(BIAOGE_TEXT_FONT, K.N_13, K.OUTLINE)
             frame.textText2 = edit
             scroll:SetScrollChild(edit)
 
             local t = frame:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            t:SetPoint("TOPRIGHT", frame.textText1, "BOTTOMRIGHT", 0, -0 - frame.textbg:GetHeight())
-            t:SetJustifyH("RIGHT")
-            t:SetTextColor(1, .82, 0)
+            t:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
+            t:SetPoint(K.TOPRIGHT, frame.textText1, K.BOTTOMRIGHT, K.N_0, -K.N_0 - frame.textbg:GetHeight())
+            t:SetJustifyH(K.RIGHT)
+            t:SetTextColor(1, .82, K.N_0)
             frame.moneyText1 = t
             local t = frame:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            t:SetPoint("LEFT", frame.moneyText1, "RIGHT", 5, -0)
-            t:SetJustifyH("LEFT")
-            t:SetWidth(frame:GetWidth() - select(4, frame.nameText1:GetPoint()) - 20)
+            t:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
+            t:SetPoint(K.LEFT, frame.moneyText1, K.RIGHT, 5, -K.N_0)
+            t:SetJustifyH(K.LEFT)
+            t:SetWidth(frame:GetWidth() - select(4, frame.nameText1:GetPoint()) - K.N_20)
             t:SetWordWrap(false)
             frame.moneyText2 = t
         end
@@ -1219,31 +1342,31 @@ local function RoadMail()
         -- 物品框
         do
             local t = frame:CreateFontString()
-            t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            t:SetPoint("TOPRIGHT", frame.moneyText1, "BOTTOMRIGHT", 0, -10)
-            t:SetJustifyH("RIGHT")
-            t:SetTextColor(1, .82, 0)
+            t:SetFont(BIAOGE_TEXT_FONT, K.N_15, K.OUTLINE)
+            t:SetPoint(K.TOPRIGHT, frame.moneyText1, K.BOTTOMRIGHT, K.N_0, -K.N_10)
+            t:SetJustifyH(K.RIGHT)
+            t:SetTextColor(1, .82, K.N_0)
             frame.itemText = t
 
-            local f = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+            local f = CreateFrame(K.Frame, nil, frame, K.BackdropTemplate)
             f:SetBackdrop({
-                bgFile = "Interface/ChatFrame/ChatFrameBackground",
-                edgeFile = "Interface/ChatFrame/ChatFrameBackground",
+                bgFile = K.TEX_CHATFRAMEBACKGROUND,
+                edgeFile = K.TEX_CHATFRAMEBACKGROUND,
                 edgeSize = 1,
             })
-            f:SetBackdropColor(0, 0, 0, 0.5)
-            f:SetBackdropBorderColor(1, 1, 1, 0.6)
-            f:SetSize(frame.textbg:GetWidth(), 85)
-            f:SetPoint("TOPLEFT", frame.itemText, "TOPRIGHT", 5, 0)
+            f:SetBackdropColor(K.N_0, K.N_0, K.N_0, K.N_0_5)
+            f:SetBackdropBorderColor(1, 1, 1, K.N_0_6)
+            f:SetSize(frame.textbg:GetWidth(), K.N_85)
+            f:SetPoint(K.TOPLEFT, frame.itemText, K.TOPRIGHT, 5, K.N_0)
             frame.itembg = f
-            local scroll = CreateFrame("ScrollFrame", nil, f, BG.scrollTemplate) -- 滚动
+            local scroll = CreateFrame(K.ScrollFrame, nil, f, BG.scrollTemplate) -- 滚动
             scroll:SetWidth(f:GetWidth())
             scroll:SetHeight(f:GetHeight() - 4)
-            scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -2)
+            scroll:SetPoint(K.TOPLEFT, f, K.TOPLEFT, K.N_0, -K.N_2)
             f.scroll = scroll
             BG.CreateSrollBarBackdrop(scroll.ScrollBar)
             BG.HookScrollBarShowOrHide(scroll, true)
-            local child = CreateFrame("Frame", nil, scroll) -- 子框架
+            local child = CreateFrame(K.Frame, nil, scroll) -- 子框架
             child:SetWidth(scroll:GetWidth())
             child:SetHeight(scroll:GetHeight())
             scroll:SetScrollChild(child)
@@ -1257,48 +1380,48 @@ local function RoadMail()
             local frame = mainFrame.infoFrame
             local type
             local r, g, b
-            if v.type:find("send") then
-                type = "send"
+            if v.type:find(K.send) then
+                type = K.send
                 r, g, b = RGB(BG.b1)
             else
-                type = "take"
-                r, g, b = 0, 1, 0
+                type = K.take
+                r, g, b = K.N_0, 1, K.N_0
             end
-            frame.timeText:SetText(date("%y/%m/%d %H:%M", v.time))
+            frame.timeText:SetText(date(K.TXT_Y_M_D_H_M, v.time))
             frame:SetBackdropBorderColor(r, g, b, .8)
-            frame:SetBackdropColor(r, g, b, 0.05)
+            frame:SetBackdropColor(r, g, b, K.N_0_05)
             frame.line:SetColorTexture(r, g, b, .8)
             frame.textbg:SetBackdropBorderColor(r, g, b, .8)
-            frame.textbg:SetBackdropColor(r, g, b, 0.05)
+            frame.textbg:SetBackdropColor(r, g, b, K.N_0_05)
             frame.itembg:SetBackdropBorderColor(r, g, b, .8)
-            frame.itembg:SetBackdropColor(r, g, b, 0.05)
+            frame.itembg:SetBackdropColor(r, g, b, K.N_0_05)
 
             frame.typeText:SetText(mainFrame.typeTbl[v.type])
-            frame.nameText1:SetText(type == "send" and MAIL_TO_LABEL or FROM)
+            frame.nameText1:SetText(type == K.send and MAIL_TO_LABEL or FROM)
             local targetText = v.name
             if v.name:find(BUTTON_LAG_AUCTIONHOUSE) then
                 targetText = BG.STC_y1(targetText)
             end
             frame.nameText2:SetText(targetText)
-            frame.titleText2:SetText(v.title or "")
-            frame.textText2:SetText(v.text or "")
+            frame.titleText2:SetText(v.title or K.EMPTY)
+            frame.textText2:SetText(v.text or K.EMPTY)
 
-            if v.giveMoney == 0 and v.getMoney == 0 then
+            if v.giveMoney == K.N_0 and v.getMoney == K.N_0 then
                 frame.moneyText1:Hide()
                 frame.moneyText2:Hide()
             else
                 frame.moneyText1:Show()
                 frame.moneyText2:Show()
 
-                local money = v.giveMoney == 0 and v.getMoney or v.giveMoney
-                local moneyText = ""
-                if v.type == "send1" then
+                local money = v.giveMoney == K.N_0 and v.getMoney or v.giveMoney
+                local moneyText = K.EMPTY
+                if v.type == K.send1 then
                     moneyText = L["发送金额："]
-                elseif v.type == "send2" then
+                elseif v.type == K.send2 then
                     moneyText = L["付款取信："]
-                elseif v.type == "take1" then
+                elseif v.type == K.take1 then
                     moneyText = L["收到金额："]
-                elseif v.type == "take2" then
+                elseif v.type == K.take2 then
                     moneyText = L["支出金额："]
                 end
                 frame.moneyText1:SetText(moneyText)
@@ -1306,7 +1429,7 @@ local function RoadMail()
             end
 
             -- 物品
-            if #v.giveItem == 0 and #v.getItem == 0 then
+            if #v.giveItem == K.N_0 and #v.getItem == K.N_0 then
                 frame.itemText:Hide()
                 frame.itembg:Hide()
             else
@@ -1316,12 +1439,12 @@ local function RoadMail()
                 wipe(frame.buttons)
                 frame.itemText:Show()
                 frame.itembg:Show()
-                if type == "send" then
+                if type == K.send then
                     frame.itemText:SetText(L["发送物品："])
                 else
                     frame.itemText:SetText(L["收到物品："])
                 end
-                local db = #v.giveItem == 0 and v.getItem or v.giveItem
+                local db = #v.giveItem == K.N_0 and v.getItem or v.giveItem
 
                 local function CreateButton(i)
                     local v = db[i]
@@ -1331,60 +1454,60 @@ local function RoadMail()
                         r, g, b = GetItemQualityColor(v.quality)
                     else
                         r, g, b = 1, 1, 1
-                        a = 0
+                        a = K.N_0
                     end
-                    local bt = CreateFrame("Frame", nil, frame.itemframe, "BackdropTemplate")
+                    local bt = CreateFrame(K.Frame, nil, frame.itemframe, K.BackdropTemplate)
                     bt:SetBackdrop({
-                        edgeFile = "Interface/ChatFrame/ChatFrameBackground",
+                        edgeFile = K.TEX_CHATFRAMEBACKGROUND,
                         edgeSize = 1,
                     })
                     bt:SetBackdropBorderColor(r, g, b, a)
-                    bt:SetSize(30, 30)
+                    bt:SetSize(K.N_30, K.N_30)
                     if i == 1 then
-                        bt:SetPoint("TOPLEFT", frame.itemframe, "TOPLEFT", 5, -3)
-                    elseif (i - 1) % 6 == 0 then
-                        bt:SetPoint("TOPLEFT", frame.buttons[i - 6], "BOTTOMLEFT", 0, -5)
+                        bt:SetPoint(K.TOPLEFT, frame.itemframe, K.TOPLEFT, 5, -K.N_3)
+                    elseif (i - 1) % K.N_6 == K.N_0 then
+                        bt:SetPoint(K.TOPLEFT, frame.buttons[i - K.N_6], K.BOTTOMLEFT, K.N_0, -5)
                     else
-                        bt:SetPoint("TOPLEFT", frame.buttons[i - 1], "TOPRIGHT", 5, 0)
+                        bt:SetPoint(K.TOPLEFT, frame.buttons[i - 1], K.TOPRIGHT, 5, K.N_0)
                     end
                     bt.itemID = v.itemID
                     bt.link = v.link
                     tinsert(frame.buttons, bt)
-                    bt:HookScript("OnEnter", function(self)
+                    bt:HookScript(K.OnEnter, function(self)
                         StopTime()
                         local num = mainFrame.frame.lastButtonNum
                         mainFrame.buttons[num][1].ds:Show()
-                        GameTooltip:SetOwner(self, "ANCHOR_LEFT", 0, 0)
+                        GameTooltip:SetOwner(self, K.ANCHOR_LEFT, K.N_0, K.N_0)
                         GameTooltip:ClearLines()
                         GameTooltip:SetHyperlink(bt.link)
                     end)
-                    bt:HookScript("OnLeave", function(self)
+                    bt:HookScript(K.OnLeave, function(self)
                         GameTooltip:Hide()
                         StartTime()
                     end)
 
-                    bt.icon = bt:CreateTexture(nil, "BACKGROUND")
+                    bt.icon = bt:CreateTexture(nil, K.BACKGROUND)
                     bt.icon:SetAllPoints()
                     bt.icon:SetTexCoord(.07, .93, .07, .93)
                     bt.icon:SetTexture(select(5, GetItemInfoInstant(bt.itemID)))
 
                     if v.count > 1 then
                         bt.count = bt:CreateFontString()
-                        bt.count:SetFont(BIAOGE_TEXT_FONT, 13, "OUTLINE")
-                        bt.count:SetPoint("BOTTOMRIGHT", -1, 1)
+                        bt.count:SetFont(BIAOGE_TEXT_FONT, K.N_13, K.OUTLINE)
+                        bt.count:SetPoint(K.BOTTOMRIGHT, -1, 1)
                         bt.count:SetText(v.count)
                     end
 
-                    local typeID = select(6, GetItemInfoInstant(v.itemID))
-                    if typeID == 2 or typeID == 4 then
+                    local typeID = select(K.N_6, GetItemInfoInstant(v.itemID))
+                    if typeID == K.N_2 or typeID == 4 then
                         local link = v.link
                         local item = Item:CreateFromItemLink(link)
                         item:ContinueOnItemLoad(function()
                             local level = select(4, GetItemInfo(link))
                             if level then
                                 bt.level = bt:CreateFontString()
-                                bt.level:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-                                bt.level:SetPoint("BOTTOM", 1, 1)
+                                bt.level:SetFont(BIAOGE_TEXT_FONT, K.N_11, K.OUTLINE)
+                                bt.level:SetPoint(K.BOTTOM, 1, 1)
                                 bt.level:SetText(level)
                             end
                         end)
@@ -1412,10 +1535,10 @@ local function RoadMail()
             local text = L["显示拍卖行邮件"]
             local ontext
             local bt = CreateCheckButton(name, text, mainFrame, ontext)
-            bt:SetPoint("TOPLEFT", mainFrame.frame, "BOTTOMLEFT", 0, -10)
+            bt:SetPoint(K.TOPLEFT, mainFrame.frame, K.BOTTOMLEFT, K.N_0, -K.N_10)
             mainFrame.optionsButton_showAuctionMail = bt
             last = bt
-            bt:HookScript("OnClick", function(self)
+            bt:HookScript(K.OnClick, function(self)
                 local name1 = "togetherAuctionMail"
                 if self:GetChecked() then
                     BG.options["button" .. name1]:Show()
@@ -1425,10 +1548,10 @@ local function RoadMail()
                 mainFrame:UpdateAllFrame()
             end)
         end
-        -- 合并相邻的拍卖行邮件
+        -- 把位置相邻的拍卖行邮件归并到一起
         do
             local name = "togetherAuctionMail"
-            BG.options[name .. "reset"] = 0
+            BG.options[name .. "reset"] = K.N_0
             BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
             local text = L["合并相邻的拍卖行邮件"]
             local ontext = {
@@ -1436,9 +1559,9 @@ local function RoadMail()
                 L["相邻的拍卖行邮件会被合并显示为一个邮件，节省空间。"],
             }
             local bt = CreateCheckButton(name, text, mainFrame, ontext)
-            bt:SetPoint("TOPLEFT", last, "BOTTOMRIGHT", 0, 0)
+            bt:SetPoint(K.TOPLEFT, last, K.BOTTOMRIGHT, K.N_0, K.N_0)
             last = bt
-            bt:HookScript("OnClick", function(self)
+            bt:HookScript(K.OnClick, function(self)
                 mainFrame:UpdateAllFrame()
             end)
             if BiaoGe.options["showAuctionMail"] ~= 1 then
@@ -1456,9 +1579,9 @@ local function RoadMail()
                 L["没有附件的邮件，也会被显示。"],
             }
             local bt = CreateCheckButton(name, text, mainFrame, ontext)
-            bt:SetPoint("TOPLEFT", mainFrame.optionsButton_showAuctionMail, "BOTTOMLEFT", 0, -30)
+            bt:SetPoint(K.TOPLEFT, mainFrame.optionsButton_showAuctionMail, K.BOTTOMLEFT, K.N_0, -K.N_30)
             last = bt
-            bt:HookScript("OnClick", function(self)
+            bt:HookScript(K.OnClick, function(self)
                 mainFrame:UpdateAllFrame()
             end)
         end
@@ -1468,14 +1591,14 @@ end
 BG.Init(function()
     BiaoGe.mailHistory = BiaoGe.mailHistory or {}
     local mailHistory = BiaoGe.mailHistory
-    mailHistory.saveDuration = mailHistory.saveDuration or 7
-    mailHistory.OrderButtonID = mailHistory.OrderButtonID or 2
+    mailHistory.saveDuration = mailHistory.saveDuration or K.N_7
+    mailHistory.OrderButtonID = mailHistory.OrderButtonID or K.N_2
     mailHistory.Order = mailHistory.Order or 1
-    mailHistory.type = mailHistory.type or "all"
-    if mailHistory.type ~= "all" and mailHistory.type ~= "send1" and mailHistory.type ~= "send2"
-        and mailHistory.type ~= "take1" and mailHistory.type ~= "take2"
+    mailHistory.type = mailHistory.type or K.all
+    if mailHistory.type ~= K.all and mailHistory.type ~= K.send1 and mailHistory.type ~= K.send2
+        and mailHistory.type ~= K.take1 and mailHistory.type ~= K.take2
     then
-        mailHistory.type = "all"
+        mailHistory.type = K.all
     end
     mailHistory.isChooseRealm = mailHistory.isChooseRealm or 1
     EnsureCurrentCharacter()

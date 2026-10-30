@@ -3,72 +3,85 @@ local _, ns = ...
 
 local L = ns.L
 
+local C = ns.Protocol
+local SendGateway = ns.SendGateway
 local SetClassCFF = ns.SetClassCFF
 local Maxb = ns.Maxb
-local AddTexture = ns.AddTexture
 local GetItemID = ns.GetItemID
 
 
-local channel = "BiaoGeReceive"
+local channel = C.PREFIX_RECEIVE
 C_ChatInfo.RegisterAddonMessagePrefix(channel)
 for i = 1, BG.addonChannelCount do
-    local channelName = channel .. i
-    C_ChatInfo.RegisterAddonMessagePrefix(channelName)
+    C_ChatInfo.RegisterAddonMessagePrefix(channel .. i)
 end
 
 local _, class = UnitClass("player")
 local r, g, b, cff = GetClassColor(class)
 
+local function resolveBuyerColor(item)
+    if item.color then
+        local cr, cg, cb = unpack(item.color)
+        return ns.RGB_16(nil, cr, cg, cb)
+    end
+    return "FFFFFF"
+end
+
 function BG.ReceiveUI()
-    local DB = {}
+    local draft = {}
     local CreateButton
+    local mainFrame
+    local logFrame
+    local titleText
 
     -- UI
     do
         -- 主界面
-        BG.ReceiveMainFrame = CreateFrame("Frame", "BG.ReceiveFrame", UIParent, "BackdropTemplate")
+        mainFrame = CreateFrame("Frame", "BG.ReceiveFrame", UIParent, "BackdropTemplate")
+        BG.ReceiveMainFrame = mainFrame
         do
-            BG.ReceiveMainFrame:SetBackdrop({
+            mainFrame:SetBackdrop({
                 bgFile = "Interface/ChatFrame/ChatFrameBackground",
                 edgeFile = "Interface/ChatFrame/ChatFrameBackground",
                 edgeSize = 2
             })
-            BG.ReceiveMainFrame:SetBackdropColor(0, 0, 0, 0.9)
-            BG.ReceiveMainFrame:SetBackdropBorderColor(r, g, b)
-            BG.ReceiveMainFrame:SetPoint("CENTER")
-            BG.ReceiveMainFrame:SetFrameLevel(100)
-            BG.ReceiveMainFrame:SetMovable(true)
-            BG.ReceiveMainFrame:SetToplevel(true)
-            BG.ReceiveMainFrame:SetSize(300, 500)
-            BG.ReceiveMainFrame.FB = BG.FB1
-            BG.ReceiveMainFrame:SetScript("OnMouseUp", function(self)
+            mainFrame:SetBackdropColor(0, 0, 0, 0.9)
+            mainFrame:SetBackdropBorderColor(r, g, b)
+            mainFrame:SetPoint("CENTER")
+            mainFrame:SetFrameLevel(100)
+            mainFrame:SetMovable(true)
+            mainFrame:SetToplevel(true)
+            mainFrame:SetSize(300, 500)
+            mainFrame.FB = BG.FB1
+            mainFrame:SetScript("OnMouseUp", function(self)
                 self:StopMovingOrSizing()
             end)
-            BG.ReceiveMainFrame:SetScript("OnMouseDown", function(self)
+            mainFrame:SetScript("OnMouseDown", function(self)
                 BG.FrameHide(0)
                 self:StartMoving()
             end)
-            BG.ReceiveMainFrame:SetScript("OnHide", function(self)
+            mainFrame:SetScript("OnHide", function(self)
                 StaticPopup_Hide("BiaoGe_YingYongReceiveBiaoGe")
             end)
-            BG.ReceiveMainFrame:SetScript("OnShow", function(self)
+            mainFrame:SetScript("OnShow", function(self)
                 local FB = self.FB
-                BG.ReceiveMainFrame:SetWidth(BG.FBWidth[FB])
-                BG.ReceiveMainFrame:SetHeight(BG.FBHeight[FB] - 20)
-                BG.ReceiveAuctionLogFrame:SetHeight(BG.ReceiveMainFrame:GetHeight())
-                BG.ReceiveAuctionLogFrame.notText:SetShown(not next(BG.ReceiveAuctionLogFrame.buttons))
+                mainFrame:SetWidth(BG.FBWidth[FB])
+                mainFrame:SetHeight(BG.FBHeight[FB] - 20)
+                logFrame:SetHeight(mainFrame:GetHeight())
+                logFrame.notText:SetShown(not next(logFrame.buttons))
             end)
             tinsert(UISpecialFrames, "BG.ReceiveFrame")
 
-            BG.CreateCloseButton(BG.ReceiveMainFrame)
-            BG.ReceiveMainFrame.CloseButton:SetSize(40, 40)
+            BG.CreateCloseButton(mainFrame)
+            mainFrame.CloseButton:SetSize(40, 40)
 
-            local TitleText = BG.ReceiveMainFrame:CreateFontString()
-            TitleText:SetPoint("TOP", BG.ReceiveMainFrame, "TOP", 0, -10)
+            local TitleText = mainFrame:CreateFontString()
+            TitleText:SetPoint("TOP", mainFrame, "TOP", 0, -10)
             TitleText:SetFont(BIAOGE_TEXT_FONT, 16, "OUTLINE")
-            BG.ReceiveMainFrameTitle = TitleText
+            titleText = TitleText
+            BG.ReceiveMainFrameTitle = titleText
 
-            local l = BG.ReceiveMainFrame:CreateLine()
+            local l = mainFrame:CreateLine()
             l:SetColorTexture(r, g, b)
             l:SetStartPoint("BOTTOMLEFT", TitleText, -20, -2)
             l:SetEndPoint("BOTTOMRIGHT", TitleText, 20, -2)
@@ -77,31 +90,32 @@ function BG.ReceiveUI()
 
         -- 拍卖记录
         do
-            BG.ReceiveAuctionLogFrame = CreateFrame("Frame", nil, BG.ReceiveMainFrame, "BackdropTemplate")
+            logFrame = CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
+            BG.ReceiveAuctionLogFrame = logFrame
             do
-                BG.ReceiveAuctionLogFrame:SetBackdrop(BG.ReceiveMainFrame:GetBackdrop())
-                BG.ReceiveAuctionLogFrame:SetBackdropColor(BG.ReceiveMainFrame:GetBackdropColor())
-                BG.ReceiveAuctionLogFrame:SetBackdropBorderColor(r, g, b)
-                BG.ReceiveAuctionLogFrame:SetSize(220, BG.ReceiveMainFrame:GetHeight())
-                BG.ReceiveAuctionLogFrame:SetPoint("TOPRIGHT", BG.ReceiveMainFrame, "TOPLEFT", 1, 0)
-                BG.ReceiveAuctionLogFrame:EnableMouse(true)
-                BG.ReceiveAuctionLogFrame.buttons = {}
-                BG.ReceiveAuctionLogFrame:SetScript("OnMouseUp", function(self)
-                    BG.ReceiveMainFrame:GetScript("OnMouseUp")(BG.ReceiveMainFrame)
+                logFrame:SetBackdrop(mainFrame:GetBackdrop())
+                logFrame:SetBackdropColor(mainFrame:GetBackdropColor())
+                logFrame:SetBackdropBorderColor(r, g, b)
+                logFrame:SetSize(220, mainFrame:GetHeight())
+                logFrame:SetPoint("TOPRIGHT", mainFrame, "TOPLEFT", 1, 0)
+                logFrame:EnableMouse(true)
+                logFrame.buttons = {}
+                logFrame:SetScript("OnMouseUp", function(self)
+                    mainFrame:GetScript("OnMouseUp")(mainFrame)
                 end)
-                BG.ReceiveAuctionLogFrame:SetScript("OnMouseDown", function(self)
-                    BG.ReceiveMainFrame:GetScript("OnMouseDown")(BG.ReceiveMainFrame)
+                logFrame:SetScript("OnMouseDown", function(self)
+                    mainFrame:GetScript("OnMouseDown")(mainFrame)
                 end)
 
-                local t = BG.ReceiveAuctionLogFrame:CreateFontString()
+                local t = logFrame:CreateFontString()
                 t:SetFont(BIAOGE_TEXT_FONT, 16, "OUTLINE")
-                t:SetPoint("TOP", BG.ReceiveAuctionLogFrame, "TOP", 0, -8)
+                t:SetPoint("TOP", logFrame, "TOP", 0, -8)
                 t:SetText(L["拍卖记录"])
             end
 
             -- 滚动框
             do
-                local frame = CreateFrame("Frame", nil, BG.ReceiveAuctionLogFrame, "BackdropTemplate")
+                local frame = CreateFrame("Frame", nil, logFrame, "BackdropTemplate")
                 frame:SetBackdrop({
                     edgeFile = "Interface/ChatFrame/ChatFrameBackground",
                     edgeSize = 1,
@@ -111,7 +125,7 @@ function BG.ReceiveUI()
                 frame:SetPoint("TOPLEFT", 5, -30)
                 frame:SetPoint("BOTTOMRIGHT", -5, 5)
                 frame:EnableMouse(true)
-                BG.ReceiveAuctionLogFrame.frame = frame
+                logFrame.frame = frame
 
                 local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
                 scroll:SetPoint("TOPLEFT", 5, -5)
@@ -120,14 +134,14 @@ function BG.ReceiveUI()
                 frame.scroll = scroll
                 BG.CreateSrollBarBackdrop(scroll.ScrollBar)
                 BG.HookScrollBarShowOrHide(scroll)
-                BG.ReceiveAuctionLogFrame.scroll = scroll
+                logFrame.scroll = scroll
 
                 local child = CreateFrame("Frame", nil, scroll)
                 child:SetAllPoints()
                 child:SetWidth(scroll:GetWidth())
                 child:SetHeight(scroll:GetHeight())
                 scroll:SetScrollChild(child)
-                BG.ReceiveAuctionLogFrame.child = child
+                logFrame.child = child
 
                 local _f = CreateFrame("Frame", nil, frame)
                 _f:SetSize(1, 1)
@@ -141,84 +155,85 @@ function BG.ReceiveUI()
                 t:SetText(L["没有自动拍卖记录。"])
                 t:SetWidth(scroll:GetWidth())
                 t:Hide()
-                BG.ReceiveAuctionLogFrame.notText = t
+                logFrame.notText = t
             end
 
             -- 列表内容
-            local buttons = BG.ReceiveAuctionLogFrame.buttons
+            local buttons = logFrame.buttons
             function CreateButton(num, v)
                 local bts = {}
-                local width = BG.ReceiveAuctionLogFrame.child:GetWidth()
+                local width = logFrame.child:GetWidth()
                 local link = v.zhuangbei
                 local itemID = GetItemID(link)
                 local icon, typeID = select(5, GetItemInfoInstant(link))
-                local r, g, b = GetItemQualityColor(v.quality)
+                local cr, cg, cb = GetItemQualityColor(v.quality)
                 bts.link = link
                 bts.itemID = itemID
                 bts.num = num
                 -- 主框架
                 do
-                    local f = CreateFrame("Frame", nil, BG.ReceiveAuctionLogFrame.child, "BackdropTemplate")
-                    f:SetSize(width, 32)
+                    local rowFrame = CreateFrame("Frame", nil, logFrame.child, "BackdropTemplate")
+                    rowFrame:SetSize(width, 32)
                     if not next(buttons) then
-                        f:SetPoint("TOPLEFT")
+                        rowFrame:SetPoint("TOPLEFT")
                     else
-                        f:SetPoint("TOPLEFT", buttons[#buttons].frame, "BOTTOMLEFT", 0, 0)
+                        rowFrame:SetPoint("TOPLEFT", buttons[#buttons].frame, "BOTTOMLEFT", 0, 0)
                     end
-                    f.link = link
-                    bts.frame = f
-                    f:SetScript("OnEnter", function(self)
-                        GameTooltip:SetOwner(BG.ReceiveAuctionLogFrame.frame.tooltip, "ANCHOR_BOTTOMRIGHT", 0, 0)
+                    rowFrame.link = link
+                    bts.frame = rowFrame
+                    rowFrame:SetScript("OnEnter", function(self)
+                        GameTooltip:SetOwner(logFrame.frame.tooltip, "ANCHOR_BOTTOMRIGHT", 0, 0)
                         GameTooltip:ClearLines()
-                        local itemID = GetItemInfoInstant(link)
-                        if itemID then
+                        local infoItemID = GetItemInfoInstant(link)
+                        if infoItemID then
                             GameTooltip:SetHyperlink(BG.SetSpecIDToLink(link))
                         end
                         bts.ds:Show()
                     end)
-                    f:SetScript("OnLeave", function(self)
+                    rowFrame:SetScript("OnLeave", function(self)
                         GameTooltip:Hide()
                         bts.ds:Hide()
                     end)
 
-                    local tex = bts.frame:CreateTexture(nil, "BACKGROUND")
-                    tex:SetAllPoints()
+                    local stripe = rowFrame:CreateTexture(nil, "BACKGROUND")
+                    stripe:SetAllPoints()
                     if num % 2 == 0 then
-                        tex:SetColorTexture(.5, .5, .5, .15)
+                        stripe:SetColorTexture(.5, .5, .5, .15)
                     else
-                        tex:SetColorTexture(0, 0, 0, .25)
+                        stripe:SetColorTexture(0, 0, 0, .25)
                     end
-                    bts.tex = tex
+                    bts.tex = stripe
 
-                    local tex = bts.frame:CreateTexture()
-                    tex:SetAllPoints()
-                    tex:SetColorTexture(.5, .5, .5, .5)
-                    tex:Hide()
-                    bts.ds = tex
+                    local highlight = rowFrame:CreateTexture()
+                    highlight:SetAllPoints()
+                    highlight:SetColorTexture(.5, .5, .5, .5)
+                    highlight:Hide()
+                    bts.ds = highlight
 
                     tinsert(buttons, bts)
                 end
                 -- 图标和装等
                 do
-                    local f = CreateFrame("Frame", nil, bts.frame, "BackdropTemplate")
-                    f:SetBackdrop({
+                    local iconFrame = CreateFrame("Frame", nil, bts.frame, "BackdropTemplate")
+                    iconFrame:SetBackdrop({
                         edgeFile = "Interface/ChatFrame/ChatFrameBackground",
                         edgeSize = 1,
                     })
-                    f:SetBackdropBorderColor(r, g, b)
-                    f:SetSize(bts.frame:GetHeight() - 2, bts.frame:GetHeight() - 2)
-                    f:SetPoint("LEFT")
-                    bts.iconFrame = f
-                    local tex = f:CreateTexture(nil, "BACKGROUND")
-                    tex:SetAllPoints()
-                    tex:SetTexture(icon)
-                    tex:SetTexCoord(unpack(BG.iconTexCoord))
-                    bts.icon = tex
-                    f.level = f:CreateFontString()
-                    f.level:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
-                    f.level:SetPoint("BOTTOM", bts.icon, 0, 1)
-                    f.level:SetText((typeID == 2 or typeID == 4) and v.itemlevel or nil)
-                    f.level:SetTextColor(r, g, b)
+                    iconFrame:SetBackdropBorderColor(cr, cg, cb)
+                    iconFrame:SetSize(bts.frame:GetHeight() - 2, bts.frame:GetHeight() - 2)
+                    iconFrame:SetPoint("LEFT")
+                    bts.iconFrame = iconFrame
+                    local iconTexture = iconFrame:CreateTexture(nil, "BACKGROUND")
+                    iconTexture:SetAllPoints()
+                    iconTexture:SetTexture(icon)
+                    iconTexture:SetTexCoord(unpack(BG.iconTexCoord))
+                    bts.icon = iconTexture
+                    iconFrame.level = iconFrame:CreateFontString()
+                    iconFrame.level:SetFont(BIAOGE_TEXT_FONT, 11, "OUTLINE")
+                    iconFrame.level:SetPoint("BOTTOM", bts.icon, 0, 1)
+                    local hasLevel = typeID == 2 or typeID == 4
+                    iconFrame.level:SetText(hasLevel and v.itemlevel or nil)
+                    iconFrame.level:SetTextColor(cr, cg, cb)
                     if v.bindType == 2 then
                         local text = bts.iconFrame:CreateFontString()
                         text:SetFont(BIAOGE_TEXT_FONT, 10, "OUTLINE")
@@ -229,44 +244,40 @@ function BG.ReceiveUI()
                 end
                 -- 装备
                 do
-                    local text = bts.frame:CreateFontString()
-                    text:SetFont(BIAOGE_TEXT_FONT, 14, "OUTLINE")
-                    text:SetWidth(width - bts.icon:GetWidth())
-                    text:SetPoint("TOPLEFT", bts.icon, "TOPRIGHT", 1, 0)
-                    text:SetText(link:gsub("%[", ""):gsub("%]", ""))
-                    text:SetJustifyH("LEFT")
-                    text:SetWordWrap(false)
-                    bts.item = text
+                    local itemText = bts.frame:CreateFontString()
+                    itemText:SetFont(BIAOGE_TEXT_FONT, 14, "OUTLINE")
+                    itemText:SetWidth(width - bts.icon:GetWidth())
+                    itemText:SetPoint("TOPLEFT", bts.icon, "TOPRIGHT", 1, 0)
+                    itemText:SetText(link:gsub("%[", ""):gsub("%]", ""))
+                    itemText:SetJustifyH("LEFT")
+                    itemText:SetWordWrap(false)
+                    bts.item = itemText
                 end
                 -- 买家和金额
                 do
-                    local text = bts.frame:CreateFontString()
-                    text:SetFont(BIAOGE_TEXT_FONT, 14, "OUTLINE")
-                    text:SetPoint("BOTTOMLEFT", bts.icon, "BOTTOMRIGHT", 1, 0)
-                    text:SetWidth(width - bts.icon:GetWidth())
-                    text.LiuPaiText = BG.STC_r1(L["<流拍>"])
+                    local moneyText = bts.frame:CreateFontString()
+                    moneyText:SetFont(BIAOGE_TEXT_FONT, 14, "OUTLINE")
+                    moneyText:SetPoint("BOTTOMLEFT", bts.icon, "BOTTOMRIGHT", 1, 0)
+                    moneyText:SetWidth(width - bts.icon:GetWidth())
+                    moneyText.LiuPaiText = BG.STC_r1(L["<流拍>"])
                     if v.type == 1 then
-                        local color = "FFFFFF"
-                        if v.color then
-                            local r, g, b = unpack(v.color)
-                            color = ns.RGB_16(nil, r, g, b)
-                        end
-                        text:SetText(format("%s |cff%s%s|r", BG.FormatNumber(v.jine, 2), color, v.maijia))
+                        local color = resolveBuyerColor(v)
+                        moneyText:SetText(format("%s |cff%s%s|r", BG.FormatNumber(v.jine, 2), color, v.maijia))
                     else
-                        text:SetText(text.LiuPaiText)
+                        moneyText:SetText(moneyText.LiuPaiText)
                     end
-                    text:SetJustifyH("LEFT")
-                    text:SetWordWrap(false)
-                    bts.money = text
+                    moneyText:SetJustifyH("LEFT")
+                    moneyText:SetWordWrap(false)
+                    bts.money = moneyText
                 end
             end
         end
 
         -- 使用该表格
         do
-            local bt = BG.CreateButton(BG.ReceiveMainFrame)
+            local bt = BG.CreateButton(mainFrame)
             bt:SetSize(120, 25)
-            bt:SetPoint("BOTTOMRIGHT", BG.ReceiveMainFrame, "BOTTOM", -10, 20)
+            bt:SetPoint("BOTTOMRIGHT", mainFrame, "BOTTOM", -10, 20)
             bt:SetText(L["使用该表格"])
             bt:SetScript("OnClick", function(self)
                 BG.PlaySound(1)
@@ -284,29 +295,29 @@ function BG.ReceiveUI()
                     }
                 end
                 StaticPopupDialogs["BiaoGe_YingYongReceiveBiaoGe"].OnAccept = function()
-                    local FB = DB.FB
+                    local FB = draft.FB
                     BG.ClearBiaoGe("biaoge", FB)
                     BG.PairFBItem(function(item, buyer, money, b, i)
-                        item:SetText(DB["boss" .. b]["zhuangbei" .. i] or "")
-                        buyer:SetText(DB["boss" .. b]["maijia" .. i] or "")
+                        item:SetText(draft["boss" .. b]["zhuangbei" .. i] or "")
+                        buyer:SetText(draft["boss" .. b]["maijia" .. i] or "")
                         buyer:SetCursorPosition(0)
-                        if DB["boss" .. b]["color" .. i] then
-                            buyer:SetTextColor(unpack(DB["boss" .. b]["color" .. i]))
+                        if draft["boss" .. b]["color" .. i] then
+                            buyer:SetTextColor(unpack(draft["boss" .. b]["color" .. i]))
                         end
-                        money:SetText(DB["boss" .. b]["jine" .. i] or "")
-                        local qiankuan = DB["boss" .. b]["qiankuan" .. i]
+                        money:SetText(draft["boss" .. b]["jine" .. i] or "")
+                        local qiankuan = draft["boss" .. b]["qiankuan" .. i]
                         if qiankuan then
                             BiaoGe[FB]["boss" .. b]["qiankuan" .. i] = qiankuan
                             BG.Frame[FB]["boss" .. b]["qiankuan" .. i]:Show()
                         end
                     end, nil, true, FB)
-                    if next(DB.auctionLog) then
+                    if next(draft.auctionLog) then
                         BiaoGe[FB].auctionLog = {}
-                        for k, v in pairs(DB.auctionLog) do
+                        for k, v in pairs(draft.auctionLog) do
                             BiaoGe[FB].auctionLog[k] = BG.Copy(v)
                         end
                     end
-                    BG.ReceiveMainFrame:Hide()
+                    mainFrame:Hide()
                     BG.MainFrame:Show()
                     BG.ClickTabButton(BG.FBMainFrameTabNum)
                     BG.ClickFBbutton(FB)
@@ -319,25 +330,25 @@ function BG.ReceiveUI()
 
         -- 二级
         for i, FB in ipairs(BG.FBtable) do
-            BG["ReceiveFrame" .. FB] = CreateFrame("Frame", "BG.ReceiveFrame" .. FB, BG.ReceiveMainFrame)
+            BG["ReceiveFrame" .. FB] = CreateFrame("Frame", "BG.ReceiveFrame" .. FB, mainFrame)
             BG["ReceiveFrame" .. FB]:Hide()
         end
     end
 
-    -- 把分享表格文字转换为链接
+    -- 将分享出来的表格文本渲染成可点击链接
     do
         local function ChangSendLink(self, event, msg, ...)
             local ver
             if strfind(msg, "^%[BiaoGe:.*%]$") then
                 ver = 1
-            elseif strfind(msg, "^%[!BiaoGe:.*%]$") then
+            elseif strfind(msg, "^%[" .. C.TAG_BIAOGE .. ":.*%]$") then
                 ver = 2
             end
             if not ver then return end
             msg = strtrim(msg, "[]")
             local _, text = strsplit(":", msg, 2)
             if text then
-                local newmsg = "|cff00BFFF|Hgarrmission:" .. msg .. "|h[" .. text .. "]|h|r"
+                local newmsg = "|cff00BFFF" .. C.ITEM_PROTOCOL .. msg .. "|h[" .. text .. "]|h|r"
                 if ver == 1 then
                     newmsg = newmsg .. L["|cffff0000（该链接为旧版本表格，已失效）"]
                 end
@@ -345,27 +356,32 @@ function BG.ReceiveUI()
             end
         end
 
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_YELL", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_OFFICER", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_PARTY", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_PARTY_LEADER", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID_LEADER", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_SAY", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER_INFORM", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_WHISPER", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_BN_WHISPER_INFORM", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_INSTANCE_CHAT", ChangSendLink)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_INSTANCE_CHAT_LEADER", ChangSendLink)
+        local chatEvents = {
+            "CHAT_MSG_CHANNEL",
+            "CHAT_MSG_YELL",
+            "CHAT_MSG_GUILD",
+            "CHAT_MSG_OFFICER",
+            "CHAT_MSG_PARTY",
+            "CHAT_MSG_PARTY_LEADER",
+            "CHAT_MSG_RAID",
+            "CHAT_MSG_RAID_LEADER",
+            "CHAT_MSG_SAY",
+            "CHAT_MSG_WHISPER",
+            "CHAT_MSG_WHISPER_INFORM",
+            "CHAT_MSG_BN_WHISPER",
+            "CHAT_MSG_BN_WHISPER_INFORM",
+            "CHAT_MSG_INSTANCE_CHAT",
+            "CHAT_MSG_INSTANCE_CHAT_LEADER",
+        }
+        for _, chatEvent in ipairs(chatEvents) do
+            ChatFrame_AddMessageEventFilter(chatEvent, ChangSendLink)
+        end
     end
 
     local cd = {}
     hooksecurefunc("SetItemRef", function(link)
         local _, prefix, text = strsplit(":", link, 3)
-        if not (prefix == "!BiaoGe" and text) then return end
+        if not (prefix == C.TAG_BIAOGE and text) then return end
         local player, server, BiaoGeType, FB, title = strsplit("-", text)
         if BG.ValueInTable(BG.FBtable, FB) then
             if IsShiftKeyDown() then
@@ -382,14 +398,14 @@ function BG.ReceiveUI()
                 end
                 text = BiaoGeType .. "-" .. FB .. "-" .. title
                 local fullName = player .. "-" .. server
-                ChatThrottleLib:SendAddonMessage("NORMAL", channel, text, "WHISPER", fullName)
+                SendGateway.Throttled(channel, text, "WHISPER", fullName)
                 BG.SendSystemMessage(format(L["已向%s发送请求%s。"], SetClassCFF(fullName), ""))
             end
         end
     end)
 
     -- 发送和接收表格数据
-    -- 1级分隔：^^ 基本信息 表格内容 拍卖记录
+    -- 第一层用^^切分：基本信息、表格内容、拍卖记录三段
     -- 2级分割：&&
     -- 3级分割：¦
     local receiveStart = {}
@@ -397,11 +413,11 @@ function BG.ReceiveUI()
     local receiveStart2 = {}
     local receiveCodes2 = {}
     function BG.ResetReceiveBiaoGe(FB)
-        BG.ReceiveMainFrame:Hide()
-        wipe(DB)
-        DB.auctionLog = {}
+        mainFrame:Hide()
+        wipe(draft)
+        draft.auctionLog = {}
         for b = 1, Maxb[FB] + 2 do
-            DB["boss" .. b] = {}
+            draft["boss" .. b] = {}
             for i = 1, BG.GetMaxi(FB, b) do
                 if BG.ReceiveFrame[FB]["boss" .. b]["zhuangbei" .. i] then
                     BG.ReceiveFrame[FB]["boss" .. b]["zhuangbei" .. i]:SetText("")
@@ -410,72 +426,35 @@ function BG.ReceiveUI()
                     BG.ReceiveFrame[FB]["boss" .. b]["jine" .. i]:SetText("")
                     BG.ReceiveFrame[FB]["boss" .. b]["qiankuan" .. i]:Hide()
 
-                    DB["boss" .. b]["zhuangbei" .. i] = ""
-                    DB["boss" .. b]["maijia" .. i] = ""
-                    DB["boss" .. b]["color" .. i] = { 1, 1, 1 }
-                    DB["boss" .. b]["jine" .. i] = ""
-                    DB["boss" .. b]["qiankuan" .. i] = nil
+                    draft["boss" .. b]["zhuangbei" .. i] = ""
+                    draft["boss" .. b]["maijia" .. i] = ""
+                    draft["boss" .. b]["color" .. i] = { 1, 1, 1 }
+                    draft["boss" .. b]["jine" .. i] = ""
+                    draft["boss" .. b]["qiankuan" .. i] = nil
                 end
             end
         end
-        for i = #BG.ReceiveAuctionLogFrame.buttons, 1, -1 do
-            BG.ReceiveAuctionLogFrame.buttons[i].frame:Hide()
-            tremove(BG.ReceiveAuctionLogFrame.buttons, i)
+        for index = #logFrame.buttons, 1, -1 do
+            logFrame.buttons[index].frame:Hide()
+            tremove(logFrame.buttons, index)
         end
-        BG.ReceiveAuctionLogFrame.notText:Hide()
+        logFrame.notText:Hide()
     end
 
-    local function GetColorStr(tbl)
-        local c1, c2, c3 = "", "", ""
-        if type(tbl) == "table" then
-            c1, c2, c3 = unpack(tbl)
-            c1 = format("%.2f", c1)
-            c2 = format("%.2f", c2)
-            c3 = format("%.2f", c3)
-        end
-        return c1, c2, c3
-    end
-    local function BuildCode(db, FB, DT, title)
-        if not (FB and DT and title) then return end
-        local str = format("%s&&%s&&%s^^", FB, DT, title)
-        local FBstr = ""
-        for b = 1, Maxb[FB] + 2 do
-            for i = 1, BG.GetMaxi(FB, b) do
-                local item = db["boss" .. b]["zhuangbei" .. i] or ""
-                local buyer = db["boss" .. b]["maijia" .. i] or ""
-                local money = db["boss" .. b]["jine" .. i] or ""
-                local qk = db["boss" .. b]["qiankuan" .. i] or ""
-                local c1, c2, c3 = GetColorStr(db["boss" .. b]["color" .. i])
-                if item ~= "" or buyer ~= "" or money ~= "" or qk ~= "" then
-                    FBstr = FBstr .. format("%s¦%s¦%s¦%s¦%s¦%s¦%s¦%s¦%s&&",
-                        b, i, item, buyer, money,
-                        qk, c1, c2, c3)
-                end
+    local bossNumeric = { true, true, false, false, false, true, true, true, true }
+    local logNumeric = { true, false, true, true, true, false, false, true, true, true }
+    local function normalizeFields(fields, numericMask)
+        for index in ipairs(numericMask) do
+            if numericMask[index] then
+                fields[index] = tonumber(fields[index])
             end
         end
-        str = str .. FBstr .. "^^"
-        local logStr = ""
-        if db.auctionLog then
-            for i, log in ipairs(db.auctionLog) do
-                local c1, c2, c3 = GetColorStr(log.color)
-                logStr = logStr .. format("%s¦%s¦%s¦%s¦%s¦%s¦%s¦%s¦%s¦%s&&",
-                    log.type or "",
-                    log.zhuangbei or "",
-                    log.itemlevel or "",
-                    log.quality or "",
-                    log.bindType or "",
-                    log.maijia or "",
-                    log.jine or "",
-                    c1, c2, c3)
-            end
-        end
-        str = str .. logStr .. "^^"
-        str = C_EncodingUtil.CompressString(str)
-        return ns.Encode(str)
+        return unpack(fields)
     end
+
     local function ReceiveFinish(sender, codes)
         local code = table.concat(codes)
-        code = code:match("^!BIAOGE!(.+)!END!$")
+        code = code:match("^" .. C.FRAME_BEGIN .. "(.+)" .. C.FRAME_END .. "$")
         if not code then return end
         local str
         if ns.IsBase64(code) then
@@ -483,52 +462,41 @@ function BG.ReceiveUI()
         else
             return
         end
-        local info, biaoge, log = BG.Split("^^", str)
-        local FB, DT, title = BG.Split("&&", info)
+        local info, biaoge, log = BG.Split(C.SEP_SECTION, str)
+        local FB, DT, title = BG.Split(C.SEP_ROW, info)
         DT = tonumber(DT)
         if FB and DT and title then
             BG.CreateFBUI(FB, "Receive")
-            DB.FB = FB
-            DB.DT = DT
-            DB.title = title
-            for _, bossStr in ipairs({ BG.Split("&&", biaoge) }) do
+            draft.FB = FB
+            draft.DT = DT
+            draft.title = title
+            for _, bossStr in ipairs({ BG.Split(C.SEP_ROW, biaoge) }) do
                 if bossStr and bossStr ~= "" then
+                    local bossFields = { BG.Split(C.SEP_FIELD, bossStr) }
                     local b, i, item, buyer, money,
-                    qk, c1, c2, c3 = BG.Split("¦", bossStr)
-                    b = tonumber(b)
-                    i = tonumber(i)
-                    qk = tonumber(qk)
-                    c1 = tonumber(c1)
-                    c2 = tonumber(c2)
-                    c3 = tonumber(c3)
-                    if b and i and DB["boss" .. b] then
-                        DB["boss" .. b]["zhuangbei" .. i] = item
-                        DB["boss" .. b]["maijia" .. i] = buyer
-                        DB["boss" .. b]["jine" .. i] = money
-                        DB["boss" .. b]["qiankuan" .. i] = qk
+                    qk, c1, c2, c3 = normalizeFields(bossFields, bossNumeric)
+                    if b and i and draft["boss" .. b] then
+                        draft["boss" .. b]["zhuangbei" .. i] = item
+                        draft["boss" .. b]["maijia" .. i] = buyer
+                        draft["boss" .. b]["jine" .. i] = money
+                        draft["boss" .. b]["qiankuan" .. i] = qk
                         if c1 and c2 and c3 then
-                            DB["boss" .. b]["color" .. i] = { c1, c2, c3 }
+                            draft["boss" .. b]["color" .. i] = { c1, c2, c3 }
                         end
                     end
                 end
             end
-            for _, bossStr in ipairs({ BG.Split("&&", log) }) do
+            for _, bossStr in ipairs({ BG.Split(C.SEP_ROW, log) }) do
                 if bossStr and bossStr ~= "" then
+                    local logFields = { BG.Split(C.SEP_FIELD, bossStr) }
                     local type, zhuangbei, itemlevel, quality, bindType,
-                    maijia, jine, c1, c2, c3 = BG.Split("¦", bossStr)
-                    type = tonumber(type)
-                    itemlevel = tonumber(itemlevel)
-                    quality = tonumber(quality)
-                    bindType = tonumber(bindType)
-                    c1 = tonumber(c1)
-                    c2 = tonumber(c2)
-                    c3 = tonumber(c3)
+                    maijia, jine, c1, c2, c3 = normalizeFields(logFields, logNumeric)
                     if type and zhuangbei and itemlevel and quality and bindType and maijia and jine and class then
                         local color = { 1, 1, 1 }
                         if c1 and c2 and c3 then
                             color = { c1, c2, c3 }
                         end
-                        tinsert(DB.auctionLog, {
+                        tinsert(draft.auctionLog, {
                             type = type,
                             zhuangbei = zhuangbei,
                             itemlevel = itemlevel,
@@ -545,14 +513,14 @@ function BG.ReceiveUI()
             for b = 1, Maxb[FB] + 2 do
                 for i = 1, BG.GetMaxi(FB, b) do
                     if BG.ReceiveFrame[FB]["boss" .. b]["zhuangbei" .. i] then
-                        BG.ReceiveFrame[FB]["boss" .. b]["zhuangbei" .. i]:SetText(DB["boss" .. b]["zhuangbei" .. i] or "")
-                        BG.ReceiveFrame[FB]["boss" .. b]["maijia" .. i]:SetText(DB["boss" .. b]["maijia" .. i] or "")
+                        BG.ReceiveFrame[FB]["boss" .. b]["zhuangbei" .. i]:SetText(draft["boss" .. b]["zhuangbei" .. i] or "")
+                        BG.ReceiveFrame[FB]["boss" .. b]["maijia" .. i]:SetText(draft["boss" .. b]["maijia" .. i] or "")
                         BG.ReceiveFrame[FB]["boss" .. b]["maijia" .. i]:SetCursorPosition(0)
-                        if DB["boss" .. b]["color" .. i] then
-                            BG.ReceiveFrame[FB]["boss" .. b]["maijia" .. i]:SetTextColor(unpack(DB["boss" .. b]["color" .. i]))
+                        if draft["boss" .. b]["color" .. i] then
+                            BG.ReceiveFrame[FB]["boss" .. b]["maijia" .. i]:SetTextColor(unpack(draft["boss" .. b]["color" .. i]))
                         end
-                        BG.ReceiveFrame[FB]["boss" .. b]["jine" .. i]:SetText(DB["boss" .. b]["jine" .. i] or "")
-                        local qiankuan = DB["boss" .. b]["qiankuan" .. i]
+                        BG.ReceiveFrame[FB]["boss" .. b]["jine" .. i]:SetText(draft["boss" .. b]["jine" .. i] or "")
+                        local qiankuan = draft["boss" .. b]["qiankuan" .. i]
                         if qiankuan then
                             BG.ReceiveFrame[FB]["boss" .. b]["qiankuan" .. i]:Show()
                             BG.ReceiveFrame[FB]["boss" .. b]["qiankuan" .. i].qiankuan = qiankuan
@@ -560,20 +528,20 @@ function BG.ReceiveUI()
                     end
                 end
             end
-            for i, log in ipairs(DB.auctionLog) do
-                CreateButton(i, log)
+            for index, entry in ipairs(draft.auctionLog) do
+                CreateButton(index, entry)
             end
 
             BG.MainFrame:Hide()
-            BG.ReceiveMainFrame.FB = FB
-            BG.ReceiveMainFrame:Show()
+            mainFrame.FB = FB
+            mainFrame:Show()
 
-            for i, FB in ipairs(BG.FBtable) do
-                BG["ReceiveFrame" .. FB]:Hide()
+            for _, frameFB in ipairs(BG.FBtable) do
+                BG["ReceiveFrame" .. frameFB]:Hide()
             end
             BG["ReceiveFrame" .. FB]:Show()
 
-            BG.ReceiveMainFrameTitle:SetText(title)
+            titleText:SetText(title)
             BG.SendSystemMessage(format(L["|cff00ff00已成功接收%s的表格。"], SetClassCFF(sender)))
         end
     end
@@ -583,25 +551,25 @@ function BG.ReceiveUI()
         local prefix, msg, distType, sender = ...
         if distType == "WHISPER" then
             if prefix == channel then
-                if msg:match("^!BIAOGE!") then
+                if msg:match("^" .. C.FRAME_BEGIN) then
                     receiveStart[sender] = true
                     wipe(receiveCodes)
                 end
                 if receiveStart[sender] then
                     tinsert(receiveCodes, msg)
-                    if msg:match("!END!$") then
+                    if msg:match(C.FRAME_END .. "$") then
                         receiveStart[sender] = nil
                         ReceiveFinish(sender, receiveCodes)
                     end
                 end
             elseif prefix:match(channel .. '(%d+)') then
-                if msg:match("^!BIAOGE!") then
+                if msg:match("^" .. C.FRAME_BEGIN) then
                     receiveStart2[sender] = true
                     wipe(receiveCodes2)
                 end
                 if receiveStart2[sender] then
                     tinsert(receiveCodes2, msg)
-                    if msg:match("!END!$") then
+                    if msg:match(C.FRAME_END .. "$") then
                         ReceiveFinish(sender, receiveCodes2)
                         BG.After(2, function()
                             receiveStart2[sender] = nil

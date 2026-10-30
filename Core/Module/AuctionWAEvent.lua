@@ -2,21 +2,60 @@ if BG.IsBlackListPlayer then return end
 local addonName, ns = ...
 local LibBG = ns.LibBG
 local L = ns.L
+local C = ns.Protocol
+local SendGateway = ns.SendGateway
 local print = print
 local After = C_Timer.After
 local LibCustomGlow = LibStub("LibCustomGlow-1.0")
-local auctionIdKey = "auctionID"
 local previewAuctionID = -1
 BG.Init(function()
- local font = BIAOGE_TEXT_FONT or STANDARD_TEXT_FONT
+ local typeface = BIAOGE_TEXT_FONT or STANDARD_TEXT_FONT
  local wa = BGA.aura_env
+ local Wire = wa.Wire
+ local auctionIdKey = Wire.auctionIdKey
+ local function AcceptsBid(slot, money)
+  return slot.start and money >= slot.money or money > slot.money
+ end
+ local function buildTopButton(ownerFrame, spec)
+  local btn = CreateFrame("Button", nil, ownerFrame)
+  btn:SetNormalFontObject(BGA.FontGreen15)
+  btn:SetHighlightFontObject(BGA.FontWhite15)
+  btn:SetDisabledFontObject(BGA.FontDis15)
+  if spec.anchor then
+   btn:SetPoint(spec.anchor, spec.x, spec.y)
+  end
+  if spec.text then
+   btn:SetText(spec.text)
+   btn:SetSize(btn:GetFontString():GetWidth(), 18)
+  end
+  if spec.levelOffset then
+   btn:SetFrameLevel(btn:GetParent():GetFrameLevel() + spec.levelOffset)
+  end
+  if spec.clickType then
+   btn:RegisterForClicks(spec.clickType)
+  end
+  if spec.offset then
+   btn.offset = spec.offset
+  end
+  btn.owner = ownerFrame
+  if spec.onClick then
+   btn:SetScript("OnClick", spec.onClick)
+  end
+  if spec.onEnter then
+   btn:SetScript("OnEnter", spec.onEnter)
+  end
+  if spec.onLeave then
+   btn:SetScript("OnLeave", spec.onLeave)
+  end
+  return btn
+ end
  local function createMenuItem(parentFrame, text, onClickFunc)
   local button = CreateFrame("Button", nil, parentFrame)
   button:SetNormalFontObject(BGA.FontWhite15)
   button:SetText(text)
-  local fontString = button:GetFontString()
-  local width = fontString:GetWidth() + 30
-  fontString:SetJustifyH("LEFT")
+  local label = button:GetFontString()
+  local width = label:GetWidth() + 30
+  label:SetJustifyH("LEFT")
   button:SetSize(width, 20)
   button:SetPoint("TOPLEFT", parentFrame, "TOPLEFT", 0, -(#parentFrame.buttons * 20 + 10))
   button.owner = parentFrame.owner
@@ -24,7 +63,7 @@ BG.Init(function()
   parentFrame:SetHeight(#parentFrame.buttons * 20 + 20)
   parentFrame:SetWidth(max(width, parentFrame:GetWidth() or 0))
   if onClickFunc then
-   fontString:SetTextColor(1, 1, 1)
+   label:SetTextColor(1, 1, 1)
    button:SetScript("OnClick", function(self)
     onClickFunc(self)
     parentFrame:Hide()
@@ -35,19 +74,19 @@ BG.Init(function()
    highlightTex:SetVertexColor(1, .82, 0)
    button:SetHighlightTexture(highlightTex)
   else
-   fontString:SetTextColor(1, .82, 0)
+   label:SetTextColor(1, .82, 0)
    button:Disable()
   end
   return button
  end
  function wa.ShowMenu(self)
-  local frame = self.owner
-  if frame.menuFrame and frame.menuFrame:IsVisible() then
-   frame.menuFrame:Hide()
+  local slot = self.owner
+  if slot.menuFrame and slot.menuFrame:IsVisible() then
+   slot.menuFrame:Hide()
    return
   end
-  if not frame.menuFrame then
-   local menuFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+  if not slot.menuFrame then
+   local menuFrame = CreateFrame("Frame", nil, slot, "BackdropTemplate")
    menuFrame:SetBackdrop({
     bgFile = "Interface/ChatFrame/ChatFrameBackground",
     edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
@@ -56,79 +95,79 @@ BG.Init(function()
    })
    menuFrame:SetBackdropColor(0, 0, 0, 1)
    menuFrame:SetBackdropBorderColor(1, 1, 1, 1)
-   menuFrame:SetFrameLevel(frame:GetFrameLevel() + 20)
+   menuFrame:SetFrameLevel(slot:GetFrameLevel() + 20)
    menuFrame:SetPoint("BOTTOM", self, "TOP", 0, -1)
    menuFrame:EnableMouse(true)
    menuFrame:SetClampedToScreen(true)
    menuFrame.buttons = {}
-   menuFrame.owner = frame
-   frame.menuFrame = menuFrame
+   menuFrame.owner = slot
+   slot.menuFrame = menuFrame
    menuFrame:SetScript("OnUpdate", function()
     if not self:IsMouseOver() and not menuFrame:IsMouseOver() then
      menuFrame:Hide()
     end
    end)
   end
-  frame.menuFrame:Show()
-  for i = #frame.menuFrame.buttons, 1, -1 do
-   local menuItem = frame.menuFrame.buttons[i]
+  slot.menuFrame:Show()
+  for i = #slot.menuFrame.buttons, 1, -1 do
+   local menuItem = slot.menuFrame.buttons[i]
    menuItem:Hide()
    menuItem:SetParent(nil)
-   tremove(frame.menuFrame.buttons, i)
+   tremove(slot.menuFrame.buttons, i)
   end
-  createMenuItem(frame.menuFrame, L["更多操作"])
-  createMenuItem(frame.menuFrame, L["取消拍卖"], wa.Cancel_OnClick)
-  createMenuItem(frame.menuFrame, frame.isPaused and L["恢复拍卖"] or L["暂停拍卖"], wa.Pause_OnClick)
-  for i, menuItem in ipairs(frame.menuFrame.buttons) do
-   local width = frame.menuFrame:GetWidth()
+  createMenuItem(slot.menuFrame, L["更多操作"])
+  createMenuItem(slot.menuFrame, L["取消拍卖"], wa.Cancel_OnClick)
+  createMenuItem(slot.menuFrame, slot.isPaused and L["恢复拍卖"] or L["暂停拍卖"], wa.Pause_OnClick)
+  for i, menuItem in ipairs(slot.menuFrame.buttons) do
+   local width = slot.menuFrame:GetWidth()
    menuItem:SetWidth(width)
    menuItem:GetFontString():SetWidth(width - 30)
   end
  end
- function wa.CreateAuction(auctionID, itemID, money, duration, player, mod, link, resetThreshold, isGen2, isPreview)
-  for minLevel, frame in pairs(BGA.Frames) do
-   if frame[auctionIdKey] == auctionID then
+ function wa.CreateAuction(auctionKey, itemID, money, duration, player, mod, link, resetThreshold, isGen2, isPreview)
+  for minLevel, slot in pairs(BGA.Frames) do
+   if slot[auctionIdKey] == auctionKey then
     return
    end
   end
   local itemName, link, rarity, itemLevel, minLevel, itemType, itemSubType, minLevel, equipLoc, icon,
   minLevel, sellPrice, classID, subclassID = GetItemInfo(link or itemID)
-  local auctionFrame
+  local panel
   mod = isGen2 and mod or "normal"
   do
-   local frame = CreateFrame("Frame", nil, BGA.AuctionMainFrame, "BackdropTemplate")
-   frame:SetBackdrop({
+   local slot = CreateFrame("Frame", nil, BGA.AuctionMainFrame, "BackdropTemplate")
+   slot:SetBackdrop({
     bgFile = "Interface/ChatFrame/ChatFrameBackground",
     edgeFile = "Interface/ChatFrame/ChatFrameBackground",
     edgeSize = wa.edgeSize,
    })
-   frame:SetBackdropColor(unpack(wa.backdropColor))
-   frame:SetBackdropBorderColor(unpack(wa.backdropBorderColor))
-   frame:SetSize(wa.WIDTH, wa.HEIGHT)
+   slot:SetBackdropColor(unpack(wa.backdropColor))
+   slot:SetBackdropBorderColor(unpack(wa.backdropBorderColor))
+   slot:SetSize(wa.WIDTH, wa.HEIGHT)
    if #BGA.Frames == 0 then
-    frame:SetPoint("TOP")
-    frame.num = 1
+    slot:SetPoint("TOP")
+    slot.num = 1
    else
     for i = 1, wa.maxNumFrame do
      if not BGA.Frames[i] then
-      frame.num = i
-      frame:SetPoint("TOP", 0, -wa.GetFrameTotolHeight(frame.num))
+      slot.num = i
+      slot:SetPoint("TOP", 0, -wa.GetFrameTotolHeight(slot.num))
       break
      end
     end
    end
-   frame:EnableMouse(true)
-   frame[auctionIdKey] = auctionID
-   frame.itemID = itemID
-   frame.link = link
-   frame.mod = mod
-   frame.logs = {}
-   frame.resetThreshold = resetThreshold
-   frame.isGen2 = isGen2
-   frame.isPreview = isPreview
-   auctionFrame = frame
-   BGA.Frames[frame.num] = frame
-   frame:SetScript("OnMouseUp", function(self)
+   slot:EnableMouse(true)
+   slot[auctionIdKey] = auctionKey
+   slot.itemID = itemID
+   slot.link = link
+   slot.mod = mod
+   slot.logs = {}
+   slot.resetThreshold = resetThreshold
+   slot.isGen2 = isGen2
+   slot.isPreview = isPreview
+   panel = slot
+   BGA.Frames[slot.num] = slot
+   slot:SetScript("OnMouseUp", function(self)
     local mainFrame = BGA.AuctionMainFrame
     mainFrame:StopMovingOrSizing()
     if BiaoGe and BiaoGe.point then
@@ -136,7 +175,7 @@ BG.Init(function()
     end
     mainFrame:SetScript("OnUpdate", nil)
    end)
-   frame:SetScript("OnMouseDown", function(self)
+   slot:SetScript("OnMouseDown", function(self)
     if wa.lastFocus then
      wa.lastFocus:ClearFocus()
     end
@@ -151,226 +190,191 @@ BG.Init(function()
      mainFrame.time = mainFrame.time + time
      if mainFrame.time >= 0.2 then
       mainFrame.time = 0
-      for minLevel, frame in pairs(BGA.Frames) do
-       if frame.itemFrame.isOnEnter then
+      for minLevel, slot in pairs(BGA.Frames) do
+       if slot.itemFrame.isOnEnter then
         GameTooltip:Hide()
-        frame.itemFrame:GetScript("OnEnter")(frame.itemFrame)
+        slot.itemFrame:GetScript("OnEnter")(slot.itemFrame)
        end
-       if frame.autoFrame:IsVisible() then
-        frame.autoFrame:GetScript("OnShow")(frame.autoFrame)
+       if slot.autoFrame:IsVisible() then
+        slot.autoFrame:GetScript("OnShow")(slot.autoFrame)
        end
       end
      end
     end)
    end)
-   frame.cantClickFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-   frame.cantClickFrame:SetAllPoints()
-   frame.cantClickFrame:SetFrameLevel(200)
-   frame.cantClickFrame:EnableMouse(true)
+   slot.cantClickFrame = CreateFrame("Frame", nil, slot, "BackdropTemplate")
+   slot.cantClickFrame:SetAllPoints()
+   slot.cantClickFrame:SetFrameLevel(200)
+   slot.cantClickFrame:EnableMouse(true)
    After(.6, function()
-    frame.cantClickFrame:Hide()
+    slot.cantClickFrame:Hide()
    end)
-   frame.updateFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-   frame.updateFrame:SetBackdrop({
+   slot.updateFrame = CreateFrame("Frame", nil, slot, "BackdropTemplate")
+   slot.updateFrame:SetBackdrop({
     bgFile = "Interface/ChatFrame/ChatFrameBackground",
    })
-   frame.updateFrame:SetBackdropColor(1, 1, 1, .4)
-   frame.updateFrame:SetAllPoints()
-   frame.updateFrame:SetFrameLevel(150)
-   frame.updateFrame.alpha = .5
-   frame.updateFrame.totalTime = .4
-   frame.updateFrame:Hide()
-   frame.updateFrame:SetScript("OnShow", function(self)
+   slot.updateFrame:SetBackdropColor(1, 1, 1, .4)
+   slot.updateFrame:SetAllPoints()
+   slot.updateFrame:SetFrameLevel(150)
+   slot.updateFrame.alpha = .5
+   slot.updateFrame.totalTime = .4
+   slot.updateFrame:Hide()
+   slot.updateFrame:SetScript("OnShow", function(self)
     self.time = 0
     self:SetScript("OnUpdate", function(self, time)
      self.time = self.time + time
      local alpha = self.alpha - self.time / self.totalTime * self.alpha
      if alpha < 0 then alpha = 0 end
      self:SetAlpha(alpha)
-     frame.autoFrame.updateFrame:SetAlpha(alpha)
+     slot.autoFrame.updateFrame:SetAlpha(alpha)
      if self:GetAlpha() <= 0 then
       self:SetScript("OnUpdate", nil)
       self:Hide()
-      frame.autoFrame.updateFrame:Hide()
+      slot.autoFrame.updateFrame:Hide()
      end
     end)
    end)
   end
   do
-   local frame = CreateFrame("Frame", nil, auctionFrame, "BackdropTemplate")
+   local slot = CreateFrame("Frame", nil, panel, "BackdropTemplate")
    do
-    frame:SetBackdrop({
+    slot:SetBackdrop({
      bgFile = "Interface/ChatFrame/ChatFrameBackground",
      edgeFile = "Interface/ChatFrame/ChatFrameBackground",
      edgeSize = wa.edgeSize,
     })
-    frame:SetBackdropColor(unpack(wa.backdropColor))
-    frame:SetBackdropBorderColor(unpack(wa.backdropBorderColor))
-    frame:SetSize(120, 73)
-    frame:EnableMouse(true)
-    frame:Hide()
-    frame.owner = auctionFrame
-    auctionFrame.autoFrame = frame
-    frame:SetScript("OnShow", function(self)
-     frame:ClearAllPoints()
+    slot:SetBackdropColor(unpack(wa.backdropColor))
+    slot:SetBackdropBorderColor(unpack(wa.backdropBorderColor))
+    slot:SetSize(120, 73)
+    slot:EnableMouse(true)
+    slot:Hide()
+    slot.owner = panel
+    panel.autoFrame = slot
+    slot:SetScript("OnShow", function(self)
+     slot:ClearAllPoints()
      if wa.IsRight(self) then
-      frame:SetPoint("BOTTOMRIGHT", auctionFrame, "BOTTOMLEFT", 2, 0)
+      slot:SetPoint("BOTTOMRIGHT", panel, "BOTTOMLEFT", 2, 0)
      else
-      frame:SetPoint("BOTTOMLEFT", auctionFrame, "BOTTOMRIGHT", -2, 0)
+      slot:SetPoint("BOTTOMLEFT", panel, "BOTTOMRIGHT", -2, 0)
      end
     end)
-    frame:SetScript("OnMouseUp", function(self)
-     auctionFrame:GetScript("OnMouseUp")(BGA.AuctionMainFrame)
+    slot:SetScript("OnMouseUp", function(self)
+     panel:GetScript("OnMouseUp")(BGA.AuctionMainFrame)
     end)
-    frame:SetScript("OnMouseDown", function(self)
-     auctionFrame:GetScript("OnMouseDown")(BGA.AuctionMainFrame)
+    slot:SetScript("OnMouseDown", function(self)
+     panel:GetScript("OnMouseDown")(BGA.AuctionMainFrame)
     end)
-    auctionFrame.cantClickFrame.autoFrame = CreateFrame("Frame", nil, auctionFrame.cantClickFrame, "BackdropTemplate")
-    auctionFrame.cantClickFrame.autoFrame:SetPoint("TOPLEFT", frame, 0, 0)
-    auctionFrame.cantClickFrame.autoFrame:SetPoint("BOTTOMRIGHT", frame, 0, 0)
-    auctionFrame.cantClickFrame.autoFrame:EnableMouse(true)
+    panel.cantClickFrame.autoFrame = CreateFrame("Frame", nil, panel.cantClickFrame, "BackdropTemplate")
+    panel.cantClickFrame.autoFrame:SetPoint("TOPLEFT", slot, 0, 0)
+    panel.cantClickFrame.autoFrame:SetPoint("BOTTOMRIGHT", slot, 0, 0)
+    panel.cantClickFrame.autoFrame:EnableMouse(true)
     After(.6, function()
-     auctionFrame.cantClickFrame.autoFrame:Hide()
+     panel.cantClickFrame.autoFrame:Hide()
     end)
-    frame.updateFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    frame.updateFrame:SetBackdrop({
+    slot.updateFrame = CreateFrame("Frame", nil, slot, "BackdropTemplate")
+    slot.updateFrame:SetBackdrop({
      bgFile = "Interface/ChatFrame/ChatFrameBackground",
     })
-    frame.updateFrame:SetBackdropColor(1, 1, 1, .3)
-    frame.updateFrame:SetAllPoints()
-    frame.updateFrame:SetFrameLevel(150)
-    frame.updateFrame:Hide()
+    slot.updateFrame:SetBackdropColor(1, 1, 1, .3)
+    slot.updateFrame:SetAllPoints()
+    slot.updateFrame:SetFrameLevel(150)
+    slot.updateFrame:Hide()
    end
-   local fontString = frame:CreateFontString()
+   local label = slot:CreateFontString()
    do
-    fontString:SetFont(font, 15, "OUTLINE")
-    fontString:SetPoint("TOP", 0, -8)
-    fontString:SetTextColor(1, 0.82, 0)
-    fontString:SetText(L["设置心理价格"])
-    auctionFrame.autoTitleText = fontString
+    label:SetFont(typeface, 15, "OUTLINE")
+    label:SetPoint("TOP", 0, -8)
+    label:SetTextColor(1, 0.82, 0)
+    label:SetText(L["设置心理价格"])
+    panel.autoTitleText = label
    end
-   local editBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+   local editBox = CreateFrame("EditBox", nil, slot, "InputBoxTemplate")
    do
     wa.SetEditBg(editBox)
-    editBox:SetSize(frame:GetWidth() - 30, 20)
+    editBox:SetSize(slot:GetWidth() - 30, 20)
     editBox:SetPoint("BOTTOM", 2, 27)
     editBox:SetAutoFocus(false)
     editBox:SetNumeric(true)
     editBox:SetMaxLetters(8)
-    editBox.owner = auctionFrame
+    editBox.owner = panel
     editBox.alpha = .3
-    auctionFrame.autoMoney = 0
-    auctionFrame.autoMoneyEdit = editBox
+    panel.autoMoney = 0
+    panel.autoMoneyEdit = editBox
     editBox:SetScript("OnTextChanged", wa.Auto_OnTextChanged)
     editBox:SetScript("OnEnterPressed", wa.AutoButton_OnClick)
     editBox:SetScript("OnEnter", wa.AutoEdit_OnEnter)
     editBox:SetScript("OnLeave", wa.OnLeave)
     editBox:SetScript("OnEditFocusGained", wa.OnEditFocusGained)
-    local frame = CreateFrame("Frame", nil, editBox)
-    frame:SetPoint("RIGHT", 12, 2)
-    frame:SetSize(25, 25)
-    frame:Hide()
-    auctionFrame.isAutoTex = frame
-    local texture = frame:CreateTexture()
-    texture:SetAllPoints()
-    texture:SetTexture("interface/raidframe/readycheck-ready")
-    texture:SetAlpha(1)
+    local slot = CreateFrame("Frame", nil, editBox)
+    slot:SetPoint("RIGHT", 12, 2)
+    slot:SetSize(25, 25)
+    slot:Hide()
+    panel.isAutoTex = slot
+    local textureObj = slot:CreateTexture()
+    textureObj:SetAllPoints()
+    textureObj:SetTexture("interface/raidframe/readycheck-ready")
+    textureObj:SetAlpha(1)
    end
-   local autoButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+   local autoButton = CreateFrame("Button", nil, slot, "UIPanelButtonTemplate")
    do
     autoButton:SetPoint("BOTTOM", 0, 5)
-    autoButton:SetSize(frame:GetWidth() - 20, 22)
+    autoButton:SetSize(slot:GetWidth() - 20, 22)
     autoButton:SetText(L["开启自动出价"])
     autoButton:Disable()
-    autoButton.owner = auctionFrame
-    auctionFrame.autoButton = autoButton
+    autoButton.owner = panel
+    panel.autoButton = autoButton
     autoButton:SetScript("OnClick", wa.AutoButton_OnClick)
-    local autoMenuFrame = CreateFrame("Frame", nil, auctionFrame.autoButton)
+    local autoMenuFrame = CreateFrame("Frame", nil, panel.autoButton)
     autoMenuFrame:SetAllPoints()
     autoMenuFrame:Hide()
     autoMenuFrame.dis = true
-    autoMenuFrame.owner = auctionFrame
+    autoMenuFrame.owner = panel
     autoMenuFrame:SetScript("OnEnter", wa.AutoButton_OnEnter)
     autoMenuFrame:SetScript("OnLeave", GameTooltip_Hide)
-    auctionFrame.autoButton.disf = autoMenuFrame
+    panel.autoButton.disf = autoMenuFrame
    end
-   auctionFrame.autoSendDelayFrame = CreateFrame("Frame", nil, auctionFrame)
+   panel.autoSendDelayFrame = CreateFrame("Frame", nil, panel)
   end
   do
-   do
-    local autoButton = CreateFrame("Button", nil, auctionFrame)
+   panel.hide = buildTopButton(panel, {
+    anchor = "TOPRIGHT", x = -wa.edgeSize - 1, y = -2,
+    text = L["折叠"], levelOffset = 15, clickType = "AnyUp",
+    onClick = wa.Hide_OnClick, onEnter = wa.Hide_OnEnter, onLeave = wa.OnLeave,
+   })
+   panel.logTextButton = buildTopButton(panel, {
+    anchor = "TOPLEFT", x = wa.edgeSize + 1, y = -2,
+    text = L["记录"], onEnter = wa.LogTextButton_OnEnter, onLeave = wa.OnLeave,
+   })
+   panel.cancelButton = buildTopButton(panel, { onClick = wa.Cancel_OnClick })
+   if panel.isGen2 then
+    local autoButton = CreateFrame("Button", nil, panel)
     autoButton:SetNormalFontObject(BGA.FontGreen15)
     autoButton:SetHighlightFontObject(BGA.FontWhite15)
     autoButton:SetDisabledFontObject(BGA.FontDis15)
-    autoButton:SetPoint("TOPRIGHT", -wa.edgeSize - 1, -2)
-    autoButton:SetText(L["折叠"])
-    autoButton:SetSize(autoButton:GetFontString():GetWidth(), 18)
-    autoButton:SetFrameLevel(autoButton:GetParent():GetFrameLevel() + 15)
-    autoButton:RegisterForClicks("AnyUp")
-    autoButton.owner = auctionFrame
-    autoButton:SetScript("OnClick", wa.Hide_OnClick)
-    autoButton:SetScript("OnEnter", wa.Hide_OnEnter)
-    autoButton:SetScript("OnLeave", wa.OnLeave)
-    auctionFrame.hide = autoButton
-   end
-   do
-    local autoButton = CreateFrame("Button", nil, auctionFrame)
-    autoButton:SetNormalFontObject(BGA.FontGreen15)
-    autoButton:SetHighlightFontObject(BGA.FontWhite15)
-    autoButton:SetDisabledFontObject(BGA.FontDis15)
-    autoButton:SetPoint("TOPLEFT", wa.edgeSize + 1, -2)
-    autoButton:SetText(L["记录"])
-    autoButton:SetSize(autoButton:GetFontString():GetWidth(), 18)
-    autoButton.owner = auctionFrame
-    auctionFrame.logTextButton = autoButton
-    autoButton:SetScript("OnEnter", wa.LogTextButton_OnEnter)
-    autoButton:SetScript("OnLeave", wa.OnLeave)
-   end
-   do
-    local autoButton = CreateFrame("Button", nil, auctionFrame)
-    autoButton:SetNormalFontObject(BGA.FontGreen15)
-    autoButton:SetHighlightFontObject(BGA.FontWhite15)
-    autoButton:SetDisabledFontObject(BGA.FontDis15)
-    autoButton.owner = auctionFrame
-    auctionFrame.cancelButton = autoButton
-    autoButton:SetScript("OnClick", wa.Cancel_OnClick)
-   end
-   if auctionFrame.isGen2 then
-    local autoButton = CreateFrame("Button", nil, auctionFrame)
-    autoButton:SetNormalFontObject(BGA.FontGreen15)
-    autoButton:SetHighlightFontObject(BGA.FontWhite15)
-    autoButton:SetDisabledFontObject(BGA.FontDis15)
-    autoButton:SetPoint("TOP", auctionFrame, "TOPLEFT", wa.WIDTH / 10 * 5, -2)
-    autoButton.owner = auctionFrame
-    auctionFrame.puaseButton = autoButton
+    autoButton:SetPoint("TOP", panel, "TOPLEFT", wa.WIDTH / 10 * 5, -2)
+    autoButton.owner = panel
+    panel.puaseButton = autoButton
     autoButton:SetScript("OnClick", wa.Pause_OnClick)
    end
-   do
-    local autoButton = CreateFrame("Button", nil, auctionFrame)
-    autoButton:SetNormalFontObject(BGA.FontGreen15)
-    autoButton:SetHighlightFontObject(BGA.FontWhite15)
-    autoButton:SetDisabledFontObject(BGA.FontDis15)
-    autoButton.offset = wa.WIDTH / 10 * 6.4
-    autoButton.owner = auctionFrame
-    auctionFrame.autoTextButton = autoButton
-    autoButton:SetScript("OnClick", wa.AutoText_OnClick)
-   end
-   wa.UpdateButtonState(auctionFrame)
+   panel.autoTextButton = buildTopButton(panel, {
+    offset = wa.WIDTH / 10 * 6.4, onClick = wa.AutoText_OnClick,
+   })
+   wa.UpdateButtonState(panel)
   end
   do
-   local frame = CreateFrame("Frame", nil, auctionFrame, "BackdropTemplate")
-   frame:SetPoint("TOPLEFT", frame:GetParent(), "TOPLEFT", wa.edgeSize + 1, -auctionFrame.hide:GetHeight() - 3)
-   frame:SetPoint("BOTTOMRIGHT", frame:GetParent(), "TOPRIGHT", -wa.edgeSize, -55)
-   frame:SetFrameLevel(frame:GetParent():GetFrameLevel() + 10)
-   frame.owner = auctionFrame
-   frame.itemID = itemID
-   frame.link = link
-   frame:SetScript("OnEnter", wa.itemOnEnter)
-   frame:SetScript("OnLeave", wa.itemOnLeave)
-   frame:SetScript("OnMouseUp", function(self)
-    auctionFrame:GetScript("OnMouseUp")(BGA.AuctionMainFrame)
+   local slot = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+   slot:SetPoint("TOPLEFT", slot:GetParent(), "TOPLEFT", wa.edgeSize + 1, -panel.hide:GetHeight() - 3)
+   slot:SetPoint("BOTTOMRIGHT", slot:GetParent(), "TOPRIGHT", -wa.edgeSize, -55)
+   slot:SetFrameLevel(slot:GetParent():GetFrameLevel() + 10)
+   slot.owner = panel
+   slot.itemID = itemID
+   slot.link = link
+   slot:SetScript("OnEnter", wa.itemOnEnter)
+   slot:SetScript("OnLeave", wa.itemOnLeave)
+   slot:SetScript("OnMouseUp", function(self)
+    panel:GetScript("OnMouseUp")(BGA.AuctionMainFrame)
    end)
-   frame:SetScript("OnMouseDown", function(self)
+   slot:SetScript("OnMouseDown", function(self)
     if IsShiftKeyDown() then
      if not GetCurrentKeyBoardFocus() then
       ChatEdit_ActivateChat(ChatEdit_ChooseBoxForSend())
@@ -379,171 +383,171 @@ BG.Init(function()
     elseif IsControlKeyDown() then
      DressUpItemLink(link)
     else
-     auctionFrame:GetScript("OnMouseDown")(BGA.AuctionMainFrame)
+     panel:GetScript("OnMouseDown")(BGA.AuctionMainFrame)
     end
    end)
-   auctionFrame.itemFrame = frame
-   local itemFrame2 = CreateFrame("Frame", nil, frame)
-   auctionFrame.itemFrame2 = itemFrame2
-   local texture = frame:CreateTexture(nil, "BACKGROUND")
-   texture:SetAllPoints()
-   texture:SetColorTexture(0, 0, 0, 0.5)
-   auctionFrame.itemFrame.bg = texture
+   panel.itemFrame = slot
+   local itemFrame2 = CreateFrame("Frame", nil, slot)
+   panel.itemFrame2 = itemFrame2
+   local textureObj = slot:CreateTexture(nil, "BACKGROUND")
+   textureObj:SetAllPoints()
+   textureObj:SetColorTexture(0, 0, 0, 0.5)
+   panel.itemFrame.bg = textureObj
    local qualityR, qualityG, qualityB = GetItemQualityColor(rarity)
-   local itemFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+   local itemFrame = CreateFrame("Frame", nil, slot, "BackdropTemplate")
    itemFrame:SetBackdrop({
     edgeFile = "Interface/ChatFrame/ChatFrameBackground",
     edgeSize = 2,
    })
    itemFrame:SetBackdropBorderColor(qualityR, qualityG, qualityB, 1)
-   itemFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-   itemFrame:SetPoint("BOTTOMRIGHT", frame, "TOPLEFT", frame:GetHeight(), -frame:GetHeight())
+   itemFrame:SetPoint("TOPLEFT", slot, "TOPLEFT", 0, 0)
+   itemFrame:SetPoint("BOTTOMRIGHT", slot, "TOPLEFT", slot:GetHeight(), -slot:GetHeight())
    itemFrame.tex = itemFrame:CreateTexture(nil, "BACKGROUND")
    itemFrame.tex:SetAllPoints()
    itemFrame.tex:SetTexture(icon)
    itemFrame.tex:SetTexCoord(0.1, 0.9, 0.1, 0.9)
    itemFrame.color = { qualityR, qualityG, qualityB }
-   auctionFrame.itemFrame.iconFrame = itemFrame
-   local fontString = itemFrame2:CreateFontString()
-   fontString:SetFont(font, 12, "OUTLINE")
-   fontString:SetPoint("BOTTOM", itemFrame, "BOTTOM", 0, 1)
-   fontString:SetText(itemLevel)
-   fontString:SetTextColor(qualityR, qualityG, qualityB)
-   auctionFrame.itemFrame.levelText = fontString
+   panel.itemFrame.iconFrame = itemFrame
+   local label = itemFrame2:CreateFontString()
+   label:SetFont(typeface, 12, "OUTLINE")
+   label:SetPoint("BOTTOM", itemFrame, "BOTTOM", 0, 1)
+   label:SetText(itemLevel)
+   label:SetTextColor(qualityR, qualityG, qualityB)
+   panel.itemFrame.levelText = label
    if subclassID == 2 then
-    local fontString = itemFrame2:CreateFontString()
-    fontString:SetFont(font, 11, "OUTLINE")
-    fontString:SetPoint("TOP", itemFrame, 0, -2)
-    fontString:SetText(L["装绑"])
-    fontString:SetTextColor(0, 1, 0)
-    auctionFrame.itemFrame.bindTypeText = fontString
+    local label = itemFrame2:CreateFontString()
+    label:SetFont(typeface, 11, "OUTLINE")
+    label:SetPoint("TOP", itemFrame, 0, -2)
+    label:SetText(L["装绑"])
+    label:SetTextColor(0, 1, 0)
+    panel.itemFrame.bindTypeText = label
    end
-   local fontString = frame:CreateFontString()
-   fontString:SetFont(font, 15, "OUTLINE")
-   fontString:SetPoint("TOPLEFT", itemFrame, "TOPRIGHT", 2, -2)
-   fontString:SetWidth(frame:GetWidth() - frame:GetHeight() - 50)
-   fontString:SetText(link:gsub("%[", ""):gsub("%]", ""))
-   fontString:SetJustifyH("LEFT")
-   fontString:SetWordWrap(false)
-   auctionFrame.itemFrame.itemNameText = fontString
+   local label = slot:CreateFontString()
+   label:SetFont(typeface, 15, "OUTLINE")
+   label:SetPoint("TOPLEFT", itemFrame, "TOPRIGHT", 2, -2)
+   label:SetWidth(slot:GetWidth() - slot:GetHeight() - 50)
+   label:SetText(link:gsub("%[", ""):gsub("%]", ""))
+   label:SetJustifyH("LEFT")
+   label:SetWordWrap(false)
+   panel.itemFrame.itemNameText = label
    if BG and BG.GetItemCount and BG.GetItemCount(itemID) ~= 0 or GetItemCount(itemID, true) ~= 0 then
-    local texture = itemFrame2:CreateTexture(nil, "ARTWORK")
-    texture:SetSize(15, 15)
-    texture:SetPoint("LEFT", fontString, "LEFT", fontString:GetWrappedWidth(), 0)
-    texture:SetTexture("interface/raidframe/readycheck-ready")
-    local texture = itemFrame:CreateTexture(nil, "ARTWORK")
-    texture:SetAllPoints()
-    texture:SetTexture("interface/raidframe/readycheck-ready")
-    auctionFrame.itemFrame.havedTex = texture
+    local textureObj = itemFrame2:CreateTexture(nil, "ARTWORK")
+    textureObj:SetSize(15, 15)
+    textureObj:SetPoint("LEFT", label, "LEFT", label:GetWrappedWidth(), 0)
+    textureObj:SetTexture("interface/raidframe/readycheck-ready")
+    local textureObj = itemFrame:CreateTexture(nil, "ARTWORK")
+    textureObj:SetAllPoints()
+    textureObj:SetTexture("interface/raidframe/readycheck-ready")
+    panel.itemFrame.havedTex = textureObj
    end
-   local fontString = itemFrame2:CreateFontString()
-   fontString:SetFont(font, 12, "OUTLINE")
-   fontString:SetPoint("BOTTOMLEFT", itemFrame, "BOTTOMRIGHT", 2, 2)
-   fontString:SetHeight(13)
-   fontString:SetWidth(auctionFrame.itemFrame.itemNameText:GetWidth())
+   local label = itemFrame2:CreateFontString()
+   label:SetFont(typeface, 12, "OUTLINE")
+   label:SetPoint("BOTTOMLEFT", itemFrame, "BOTTOMRIGHT", 2, 2)
+   label:SetHeight(13)
+   label:SetWidth(panel.itemFrame.itemNameText:GetWidth())
    local tooltipClassText = BG and BG.GetTooltipClassText and BG.GetTooltipClassText(itemID) or ""
    if _G[equipLoc] then
     if sellPrice == 2 then
-     fontString:SetText(itemSubType .. "  " .. tooltipClassText)
+     label:SetText(itemSubType .. "  " .. tooltipClassText)
     else
-     fontString:SetText(_G[equipLoc] .. " " .. itemSubType .. "  " .. tooltipClassText)
+     label:SetText(_G[equipLoc] .. " " .. itemSubType .. "  " .. tooltipClassText)
     end
    else
-    fontString:SetText(tooltipClassText)
+    label:SetText(tooltipClassText)
    end
-   fontString:SetJustifyH("LEFT")
-   auctionFrame.itemFrame.itemTypeText = fontString
-   local statusBar = CreateFrame("StatusBar", nil, frame)
+   label:SetJustifyH("LEFT")
+   panel.itemFrame.itemTypeText = label
+   local statusBar = CreateFrame("StatusBar", nil, slot)
    statusBar:SetPoint("TOPLEFT", itemFrame, "TOPRIGHT", 0, 0)
-   statusBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+   statusBar:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", 0, 0)
    statusBar:SetFrameLevel(statusBar:GetParent():GetFrameLevel())
    statusBar:SetStatusBarTexture("Interface/ChatFrame/ChatFrameBackground")
    statusBar:SetStatusBarColor(1, 1, 0, 0.6)
    statusBar:SetMinMaxValues(0, 1000)
-   statusBar.owner = auctionFrame
-   auctionFrame.bar = statusBar
+   statusBar.owner = panel
+   panel.bar = statusBar
    local fontString2 = itemFrame2:CreateFontString()
-   fontString2:SetFont(font, 15, "OUTLINE")
-   fontString2:SetPoint("RIGHT", frame, "RIGHT", -5, 0)
+   fontString2:SetFont(typeface, 15, "OUTLINE")
+   fontString2:SetPoint("RIGHT", slot, "RIGHT", -5, 0)
    fontString2:SetTextColor(1, 1, 1)
-   auctionFrame.remainingTime = fontString2
+   panel.remainingTime = fontString2
   end
   do
    local width = 190
    local offset = 25
    local height = 22
-   local frame = CreateFrame("Frame", nil, auctionFrame)
-   frame:SetSize(width, 20)
-   frame:SetPoint("TOPLEFT", auctionFrame.itemFrame, "BOTTOMLEFT", 3, -3)
-   frame:SetFrameLevel(frame:GetParent():GetFrameLevel() + 11)
-   frame:SetScript("OnMouseDown", wa.currentMoney_OnMouseDown)
-   frame:SetScript("OnMouseUp", wa.currentMoney_OnMouseUp)
-   frame.owner = auctionFrame
-   local fontString = frame:CreateFontString()
-   fontString:SetFont(font, 14, "OUTLINE")
-   fontString:SetAllPoints()
-   fontString:SetJustifyH("LEFT")
+   local slot = CreateFrame("Frame", nil, panel)
+   slot:SetSize(width, 20)
+   slot:SetPoint("TOPLEFT", panel.itemFrame, "BOTTOMLEFT", 3, -3)
+   slot:SetFrameLevel(slot:GetParent():GetFrameLevel() + 11)
+   slot:SetScript("OnMouseDown", wa.currentMoney_OnMouseDown)
+   slot:SetScript("OnMouseUp", wa.currentMoney_OnMouseUp)
+   slot.owner = panel
+   local label = slot:CreateFontString()
+   label:SetFont(typeface, 14, "OUTLINE")
+   label:SetAllPoints()
+   label:SetJustifyH("LEFT")
    if player and player ~= "" then
-    fontString:SetText(L["|cffFFD100当前价格：|r"] .. wa.FormatNumber(money))
-    auctionFrame.start = false
+    label:SetText(L["|cffFFD100当前价格：|r"] .. wa.FormatNumber(money))
+    panel.start = false
    else
-    fontString:SetText(L["|cffFFD100起拍价：|r"] .. wa.FormatNumber(money))
-    auctionFrame.start = true
+    label:SetText(L["|cffFFD100起拍价：|r"] .. wa.FormatNumber(money))
+    panel.start = true
    end
-   local prevFrame = frame
-   auctionFrame.currentMoneyFrame = frame
-   auctionFrame.currentMoneyText = fontString
-   auctionFrame.money = money
-   local frame = CreateFrame("Frame", nil, prevFrame)
-   frame:SetSize(width, height)
-   frame:SetPoint("TOPLEFT", prevFrame, "BOTTOMLEFT", 0, 0)
-   local fontString = frame:CreateFontString()
-   fontString:SetFont(font, 14, "OUTLINE")
-   fontString:SetAllPoints()
-   fontString:SetJustifyH("LEFT")
+   local prevFrame = slot
+   panel.currentMoneyFrame = slot
+   panel.currentMoneyText = label
+   panel.money = money
+   local slot = CreateFrame("Frame", nil, prevFrame)
+   slot:SetSize(width, height)
+   slot:SetPoint("TOPLEFT", prevFrame, "BOTTOMLEFT", 0, 0)
+   local label = slot:CreateFontString()
+   label:SetFont(typeface, 14, "OUTLINE")
+   label:SetAllPoints()
+   label:SetJustifyH("LEFT")
    if player then
-    auctionFrame.player = player
-    auctionFrame.colorplayer = wa.SetClassCFF(player)
+    panel.player = player
+    panel.colorplayer = wa.SetClassCFF(player)
    end
    if player and player ~= "" then
     if player == wa.GN() then
-     fontString:SetText(L["|cffFFD100出价最高者：|r"] .. "|cff" .. wa.GREEN1 .. L[">> 你 <<"])
-     auctionFrame:SetBackdropColor(unpack(wa.backdropColor_IsMe))
-     auctionFrame:SetBackdropBorderColor(unpack(wa.backdropBorderColor_IsMe))
-     auctionFrame.autoFrame:SetBackdropColor(unpack(wa.backdropColor_IsMe))
-     auctionFrame.autoFrame:SetBackdropBorderColor(unpack(wa.backdropBorderColor_IsMe))
+     label:SetText(L["|cffFFD100出价最高者：|r"] .. "|cff" .. wa.GREEN1 .. L[">> 你 <<"])
+     panel:SetBackdropColor(unpack(wa.backdropColor_IsMe))
+     panel:SetBackdropBorderColor(unpack(wa.backdropBorderColor_IsMe))
+     panel.autoFrame:SetBackdropColor(unpack(wa.backdropColor_IsMe))
+     panel.autoFrame:SetBackdropBorderColor(unpack(wa.backdropBorderColor_IsMe))
     else
-     fontString:SetText(L["|cffFFD100出价最高者：|r"] .. auctionFrame.colorplayer)
-     auctionFrame:SetBackdropColor(unpack(wa.backdropColor))
-     auctionFrame:SetBackdropBorderColor(unpack(wa.backdropBorderColor))
-     auctionFrame.autoFrame:SetBackdropColor(unpack(wa.backdropColor))
-     auctionFrame.autoFrame:SetBackdropBorderColor(unpack(wa.backdropBorderColor))
+     label:SetText(L["|cffFFD100出价最高者：|r"] .. panel.colorplayer)
+     panel:SetBackdropColor(unpack(wa.backdropColor))
+     panel:SetBackdropBorderColor(unpack(wa.backdropBorderColor))
+     panel.autoFrame:SetBackdropColor(unpack(wa.backdropColor))
+     panel.autoFrame:SetBackdropBorderColor(unpack(wa.backdropBorderColor))
     end
    end
-   auctionFrame.topMoneyFrame = frame
-   auctionFrame.topMoneyText = fontString
+   panel.topMoneyFrame = slot
+   panel.topMoneyText = label
    local editBox = CreateFrame("EditBox", nil, prevFrame, "InputBoxTemplate")
    wa.SetEditBg(editBox)
-   editBox:SetSize(auctionFrame:GetRight() - prevFrame:GetRight() - 3, 20)
+   editBox:SetSize(panel:GetRight() - prevFrame:GetRight() - 3, 20)
    editBox:SetPoint("TOPLEFT", prevFrame, "TOPRIGHT", 0, 0)
    editBox:SetAutoFocus(false)
    editBox:SetNumeric(true)
    editBox:SetText(money)
    editBox:SetMaxLetters(8)
-   editBox.owner = auctionFrame
+   editBox.owner = panel
    editBox:SetScript("OnTextChanged", wa.myMoney_OnTextChanged)
    editBox:SetScript("OnEnterPressed", wa.SendMyMoney_OnClick)
    editBox:SetScript("OnMouseWheel", wa.myMoney_OnMouseWheel)
    editBox:SetScript("OnEnter", wa.myMoney_OnEnter)
    editBox:SetScript("OnLeave", wa.OnLeave)
    editBox:SetScript("OnEditFocusGained", wa.OnEditFocusGained)
-   auctionFrame.myMoneyEdit = editBox
+   panel.myMoneyEdit = editBox
    local autoButton = CreateFrame("Button", nil, editBox, "UIPanelButtonTemplate")
    autoButton:SetSize(offset, 22)
    autoButton:SetPoint("TOPLEFT", editBox, "BOTTOMLEFT", -5, 0)
    autoButton:SetNormalFontObject(BGA.FontGold18)
    autoButton:SetDisabledFontObject(BGA.FontDis18)
-   autoButton.owner = auctionFrame
+   autoButton.owner = panel
    autoButton.edit = editBox
    autoButton._type = "-"
    autoButton:SetText(autoButton._type)
@@ -552,13 +556,13 @@ BG.Init(function()
    autoButton:SetScript("OnClick", wa.JiaJian_OnClick)
    autoButton:SetScript("OnEnter", wa.JiaJian_OnEnter)
    autoButton:SetScript("OnLeave", wa.OnLeave)
-   auctionFrame.ButtonJian = autoButton
+   panel.ButtonJian = autoButton
    local autoButton = CreateFrame("Button", nil, editBox, "UIPanelButtonTemplate")
    autoButton:SetSize(offset, 22)
-   autoButton:SetPoint("LEFT", auctionFrame.ButtonJian, "RIGHT", 0, 0)
+   autoButton:SetPoint("LEFT", panel.ButtonJian, "RIGHT", 0, 0)
    autoButton:SetNormalFontObject(BGA.FontGold18)
    autoButton:SetDisabledFontObject(BGA.FontDis18)
-   autoButton.owner = auctionFrame
+   autoButton.owner = panel
    autoButton.edit = editBox
    autoButton._type = "+"
    autoButton:SetText(autoButton._type)
@@ -567,87 +571,87 @@ BG.Init(function()
    autoButton:SetScript("OnClick", wa.JiaJian_OnClick)
    autoButton:SetScript("OnEnter", wa.JiaJian_OnEnter)
    autoButton:SetScript("OnLeave", wa.OnLeave)
-   auctionFrame.ButtonJia = autoButton
+   panel.ButtonJia = autoButton
    local autoButton = CreateFrame("Button", nil, editBox, "UIPanelButtonTemplate")
-   autoButton:SetPoint("TOPLEFT", auctionFrame.ButtonJia, "TOPRIGHT", 0, 0)
+   autoButton:SetPoint("TOPLEFT", panel.ButtonJia, "TOPRIGHT", 0, 0)
    autoButton:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, -height)
    autoButton:SetText(L["出价"])
-   autoButton.owner = auctionFrame
+   autoButton.owner = panel
    autoButton.edit = editBox
    autoButton.itemID = itemID
-   auctionFrame.ButtonSendMyMoney = autoButton
+   panel.ButtonSendMyMoney = autoButton
    autoButton:SetScript("OnClick", wa.SendMyMoney_OnClick)
    autoButton:SetScript("OnEnter", wa.SendMyMoney_OnEnter)
    autoButton:SetScript("OnLeave", wa.OnLeave)
-   local frame = CreateFrame("Frame", nil, autoButton)
-   frame:SetAllPoints()
-   frame:Hide()
-   frame.dis = true
-   frame.owner = auctionFrame
-   frame:SetScript("OnEnter", wa.SendMyMoneyDis_OnEnter)
-   frame:SetScript("OnLeave", GameTooltip_Hide)
-   auctionFrame.disf = frame
-   autoButton.disf = frame
-   wa.myMoney_OnTextChanged(auctionFrame.myMoneyEdit)
+   local slot = CreateFrame("Frame", nil, autoButton)
+   slot:SetAllPoints()
+   slot:Hide()
+   slot.dis = true
+   slot.owner = panel
+   slot:SetScript("OnEnter", wa.SendMyMoneyDis_OnEnter)
+   slot:SetScript("OnLeave", GameTooltip_Hide)
+   panel.disf = slot
+   autoButton.disf = slot
+   wa.myMoney_OnTextChanged(panel.myMoneyEdit)
   end
-  wa.anim(auctionFrame)
+  wa.anim(panel)
   if not isPreview then
-   wa.Auctioning(auctionFrame, duration)
+   wa.Auctioning(panel, duration)
   end
   if BG and BG.HookCreateAuction then
-   BG.HookCreateAuction(auctionFrame)
+   BG.HookCreateAuction(panel)
   end
   if isPreview then
-   auctionFrame.remainingTime:SetText(L["预览"])
-   auctionFrame.remainingTime:SetTextColor(0, 1, 0)
-   auctionFrame.bar:Show()
-   auctionFrame.bar:SetValue(700)
-   auctionFrame.myMoneyEdit:Disable()
-   auctionFrame.ButtonJian:Disable()
-   auctionFrame.ButtonJia:Disable()
-   auctionFrame.ButtonSendMyMoney:Disable()
-   auctionFrame.autoMoneyEdit:Disable()
-   auctionFrame.autoButton:Disable()
-   auctionFrame.cancelButton:Hide()
-   if auctionFrame.puaseButton then auctionFrame.puaseButton:Hide() end
-   auctionFrame.autoTextButton:Hide()
-   auctionFrame.logTextButton:Hide()
-   auctionFrame.hide:Hide()
-   auctionFrame.cantClickFrame:Hide()
-   auctionFrame.cantClickFrame.autoFrame:Hide()
+   panel.remainingTime:SetText(L["预览"])
+   panel.remainingTime:SetTextColor(0, 1, 0)
+   panel.bar:Show()
+   panel.bar:SetValue(700)
+   panel.myMoneyEdit:Disable()
+   panel.ButtonJian:Disable()
+   panel.ButtonJia:Disable()
+   panel.ButtonSendMyMoney:Disable()
+   panel.autoMoneyEdit:Disable()
+   panel.autoButton:Disable()
+   panel.cancelButton:Hide()
+   if panel.puaseButton then panel.puaseButton:Hide() end
+   panel.autoTextButton:Hide()
+   panel.logTextButton:Hide()
+   panel.hide:Hide()
+   panel.cantClickFrame:Hide()
+   panel.cantClickFrame.autoFrame:Hide()
 
-   local previewText = auctionFrame:CreateFontString()
-   previewText:SetFont(font, 14, "OUTLINE")
+   local previewText = panel:CreateFontString()
+   previewText:SetFont(typeface, 14, "OUTLINE")
    previewText:SetPoint("TOP", 0, -3)
    previewText:SetText(L["心愿拍卖预览"])
    previewText:SetTextColor(0.2, 1, 0.2)
 
-   local closeButton = CreateFrame("Button", nil, auctionFrame, "UIPanelCloseButton")
+   local closeButton = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
    closeButton:SetPoint("TOPRIGHT", 4, 4)
-   closeButton:SetFrameLevel(auctionFrame:GetFrameLevel() + 210)
+   closeButton:SetFrameLevel(panel:GetFrameLevel() + 210)
    local function ClosePreview()
-    if auctionFrame.previewClosed then return end
-    auctionFrame.previewClosed = true
+    if panel.previewClosed then return end
+    panel.previewClosed = true
     for index, candidate in pairs(BGA.Frames) do
-     if candidate == auctionFrame then
+     if candidate == panel then
       BGA.Frames[index] = nil
       break
      end
     end
-    auctionFrame.autoFrame:Hide()
-    LibCustomGlow.PixelGlow_Stop(auctionFrame)
-    auctionFrame:Hide()
-    if BG.WishlistAuctionPreviewFrame == auctionFrame then
+    panel.autoFrame:Hide()
+    LibCustomGlow.PixelGlow_Stop(panel)
+    panel:Hide()
+    if BG.WishlistAuctionPreviewFrame == panel then
      BG.WishlistAuctionPreviewFrame = nil
     end
     wa.UpdateAllFrames()
    end
-   auctionFrame.ClosePreview = ClosePreview
+   panel.ClosePreview = ClosePreview
    closeButton:SetScript("OnClick", ClosePreview)
-   auctionFrame.previewCloseButton = closeButton
-   BG.WishlistAuctionPreviewFrame = auctionFrame
+   panel.previewCloseButton = closeButton
+   BG.WishlistAuctionPreviewFrame = panel
   end
-  return auctionFrame
+  return panel
  end
 
  function BG.ShowWishlistAuctionPreview(itemID, link)
@@ -658,24 +662,24 @@ BG.Init(function()
   return wa.CreateAuction(previewAuctionID, itemID, 1000, 30, nil, "normal", link, 20, true, true)
  end
  do
-  local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-  frame:SetSize(wa.WIDTH, wa.HEIGHT)
+  local slot = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+  slot:SetSize(wa.WIDTH, wa.HEIGHT)
   if BiaoGe and BiaoGe.options and BiaoGe.options.autoAuctionFrameLevel then
-   frame:SetFrameStrata(BiaoGe.options.autoAuctionFrameLevel)
+   slot:SetFrameStrata(BiaoGe.options.autoAuctionFrameLevel)
   else
-   frame:SetFrameStrata("HIGH")
+   slot:SetFrameStrata("HIGH")
   end
-  frame:SetClampedToScreen(true)
-  frame:SetFrameLevel(100)
-  frame:SetToplevel(true)
-  frame:SetMovable(true)
-  frame:SetScale(BiaoGe and BiaoGe.options and BiaoGe.options["autoAuctionScale"] or 0.9)
-  BGA.AuctionMainFrame = frame
+  slot:SetClampedToScreen(true)
+  slot:SetFrameLevel(100)
+  slot:SetToplevel(true)
+  slot:SetMovable(true)
+  slot:SetScale(BiaoGe and BiaoGe.options and BiaoGe.options["autoAuctionScale"] or 0.9)
+  BGA.AuctionMainFrame = slot
   if BiaoGe and BiaoGe.point and BiaoGe.point.Auction then
    BiaoGe.point.Auction[2] = nil
-   frame:SetPoint(unpack(BiaoGe.point.Auction))
+   slot:SetPoint(unpack(BiaoGe.point.Auction))
   else
-   frame:SetPoint("TOPRIGHT", -100, -200)
+   slot:SetPoint("TOPRIGHT", -100, -200)
   end
  end
  local function getModLabel(link)
@@ -684,88 +688,88 @@ BG.Init(function()
  end
  local function eventHandler(self, event, ...)
   if event == "CHAT_MSG_ADDON" then
-   local prefix, message, distribution, v, line = ...
-   local opcode, auctionIDStr, itemIDStr, moneyStr, durationStr, playerStr, modStr, linkStr, resetStr, extra
+   local channelPrefix, payload, channelScope, vendor, line = ...
+   local command, auctionKeyText, itemIdText, moneyText, durationText, playerText, modText, linkText, resetText, trailing
    local isGen2
-   if prefix == wa.AddonChannel then
-    opcode, auctionIDStr, itemIDStr, moneyStr, durationStr, playerStr, modStr, linkStr = strsplit(",", message, 8)
-   elseif prefix:match(wa.AddonChannel2) then
-    opcode, auctionIDStr, itemIDStr, moneyStr, durationStr, playerStr, modStr, linkStr, resetStr, extra = strsplit("^", message)
+   if channelPrefix == wa.AddonChannel then
+    command, auctionKeyText, itemIdText, moneyText, durationText, playerText, modText, linkText = strsplit(Wire.separatorGen1, payload, Wire.fieldCountGen1)
+   elseif channelPrefix:match(wa.AddonChannel2) then
+    command, auctionKeyText, itemIdText, moneyText, durationText, playerText, modText, linkText, resetText, trailing = strsplit(Wire.separatorGen2, payload)
     isGen2 = true
    end
-   if not opcode then return end
-   if opcode == "StartAuction" and distribution == "RAID" then
-    local auctionID = tonumber(auctionIDStr)
-    local itemID = tonumber(itemIDStr)
-    local money = tonumber(moneyStr)
-    local duration = tonumber(durationStr)
-    local player = playerStr
-    local mod = modStr
-    -- 匿名拍卖已移除（决策逆转 docs/07 §3.3）：匿名 StartAuction 不创建帧，静默忽略。常规拍卖（mod=normal）不受影响。
+   if not command then return end
+   if command == C.OP_START_AUCTION and channelScope == "RAID" then
+    local auctionKey = tonumber(auctionKeyText)
+    local itemID = tonumber(itemIdText)
+    local money = tonumber(moneyText)
+    local duration = tonumber(durationText)
+    local player = playerText
+    local mod = modText
+    -- 匿名拍卖已移除：匿名 StartAuction 不创建帧，静默忽略。常规拍卖（mod=normal）不受影响。
     if mod == "anonymous" then return end
-    local link = linkStr ~= "" and linkStr or nil
-    local resetThreshold = isGen2 and tonumber(resetStr) or wa.REPEAT_TIME
+    local link = linkText ~= "" and linkText or nil
+    local resetThreshold = isGen2 and tonumber(resetText) or wa.REPEAT_TIME
     BG.OnItemLoad(link or itemID):ContinueOnItemLoad(function()
-     wa.CreateAuction(auctionID, itemID, money, duration, player, mod, link, resetThreshold, isGen2)
+     wa.CreateAuction(auctionKey, itemID, money, duration, player, mod, link, resetThreshold, isGen2)
      if wa.IsRaidLeader() then
-      local v, link = GetItemInfo(link or itemID)
-      local message = format(L["{rt1}拍卖开始{rt1} %s 起拍价：%s"], link, money)
+      local vendor, link = GetItemInfo(link or itemID)
+      local payload = format(L["{rt1}拍卖开始{rt1} %s 起拍价：%s"], link, money)
       local modLabel = securecall(getModLabel, link)
       if modLabel then
-       if strlen(message .. modLabel) < 255 then
-        message = message .. modLabel
+       if strlen(payload .. modLabel) < 255 then
+        payload = payload .. modLabel
        end
       end
-      SendChatMessage(message, "RAID_WARNING")
+      SendGateway.Chat(payload, "RAID_WARNING")
      end
     end)
-   elseif opcode == "CancelAuction" and distribution == "RAID" then
-    local auctionID = tonumber(auctionIDStr)
-    for v, frame in pairs(BGA.Frames) do
-     if frame[auctionIdKey] == auctionID and not frame.IsEnd then
-      wa.SetEndState(frame, L["拍卖取消"], 1, 0, 0)
-      if frame.IsSmallWindow then
-       frame.currentMoneyText:SetText("|cffFF0000" .. L["拍卖取消"])
+   elseif command == C.OP_CANCEL_AUCTION and channelScope == "RAID" then
+    local auctionKey = tonumber(auctionKeyText)
+    for vendor, slot in pairs(BGA.Frames) do
+     if slot[auctionIdKey] == auctionKey and not slot.IsEnd then
+      wa.SetEndState(slot, L["拍卖取消"], 1, 0, 0)
+      if slot.IsSmallWindow then
+       slot.currentMoneyText:SetText("|cffFF0000" .. L["拍卖取消"])
       end
       if wa.IsRaidLeader() then
-       SendChatMessage(format(L["{rt7}拍卖取消{rt7} %s"], frame.link), "RAID")
+       SendGateway.Chat(format(L["{rt7}拍卖取消{rt7} %s"], slot.link), "RAID")
       end
       if BG and BG.AuctionWAEnd then
-       BG.AuctionWAEnd(3, frame.link, frame.player, frame.money)
+       BG.AuctionWAEnd(3, slot.link, slot.player, slot.money)
       end
       After(wa.HIDEFRAME_TIME, function()
-       wa.UpdateFrame(frame)
+       wa.UpdateFrame(slot)
       end)
       return
      end
     end
-   elseif opcode == "PauseAuction" and distribution == "RAID" then
-    local itemID = tonumber(auctionIDStr)
-    for v, frame in pairs(BGA.Frames) do
-     if frame.itemID == itemID and frame.isGen2 and not frame.IsEnd then
-      wa.PauseAuction(frame)
+   elseif command == C.OP_PAUSE_AUCTION and channelScope == "RAID" then
+    local itemID = tonumber(auctionKeyText)
+    for vendor, slot in pairs(BGA.Frames) do
+     if slot.itemID == itemID and slot.isGen2 and not slot.IsEnd then
+      wa.PauseAuction(slot)
      end
     end
-   elseif opcode == "ResumeAuction" and distribution == "RAID" then
-    local itemID = tonumber(auctionIDStr)
-    for v, frame in pairs(BGA.Frames) do
-     if frame.itemID == itemID and frame.isGen2 and not frame.IsEnd then
-      wa.ResumeAuction(frame)
+   elseif command == C.OP_RESUME_AUCTION and channelScope == "RAID" then
+    local itemID = tonumber(auctionKeyText)
+    for vendor, slot in pairs(BGA.Frames) do
+     if slot.itemID == itemID and slot.isGen2 and not slot.IsEnd then
+      wa.ResumeAuction(slot)
      end
     end
-   elseif opcode == "SendMyMoney" and distribution == "RAID" then
-    local auctionID = tonumber(auctionIDStr)
-    local money = tonumber(itemIDStr)
-    for v, frame in pairs(BGA.Frames) do
-     if not frame.IsEnd and not frame.isPaused and frame.mod ~= "anonymous" and frame[auctionIdKey] == auctionID then
-      if frame.start and money >= frame.money or money > frame.money then
-       wa.SetMoney(frame, money, line)
+   elseif command == C.OP_SEND_MY_MONEY and channelScope == "RAID" then
+    local auctionKey = tonumber(auctionKeyText)
+    local money = tonumber(itemIdText)
+    for vendor, slot in pairs(BGA.Frames) do
+     if not slot.IsEnd and not slot.isPaused and slot.mod ~= "anonymous" and slot[auctionIdKey] == auctionKey then
+      if AcceptsBid(slot, money) then
+       wa.SetMoney(slot, money, line)
       end
       return
      end
     end
-   elseif opcode == "VersionCheck" and distribution == "RAID" then
-    C_ChatInfo.SendAddonMessage(wa.AddonChannel, "MyVer" .. "," .. wa.ver, "RAID")
+   elseif command == C.OP_VERSION_CHECK and channelScope == "RAID" then
+    SendGateway.Addon(wa.AddonChannel, C.OP_MY_VER .. "," .. wa.ver, "RAID")
    -- 匿名族三消息（AnonymousWhisperMyMoney / AnonymousSendMyMoney / AnonymousWinner）已移除。
    -- 收到外部原版发来的匿名 opcode 自然落入链尾静默丢弃（识别但忽略），不回包、不中继、不落盘。
    end
@@ -791,22 +795,22 @@ BG.Init(function()
     end
    end
   elseif event == "CHAT_MSG_RAID_LEADER" then
-   local message = ...
-   if wa.IsSecret(message) then return end
+   local payload = ...
+   if wa.IsSecret(payload) then return end
    local item, buyer, price
-   item, buyer, price = message:match("{rt6}拍卖成功{rt6} (.-) (.-) (.+)")
+   item, buyer, price = payload:match("{rt6}拍卖成功{rt6} (.-) (.-) (.+)")
    if not (item and buyer and price) then
-    item, buyer, price = message:match("{rt6}拍賣成功{rt6} (.-) (.-) (.+)")
+    item, buyer, price = payload:match("{rt6}拍賣成功{rt6} (.-) (.-) (.+)")
    end
    if not (item and buyer and price) then
-    item, buyer, price = message:match("{rt6}Auction Successful{rt6} (.-) (.-) (.+)")
+    item, buyer, price = payload:match("{rt6}Auction Successful{rt6} (.-) (.-) (.+)")
    end
    if (item and buyer and price) then
     return
    end
-   item = message:match("{rt7}流拍{rt7} (.+)")
+   item = payload:match("{rt7}流拍{rt7} (.+)")
    if not item then
-    item = message:match("^{rt7}Auction Failed{rt7} (.+)$")
+    item = payload:match("^{rt7}Auction Failed{rt7} (.+)$")
    end
    if item then
     return

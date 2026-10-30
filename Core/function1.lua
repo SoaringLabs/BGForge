@@ -1,4 +1,4 @@
-local _, ns = ...
+local AddonName, ns = ...
 
 local LibBG = ns.LibBG
 local L = ns.L
@@ -9,14 +9,14 @@ local RGB = ns.RGB
 local player = BG.playerName
 BG.After = C_Timer.After
 
-------------------函数：四舍五入------------------ 数字，小数点数
+------------------四舍五入函数------------------ 入参是数字和保留的小数位数
 local function Round(number, decimal_places)
     local mult = 10 ^ (decimal_places or 0)
     return math.floor(number * mult + 0.5) / mult
 end
 ns.Round = Round
 
-------------------函数：设置颜色（0-1代码变为16进制颜色）------------------
+------------------颜色设置函数：把0-1分量拼成16进制色码------------------
 local function RGB_16(name, r, g, b)
     if not r then
         r, g, b = name:GetTextColor()
@@ -88,7 +88,26 @@ function BG.GetBossNumInfo(FB, bossNum)
     end
 end
 
-------------------在文本里插入材质图标------------------
+------------------向文本中嵌入材质图标------------------
+local TEX_MAP = {
+    ["MAINTANK"] = "132064",                                      -- 主坦克
+    ["MAINASSIST"] = "132063",                                    -- 主助理
+    ["QUEST"] = "Interface\\GossipFrame\\AvailableQuestIcon",     -- 黄色感叹号
+    ["BOX"] = format("Interface\\AddOns\\%s\\Media\\icon\\BOX", AddonName),
+    ["DD"] = format("Interface\\AddOns\\%s\\Media\\icon\\DD", AddonName),
+}
+local ICON_MAP = {
+    ["TANK"] = "|A:ui-lfg-roleicon-tank:0:0|a",                   -- 坦克职责
+    ["HEALER"] = "|A:ui-lfg-roleicon-healer:0:0|a",               -- 治疗职责
+    ["DAMAGER"] = "|A:ui-lfg-roleicon-dps:0:0|a",                 -- 输出职责
+    ["LEFT"] = "|A:NPE_LeftClick:0:0|a",
+    ["RIGHT"] = "|A:NPE_RightClick:0:0|a",
+}
+local HONOR_TEX = {
+    [137000] = true,
+    [136998] = true,
+}
+
 local function AddTexture(Texture, y, coord, width)
     if not Texture then
         return ""
@@ -99,33 +118,16 @@ local function AddTexture(Texture, y, coord, width)
     end
     local tex = ""
     local coord = coord or ""
-    if Texture == "MAINTANK" then                      -- 主坦克
-        tex = "132064"
-    elseif Texture == "MAINASSIST" then                -- 主助理
-        tex = "132063"
-    elseif Texture == "TANK" then                      -- 坦克职责
-        return "|A:ui-lfg-roleicon-tank:0:0|a"
-    elseif Texture == "HEALER" then                    -- 治疗职责
-        return "|A:ui-lfg-roleicon-healer:0:0|a"
-    elseif Texture == "DAMAGER" then                   -- 输出职责
-        return "|A:ui-lfg-roleicon-dps:0:0|a"
-    elseif Texture == 137000 or Texture == 136998 then -- 战场荣誉
+    if HONOR_TEX[Texture] then -- 战场荣誉
         coord = ":100:100:10:60:0:55"
         local t = "|T" .. Texture .. ":0:0:0:0" .. coord .. "|t"
         return t
-    elseif Texture == "QUEST" then -- 黄色感叹号
-        tex = "Interface\\GossipFrame\\AvailableQuestIcon"
-    elseif Texture == "BOX" then
-            tex = "Interface\\AddOns\\BGForge\\Media\\icon\\BOX"
-    elseif Texture == "DD" then
-            tex = "Interface\\AddOns\\BGForge\\Media\\icon\\DD"
-    elseif Texture == "LEFT" then
-        return "|A:NPE_LeftClick:0:0|a"
-    elseif Texture == "RIGHT" then
-        return "|A:NPE_RightClick:0:0|a"
-    else
-        tex = Texture
     end
+    local icon = ICON_MAP[Texture]
+    if icon then
+        return icon
+    end
+    tex = TEX_MAP[Texture] or Texture
     width = width or 0
     return "|T" .. tex .. ":" .. width .. ":" .. width .. ":" .. x .. ":" .. y .. coord .. "|t"
 end
@@ -160,7 +162,7 @@ function BG.CreateRoundTexture(tex, parent, w, h)
     return icon
 end
 
-------------------获取文字（删掉材质）------------------
+------------------取出纯文字内容，并去掉材质标记------------------
 local function GetText_T(bt)
     local text
     if type(bt) == "table" then
@@ -173,7 +175,7 @@ local function GetText_T(bt)
 end
 ns.GetText_T = GetText_T
 
-------------------函数：获取名字的职业颜色RGB------------------
+------------------函数：取得名字所属职业的颜色RGB值------------------
 local function GetClassRGB(name, player, Alpha)
     local _, class
     if player then
@@ -189,7 +191,7 @@ local function GetClassRGB(name, player, Alpha)
 end
 ns.GetClassRGB = GetClassRGB
 
-------------------函数：设置名字为职业颜色CFF代码（|cffFFFFFF名字|r）------------------
+------------------函数：把名字套成职业色CFF片段（形如|cffFFFFFF名字|r）------------------
 local function SetClassCFF(name, player, type)
     if type then return name end
     local _, class
@@ -207,14 +209,14 @@ local function SetClassCFF(name, player, type)
 end
 ns.SetClassCFF = SetClassCFF
 
-------------------函数：仅提取链接文本------------------
+------------------函数：只截取链接中的文本部分------------------
 local function GetItemID(text)
     if not text then return end
     return tonumber(text:match("item:(%d+):"))
 end
 ns.GetItemID = GetItemID
 
-------------------清除输入框的焦点------------------
+------------------让输入框失去焦点------------------
 function BG.ClearFocus()
     if BG.lastfocus then
         BG.lastfocus:ClearFocus()
@@ -251,33 +253,43 @@ function BG.FrameHide(num)
     end
 end
 
-------------------当前表格已经有东西了------------------
+------------------表格中已经存在内容的情形------------------
+local END_OFFSET = {
+    ["onlyboss"] = -2,
+}
+local RANGE_TYPE = {
+    ["autoQingKong"] = true,
+}
+local FRAME_FIELDS = { "maijia", "jine" }
+local BOOK_FIELDS = { "guanzhu", "qiankuan" }
+
 function BG.BiaoGeHavedItem(FB, _type, instanceID)
     local startB = 1
     local endB = Maxb[FB] + 1
-    if _type == "onlyboss" then
-        endB = Maxb[FB] - 2
-    elseif _type == "autoQingKong" then
-        startB = BG.bossPositionStartEnd[instanceID][1]
-        endB = BG.bossPositionStartEnd[instanceID][2]
+    local endOffset = END_OFFSET[_type]
+    if endOffset then
+        endB = Maxb[FB] + endOffset
+    elseif RANGE_TYPE[_type] then
+        local range = BG.bossPositionStartEnd[instanceID]
+        startB = range[1]
+        endB = range[2]
     end
     for b = startB, endB do
         for i = 1, BG.GetMaxi(FB, b) do
-            if BG.Frame[FB]["boss" .. b]["zhuangbei" .. i] then
-                if b ~= Maxb[FB] + 1 and BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]:GetText() ~= "" then
+            local frameRow = BG.Frame[FB]["boss" .. b]
+            if frameRow["zhuangbei" .. i] then
+                if b ~= Maxb[FB] + 1 and frameRow["zhuangbei" .. i]:GetText() ~= "" then
                     return true
                 end
-                if BG.Frame[FB]["boss" .. b]["maijia" .. i]:GetText() ~= "" then
-                    return true
+                for _, field in ipairs(FRAME_FIELDS) do
+                    if frameRow[field .. i]:GetText() ~= "" then
+                        return true
+                    end
                 end
-                if BG.Frame[FB]["boss" .. b]["jine" .. i]:GetText() ~= "" then
-                    return true
-                end
-                if BiaoGe[FB]["boss" .. b]["guanzhu" .. i] then
-                    return true
-                end
-                if BiaoGe[FB]["boss" .. b]["qiankuan" .. i] then
-                    return true
+                for _, field in ipairs(BOOK_FIELDS) do
+                    if BiaoGe[FB]["boss" .. b][field .. i] then
+                        return true
+                    end
                 end
             end
         end
@@ -285,7 +297,7 @@ function BG.BiaoGeHavedItem(FB, _type, instanceID)
     return false
 end
 
-------------------隐藏提示工具------------------
+------------------关闭提示框------------------
 local function GameTooltip_Hide()
     GameTooltip:Hide()
 end
@@ -293,7 +305,7 @@ function BG.GameTooltip_Hide(frame)
     frame:SetScript("OnLeave", GameTooltip_Hide)
 end
 
-------------------查找或匹配table里的字符------------------
+------------------在table中查找或匹配子串------------------
 do
     function BG.FindTableString(text, table)
         local num
@@ -315,7 +327,7 @@ do
         end
     end
 end
-------------------返回字符串里每个字符的位置------------------
+------------------给出字符串里每个字符所在的索引------------------
 function BG.getCharacterPositions(str)
     local positions = {}
     local position = 1
@@ -324,19 +336,19 @@ function BG.getCharacterPositions(str)
         local byte = string.byte(str, position)
 
         if byte >= 0xC0 and byte <= 0xDF then
-            -- 处理两个字节的UTF-8字符
+            -- 针对两字节的UTF-8字符处理
             positions[string.sub(str, position, position + 1)] = position
             position = position + 2
         elseif byte >= 0xE0 and byte <= 0xEF then
-            -- 处理三个字节的UTF-8字符
+            -- 针对三字节的UTF-8字符处理
             positions[string.sub(str, position, position + 2)] = position
             position = position + 3
         elseif byte >= 0xF0 and byte <= 0xF7 then
-            -- 处理四个字节的UTF-8字符
+            -- 针对四字节的UTF-8字符处理
             positions[string.sub(str, position, position + 3)] = position
             position = position + 4
         else
-            -- 处理单字节字符和非法字节
+            -- 针对单字节字符以及非法字节处理
             positions[string.sub(str, position, position)] = position
             position = position + 1
         end
@@ -345,7 +357,7 @@ function BG.getCharacterPositions(str)
     return positions
 end
 
-------------------隐藏全部Tab按钮------------------
+------------------把所有Tab按钮隐藏起来------------------
 function BG.HideTab(Buttons, Show)
     for i, v in ipairs(Buttons) do
         v:Hide()
@@ -373,20 +385,20 @@ BG.OnUpdateTime(function(self,elapsed)
 end)
  ]]
 
-------------------设置按钮文本的宽度------------------
+------------------设定按钮文字占用的宽度------------------
 function BG.SetButtonStringWidth(bt)
     local t = bt:GetFontString()
     t:SetWidth(bt:GetWidth())
     t:SetWordWrap(false)
 end
 
-------------------按钮适应文本的宽度------------------
+------------------让按钮宽度贴合文字长度------------------
 function BG.SetButtonWidthForString(bt)
     local t = bt:GetFontString()
     bt:SetWidth(t:GetWidth())
 end
 
-------------------菜单：点文本也能打开菜单------------------
+------------------菜单：点击文字同样可以展开菜单------------------
 function BG.dropDownToggle(dropDown)
     dropDown:SetScript("OnMouseDown", function(self)
         if dropDown.isDisabled then return end
@@ -396,7 +408,7 @@ function BG.dropDownToggle(dropDown)
     BG.SkinDropDown(dropDown)
 end
 
-------------------是国服或亚服吗------------------
+------------------判断当前是否国服或亚服------------------
 function BG.IsCN()
     if GetCurrentRegionName() == "CN" or GetCurrentRegionName() == "TW" or GetCurrentRegionName() == "KR" then
         return true
@@ -427,20 +439,20 @@ function BG.PlaySound(id)
     end
 end
 
-------------------按钮的文本截断------------------
+------------------对按钮文字做截断处理------------------
 function BG.ButtonTextSetWordWrap(bt)
     local t = bt:GetFontString()
     t:SetWidth(bt:GetWidth())
     t:SetWordWrap(false)
 end
 
-------------------按钮的文本颜色------------------
+------------------设定按钮文字的颜色------------------
 function BG.ButtonTextColor(bt, color)
     local t = bt:GetFontString()
     t:SetTextColor(RGB(color))
 end
 
-------------------团队标记材质------------------
+------------------团队标记所用的贴图------------------
 local tex = [[Interface\TargetingFrame\UI-RaidTargetingIcons]]
 local y = -3
 local RaidTargetingIcons = {
@@ -476,7 +488,7 @@ function BG.SetScrollBottom(scroll, child)
     end
 end
 
-----------右键菜单切换开/关----------
+----------判断右键菜单是展开还是收起----------
 function BG.DropDownListIsVisible(self)
     local _, parent = _G.L_DropDownList1:GetPoint()
     if parent == self and _G.L_DropDownList1:IsVisible() then
@@ -493,7 +505,7 @@ function BG.SetTextHighlightTexture(bt)
     bt:SetHighlightTexture(tex)
 end
 
-----------鼠标/按钮是否在右边----------
+----------判断光标或按钮是否处于右侧----------
 do
     function BG.CursorIsInRight()
         local uiScale = UIParent:GetEffectiveScale()
@@ -515,7 +527,7 @@ do
     end
 end
 
-----------把time转换为时或分----------
+----------将秒数换算成小时或分钟----------
 function BG.SecondsToTime(second, short)
     local h = floor(second / 3600)
     if h >= 1 then
@@ -533,7 +545,7 @@ function BG.SecondsToTime(second, short)
     end
 end
 
-----------是否已经拥有某物品----------
+----------检查某件物品是否早已拥有----------
 function BG.GetItemCount(itemIDorLink)
     local itemID = itemIDorLink
     if not tonumber(itemIDorLink) then
@@ -564,6 +576,27 @@ function BG.SetBorderAlpha(self)
     self.Middle:SetAlpha(BG.otherEditAlpha)
 end
 
+local SCALES_EN = {
+    [1] = {
+        { 1000000, "%.1fm", 1000000 },
+        { 1000, "%.1fk", 1000 },
+    },
+    [3] = {
+        { 1000000, "%.1fm", 1000000 },
+        { 10000, "%dk", 1000 },
+        { 1000, "%.1fk", 1000 },
+    },
+}
+local SCALES_CN = {
+    [1] = {
+        { 10000, L["%.1f万"], 10000 },
+    },
+    [3] = {
+        { 10000, L["%.1f万"], 10000 },
+        { 1000, L["%.1fk"], 1000 },
+    },
+}
+
 function BG.FormatNumber(num, type)
     if not tonumber(num) or num % 1 ~= 0 then return num end
     num = tonumber(num)
@@ -573,38 +606,16 @@ function BG.FormatNumber(num, type)
         formatted = formatted:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
         return formatted
     end
+    local scales
     if ns.enUS then
-        if type == 1 then
-            if num >= 1000000 then
-                return format("%.1fm", floor(num / 1000000 * 10) / 10)
-            elseif num >= 1000 then
-                return format("%.1fk", floor(num / 1000 * 10) / 10)
-            else
-                return num
-            end
-        elseif type == 2 then -- 添加分隔符
+        if type == 2 then -- 添加分隔符
             local formatted = tostring(num)
             formatted = formatted:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
             return formatted
-        elseif type == 3 then
-            if num >= 1000000 then
-                return format("%.1fm", floor(num / 1000000 * 10) / 10)
-            elseif num >= 10000 then
-                return format("%dk", floor(num / 1000 * 10) / 10)
-            elseif num >= 1000 then
-                return format("%.1fk", floor(num / 1000 * 10) / 10)
-            else
-                return num
-            end
         end
+        scales = SCALES_EN[type]
     else
-        if type == 1 then -- 省略百十个位
-            if num >= 10000 then
-                return format(L["%.1f万"], floor(num / 10000 * 10) / 10)
-            else
-                return num
-            end
-        elseif type == 2 then -- 输出所有小数点
+        if type == 2 then -- 输出所有小数点
             if num >= 10000 then
                 local wanNum = num / 10000
                 if num % 10000 == 0 then
@@ -621,13 +632,14 @@ function BG.FormatNumber(num, type)
             else
                 return num
             end
-        elseif type == 3 then -- 省略十个位
-            if num >= 10000 then
-                return format(L["%.1f万"], floor(num / 10000 * 10) / 10)
-            elseif num >= 1000 then
-                return format(L["%.1fk"], floor(num / 1000 * 10) / 10)
-            else
-                return num
+        end
+        scales = SCALES_CN[type]
+    end
+    if scales then
+        for _, row in ipairs(scales) do
+            local threshold, fmt, divisor = unpack(row)
+            if num >= threshold then
+                return format(fmt, floor(num / divisor * 10) / 10)
             end
         end
     end
@@ -687,7 +699,7 @@ function BG.DeletePlayerData(realmID, player)
     -- end
 end
 
---获取副本tbl某个value
+--读取副本表中某个字段的值
 function BG.GetFBinfo(FB, info)
     for i, v in ipairs(BG.FBtable2) do
         if FB == v.FB then
@@ -716,8 +728,6 @@ function BG.SetSpecIDToLink(link)
     end
 end
 
--- function BG.GsubLink(link1,link2)
---     return link1:gsub("(item:)%d+:[%d-:]+","%1"..link2)
 -- end
 
 local function Get(link)
@@ -848,13 +858,13 @@ function BG.GetNextWeekTime() -- 距离下周四还有多少秒
 
     local today = date("*t", currentTimestamp)
     if daysToThursday == 0 and today.hour < 7 then
-        -- 如果时间小于当天凌晨7点
+        -- 当时间还没到当天早上7点时
         today.hour = 7
         today.min = 0
         today.sec = 0
         nextThursdayTimestamp = time(today)
     else
-        -- 如果已经是周四了，则日期+7
+        -- 若当前已经是周四，就把日期往后加7天
         if daysToThursday <= 0 then
             daysToThursday = daysToThursday + 7
         end
@@ -873,14 +883,14 @@ function BG.GetNextDayTime() -- 距离明天7点还有多少秒
     local currentTimestamp = GetServerTime()
     local tomorrow7amTimestamp
     local today = date("*t", currentTimestamp)
-    -- 如果时间小于当天凌晨7点
+    -- 当时间还没到当天早上7点时
     if today.hour < 7 then
         today.hour = 7
         today.min = 0
         today.sec = 0
         tomorrow7amTimestamp = time(today)
     else
-        -- 获取明天凌晨7点的时间戳
+        -- 算出明天早上7点对应的时间戳
         local tomorrow = date("*t", currentTimestamp + 86400) -- 加上一天的秒数
         tomorrow.hour = 7
         tomorrow.min = 0
@@ -954,7 +964,7 @@ function BG.InBoss()
     return issecretvalue and BG.IsRetail and C_InstanceEncounter and C_InstanceEncounter.IsEncounterInProgress()
 end
 
--- 创建右下角可拖动的缩放按钮
+-- 在右下角生成可拖动、用于缩放界面的按钮
 do
     local btMixin = {}
     local ag = 0.002 -- 灵敏度可调整

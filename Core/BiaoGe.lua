@@ -4,6 +4,7 @@ local AddonName, ns = ...
 local LibBG = ns.LibBG
 local L = ns.L
 
+local SendGateway = ns.SendGateway
 local RR = ns.RR
 local RGB = ns.RGB
 local GetClassRGB = ns.GetClassRGB
@@ -108,7 +109,7 @@ BG.Init(function()
 
             -- 「打开表格时自动获取在线人数」已随 Core/Module/InfoBar.lua 整模块删除而移除
             -- （原实现依赖 BG.ButtonOnLineCount 与 BG.GetChannelMemberCount，两者都定义在 InfoBar 内）。
-            -- 检查Frame中点是否超过屏幕边界
+            -- 判断窗体中心点有没有落到屏幕范围之外
             if not self.CheckOutSide then
                 self.CheckOutSide = true
                 local frameCenterX, frameCenterY = self:GetCenter()
@@ -214,8 +215,11 @@ BG.Init(function()
             end
             return true
         end
-        -- BiaoGe.options.SearchHistory[ns.updateText_now[1]] = nil
         local offset = 20
+        local indentBySub = {
+            [true] = { [true] = 0, [false] = offset },
+            [false] = { [true] = -offset, [false] = 0 },
+        }
         if next(ns.updateText_now) and not BiaoGe.options.SearchHistory[ns.updateText_now[1]] then
             BiaoGe.options.SearchHistory[ns.updateText_now[1]] = true
             if BiaoGe.options.lastVer then
@@ -240,20 +244,7 @@ BG.Init(function()
                         t:SetJustifyH("CENTER")
                     else
                         local upText = f.texts[i - 1]
-                        local x
-                        if t.isSub then
-                            if upText.isSub then
-                                x = 0
-                            else
-                                x = offset
-                            end
-                        else
-                            if upText.isSub then
-                                x = -offset
-                            else
-                                x = 0
-                            end
-                        end
+                        local x = indentBySub[t.isSub == true][upText.isSub == true]
                         t:SetPoint("TOPLEFT", upText, "BOTTOMLEFT", x, -15)
                         t:SetJustifyH("LEFT")
                     end
@@ -746,7 +737,7 @@ BG.Init(function()
             end
         end
     end
-    ----------难度选择菜单----------
+    ----------提供难度选择的菜单----------
     if not BG.onlyOneHard then
         local tbl = {
             [3] = { ID = 3, name = L["10人|cff00BFFF普通|r"], sound = 12880 },
@@ -820,15 +811,9 @@ BG.Init(function()
             info.notCheckable = true
             LibBG:UIDropDownMenu_AddButton(info)
 
-            if BG.IsRetail then
-                AddButton(14)
-                AddButton(15)
-                AddButton(16)
-            else
-                AddButton(3)
-                AddButton(5)
-                AddButton(4)
-                AddButton(6)
+            local diffIDs = BG.IsRetail and { 14, 15, 16 } or { 3, 5, 4, 6 }
+            for _, diffID in ipairs(diffIDs) do
+                AddButton(diffID)
             end
         end)
 
@@ -848,7 +833,7 @@ BG.Init(function()
             end
         end)
     end
-    ----------副本切换按钮----------
+    ----------用于切换副本的按钮----------
     do
         local last
         local lastClickFB = BG.FB1
@@ -1016,7 +1001,7 @@ BG.Init(function()
             l:SetThickness(1.5)
         end
     end
-    ----------模块切换按钮----------
+    ----------用于切换模块的按钮----------
     do
         BG.tabButtons = {}
         BG.mainNavigationButtons = {}
@@ -1237,7 +1222,7 @@ BG.Init(function()
             end)
         end
     end
-    ----------定时获取当前副本----------
+    ----------按固定间隔读取当前所在副本----------
     do
         -- 获取当前副本
         local lastZoneID
@@ -1261,7 +1246,7 @@ BG.Init(function()
             lastZoneID = FBID
         end)
     end
-    ----------高亮团长发出的装备----------
+    ----------把团长贴出的装备标为高亮----------
     do
         local blackList = {
             '{rt7}拍卖取消{rt7}',
@@ -1384,7 +1369,7 @@ BG.Init(function()
             end
         end)
     end
-    ----------点击聊天/背包添加装备----------
+    ----------通过点击聊天或背包条目来添加装备----------
     do
         local function Insert(text)
             if not GetItemID(text) then return end
@@ -1435,7 +1420,7 @@ BG.Init(function()
             hooksecurefunc("ContainerFrameItemButton_OnModifiedClick", func)
         end
     end
-    ----------离队入队染上职业颜色----------
+    ----------成员进出队伍时给名字着上职业色----------
     do
         local lastraidjoinname
         local lastpartyjoinname
@@ -1445,68 +1430,85 @@ BG.Init(function()
                 return select(4, GetClassColor(class))
             end
         end
+        local raidJoinLast = {
+            get = function() return lastraidjoinname end,
+            set = function(value) lastraidjoinname = value end,
+        }
+        local partyJoinLast = {
+            get = function() return lastpartyjoinname end,
+            set = function(value) lastpartyjoinname = value end,
+        }
+        local function LeaveMessage(name, roster, err)
+            if roster and type(roster) == "table" then
+                for k, v in pairs(roster) do
+                    if name == v.name then
+                        local link = "|Hplayer:" .. name .. "|h[" .. name .. "]|h"
+                        local c = select(4, GetClassColor(v.class))
+                        return format(err, "|c" .. c .. link .. "|r")
+                    end
+                end
+            end
+        end
+        local function JoinMessage(name, groupCheck, err, last)
+            C_Timer.After(0.5, function()
+                if not groupCheck(1) then return end
+                if last.get() == name then return end
+                local link = "|Hplayer:" .. name .. "|h[" .. name .. "]|h"
+                local color = GetColorByName(name)
+                local colorname = color and "|c" .. color .. link .. "|r" or link
+                SendSystemMessage(format(err .. " ", colorname))
+                last.set(name)
+            end)
+        end
+        local messageRules = {
+            {
+                match = function(msg) return strmatch(msg, ERR_RAID_MEMBER_REMOVED_S:gsub("%%s", "(.+)")) end,
+                leave = true,
+                roster = BG.raidRosterInfo,
+                err = ERR_RAID_MEMBER_REMOVED_S,
+                last = raidJoinLast,
+            },
+            {
+                match = function(msg) return strmatch(msg, ERR_RAID_MEMBER_ADDED_S:gsub("%%s", "(.+)")) end,
+                groupCheck = IsInRaid,
+                err = ERR_RAID_MEMBER_ADDED_S,
+                last = raidJoinLast,
+            },
+            {
+                match = function(msg) return strmatch(msg, ERR_LEFT_GROUP_S:gsub("%%s", "(.+)")) end,
+                leave = true,
+                roster = BG.groupRosterInfo,
+                err = ERR_LEFT_GROUP_S,
+                last = partyJoinLast,
+            },
+            {
+                match = function(msg) return strmatch(msg, ERR_JOINED_GROUP_S:gsub("%%s", "(.+)")) end,
+                groupCheck = IsInGroup,
+                err = ERR_JOINED_GROUP_S,
+                last = partyJoinLast,
+            },
+        }
         local function MsgClassColor(self, event, msg, player, l, cs, t, flag, channelId, ...)
             if BiaoGe.options.ERR_CHAT_THROTTLED == 1 and msg == ERR_CHAT_THROTTLED then return true end
             if BiaoGe.options["joinorleavePlayercolor"] ~= 1 then return end
             if msg:match("%s$") then return end
 
-            local raidleavename = strmatch(msg, ERR_RAID_MEMBER_REMOVED_S:gsub("%%s", "(.+)"))
-            local raidjoinname = strmatch(msg, ERR_RAID_MEMBER_ADDED_S:gsub("%%s", "(.+)"))
-            local partyleavename = strmatch(msg, ERR_LEFT_GROUP_S:gsub("%%s", "(.+)"))
-            local partyjoinname = strmatch(msg, ERR_JOINED_GROUP_S:gsub("%%s", "(.+)"))
-            -- 离开了团队
-            if raidleavename then
-                if BG.raidRosterInfo and type(BG.raidRosterInfo) == "table" then
-                    for k, v in pairs(BG.raidRosterInfo) do
-                        if raidleavename == v.name then
-                            local raidleavenamelink = "|Hplayer:" .. raidleavename .. "|h[" .. raidleavename .. "]|h"
-                            local c = select(4, GetClassColor(v.class))
-                            local colorname = "|c" .. c .. raidleavenamelink .. "|r"
-                            msg = format(ERR_RAID_MEMBER_REMOVED_S, colorname)
-                            lastraidjoinname = nil
+            for _, rule in ipairs(messageRules) do
+                local name = rule.match(msg)
+                if name then
+                    if rule.leave then
+                        local colored = LeaveMessage(name, rule.roster, rule.err)
+                        if colored then
+                            rule.last.set(nil)
+                            msg = colored
                             return false, msg, player, l, cs, t, flag, channelId, ...
                         end
+                    else
+                        JoinMessage(name, rule.groupCheck, rule.err, rule.last)
+                        return true
                     end
+                    break
                 end
-                -- 加入了团队
-            elseif raidjoinname then
-                C_Timer.After(0.5, function()
-                    if not IsInRaid(1) then return end
-                    if lastraidjoinname == raidjoinname then return end
-                    local raidjoinnamelink = "|Hplayer:" .. raidjoinname .. "|h[" .. raidjoinname .. "]|h"
-                    local color = GetColorByName(raidjoinname)
-                    local colorname = color and "|c" .. color .. raidjoinnamelink .. "|r" or raidjoinnamelink
-                    SendSystemMessage(format(ERR_RAID_MEMBER_ADDED_S .. " ", colorname))
-                    lastraidjoinname = raidjoinname
-                end)
-                return true
-
-                -- 离开了队伍
-            elseif partyleavename then
-                if BG.groupRosterInfo and type(BG.groupRosterInfo) == "table" then
-                    for k, v in pairs(BG.groupRosterInfo) do
-                        if partyleavename == v.name then
-                            local partyleavenamelink = "|Hplayer:" .. partyleavename .. "|h[" .. partyleavename .. "]|h"
-                            local c = select(4, GetClassColor(v.class))
-                            local colorname = "|c" .. c .. partyleavenamelink .. "|r"
-                            msg = format(ERR_LEFT_GROUP_S, colorname)
-                            lastpartyjoinname = nil
-                            return false, msg, player, l, cs, t, flag, channelId, ...
-                        end
-                    end
-                end
-                -- 加入了队伍
-            elseif partyjoinname then
-                C_Timer.After(0.5, function()
-                    if not IsInGroup(1) then return end
-                    if lastpartyjoinname == partyjoinname then return end
-                    local partyjoinnamelink = "|Hplayer:" .. partyjoinname .. "|h[" .. partyjoinname .. "]|h"
-                    local color = GetColorByName(partyjoinname)
-                    local colorname = color and "|c" .. color .. partyjoinnamelink .. "|r" or partyjoinnamelink
-                    SendSystemMessage(format(ERR_JOINED_GROUP_S .. " ", colorname))
-                    lastpartyjoinname = partyjoinname
-                end)
-                return true
             end
         end
         ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", MsgClassColor)
@@ -1564,7 +1566,7 @@ BG.Init(function()
             local channel = Channel(leader, assistant, looter, BiaoGe.options["countDownSendChannel"])
             if auctioning then
                 local text = L["{rt7}倒数暂停{rt7}"]
-                SendChatMessage(text, channel)
+                SendGateway.Chat(text, channel)
                 auctioning = nil
                 f:SetScript("OnUpdate", nil)
                 return
@@ -1572,7 +1574,7 @@ BG.Init(function()
 
             local Maxtime = BiaoGe.options["countDownDuration"]
             local text = link .. L[" {rt1}拍卖倒数{rt1}"]
-            SendChatMessage(text, channel)
+            SendGateway.Chat(text, channel)
             auctioning = true
 
             local timeElapsed = 0
@@ -1582,7 +1584,7 @@ BG.Init(function()
                     needStop = nil
                     BG.PlaySound("countDownStop")
                     local text = L["{rt7}倒数暂停{rt7}"]
-                    SendChatMessage(text, channel)
+                    SendGateway.Chat(text, channel)
                     auctioning = nil
                     f:SetScript("OnUpdate", nil)
                     return
@@ -1596,7 +1598,7 @@ BG.Init(function()
                         return
                     end
                     local text = "> " .. lasttime .. " <"
-                    SendChatMessage(text, channel)
+                    SendGateway.Chat(text, channel)
                     timeElapsed = 0
                 end
             end)
@@ -1775,7 +1777,7 @@ BG.Init(function()
         local icon = f:CreateTexture()
         icon:SetSize(20, 20)
         icon:SetPoint("LEFT", 0, 0)
-        icon:SetTexture([[Interface\AddOns\BGForge\Media\icon\icon-128.tga]])
+        icon:SetTexture(format("Interface\\AddOns\\%s\\Media\\icon\\icon-128.tga", AddonName))
         local t = f:CreateFontString()
         t:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
         t:SetPoint("LEFT", icon, "RIGHT", 0, -1)
@@ -1783,7 +1785,7 @@ BG.Init(function()
         t:SetText(AddonName)
         f:SetWidth(icon:GetWidth() + t:GetWidth() + 0)
     end)
-    ----------幻化/鼠标材质----------
+    ----------幻化外观与鼠标指针贴图----------
     do
         function BG.DressUp(type)
             local itemID
@@ -1958,8 +1960,6 @@ BG.Init(function()
             end
 
             S(BiaoGeTooltip2)
-            -- for i = 11, 15 do
-            --     local frameName = "BiaoGeTooltip" .. i
             --     S(_G[frameName])
             -- end
         end
@@ -1995,24 +1995,29 @@ BG.Init(function()
             BG.ClickTabButton(BG.FBMainFrameTabNum)
         end
     end)
-    ----------检查版本过期----------
+    ----------判定版本是否已过期----------
     do
-        -- 把版本号转换为纯数字
+        -- 将版本号换算成一串数字
         function BG.GetVerNum(ver)
             ver = ver:gsub("%s-[Bb]eta%d+", ""):gsub("%s-[Aa]lpha%d+", "")
             local lastString = tonumber(strsub(ver, strlen(ver), strlen(ver)))
             if lastString then
                 ver = ver .. "0"
             end
-            ver = ver:gsub("a", 1)
-            ver = ver:gsub("b", 2)
-            ver = ver:gsub("c", 3)
-            ver = ver:gsub("d", 4)
-            ver = ver:gsub("e", 5)
-            ver = ver:gsub("f", 6)
-            ver = ver:gsub("g", 7)
-            ver = ver:gsub("h", 8)
-            ver = ver:gsub("i", 9)
+            local letterValue = {
+                ["a"] = 1,
+                ["b"] = 2,
+                ["c"] = 3,
+                ["d"] = 4,
+                ["e"] = 5,
+                ["f"] = 6,
+                ["g"] = 7,
+                ["h"] = 8,
+                ["i"] = 9,
+            }
+            for letter, value in pairs(letterValue) do
+                ver = ver:gsub(letter, value)
+            end
             local start, middle, last = strsplit(".", ver)
             if middle:len() == 1 then
                 middle = "0" .. middle
@@ -2046,7 +2051,7 @@ BG.Init(function()
     BG.MainFrame.ErrorText:Hide()
 end)
 
-----------刷新团队成员信息----------
+----------更新团队名单与成员数据----------
 do
     BG.raidRosterInfo = {}
     BG.groupRosterInfo = {}

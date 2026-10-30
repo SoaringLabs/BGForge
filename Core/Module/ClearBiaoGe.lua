@@ -116,49 +116,258 @@ local function CheckAutoClearForInstance(instanceID)
     return decision
 end
 
+local RAID_PLAYER_DEFAULTS = {
+    { flag = "IsVanilla", default = 40 },
+    { flag = "IsTBC", default = 25 },
+    { flag = "IsTitan", default = 25, titan = true },
+    { flag = "IsRetail", default = 20 },
+}
+
+local DIFFICULTY_RAID_SIZE = {
+    [3] = 10, [175] = 10,
+    [4] = 25, [176] = 25,
+    [5] = 10, [193] = 10,
+    [6] = 25, [194] = 25,
+}
+
+local CLEAR_UI_TEXT_FIELDS = { "zhuangbei", "maijia", "jine" }
+local CLEAR_UI_HIDE_FIELDS = { "qiankuan", "guanzhu" }
+local CLEAR_DB_FIELDS = {
+    "zhuangbei", "maijia", "jine", "qiankuan", "guanzhu",
+    "loot", "itemLevel", "bindOnEquip",
+}
+
+local FREE_CLEAR_BUTTON_SPECS = {
+    {
+        text = L["全选"],
+        point = "TOPRIGHT", relPoint = "TOPRIGHT",
+        x = -10, y = -30,
+        field = "chooseAllButton", choose = true,
+    },
+    {
+        text = L["取消全选"],
+        point = "TOP", anchorField = "chooseAllButton", relPoint = "BOTTOM",
+        x = 0, y = -5,
+        field = "cancelAllButton",
+    },
+    {
+        text = L["确定清空表格"],
+        point = "TOP", anchorField = "cancelAllButton", relPoint = "BOTTOM",
+        x = 0, y = -40,
+        field = "sureButton",
+    },
+}
+
+local FREE_CLEAR_BACKDROP = {
+    bgFile = "Interface/ChatFrame/ChatFrameBackground",
+    edgeFile = "Interface/ChatFrame/ChatFrameBackground",
+    edgeSize = 1,
+}
+
+local function FreeClearOnHide(self)
+    self:Hide()
+end
+
+local function FreeClearOnMouseUp(self)
+    self:StopMovingOrSizing()
+end
+
+local function FreeClearOnMouseDown(self)
+    self:StartMoving()
+end
+
+local function AddGoldDoubleLine(label, value)
+    GameTooltip:AddDoubleLine(label, value, 1, .82, 0, 1, .82, 0)
+end
+
+local function ResolveRaidPlayerCount(FB)
+    local num
+    for _, rule in ipairs(RAID_PLAYER_DEFAULTS) do
+        if BG[rule.flag] then
+            if rule.titan and BiaoGe.options["QingKongPeople"] == 1
+                and tonumber(BiaoGe.options["MaxPlayers_Titan"])
+                and FB ~= "Worldtitan"
+            then
+                num = tonumber(BiaoGe.options["MaxPlayers_Titan"])
+            else
+                num = BG.GetFBinfo(FB, "maxplayers") or rule.default
+            end
+            break
+        end
+    end
+    if num then
+        return num
+    end
+    local size = DIFFICULTY_RAID_SIZE[GetRaidDifficultyID()]
+    if size then
+        local optionKey = size == 10 and "10MaxPlayers" or "25MaxPlayers"
+        return (BiaoGe.options["QingKongPeople"] == 1 and BiaoGe.options[optionKey]) or size
+    end
+    return 25
+end
+
+local function ClearBiaoGeTable(FB)
+    for b = 1, Maxb[FB] + 1 do
+        BG.ClearBiaoGeByIndex(FB, b)
+    end
+    BiaoGe[FB].tradeTbl = {}
+    BiaoGe[FB].raidRoster = nil
+    BiaoGe[FB].auctionLog = nil
+    BiaoGe[FB].leaderInfo = nil
+    BG.UpdateAuctionLogFrame()
+    BG.auctionLogFrame.changeFrame:Hide()
+
+    local num = ResolveRaidPlayerCount(FB)
+    if num then
+        local totalBossKey = "boss" .. (Maxb[FB] + 2)
+        BG.Frame[FB][totalBossKey]["jine4"]:SetText(num)
+        BiaoGe[FB][totalBossKey]["jine4"] = num
+    end
+
+    local money = floor(GetMoney() / 1e4)
+    BiaoGe.clearBiaoGeMoney = BiaoGe.clearBiaoGeMoney or {}
+    BiaoGe.clearBiaoGeMoney[FB] = {
+        FB = FB,
+        realmID = realmID,
+        name = player,
+        money = money,
+        time = GetServerTime()
+    }
+    BG.UpdateButtonClearBiaoGeMoney()
+    return num
+end
+
+local CLEAR_TYPE_HANDLERS = {
+    biaoge = ClearBiaoGeTable,
+}
+
+local function ClearFreeAuctionLog(FB)
+    BiaoGe[FB].auctionLog = nil
+    BG.UpdateAuctionLogFrame()
+    BG.auctionLogFrame.changeFrame:Hide()
+end
+
+local NUMBER_CLEAR_ACTION = function(FB, b)
+    BG.ClearBiaoGeByIndex(FB, b)
+end
+
+local FREE_CLEAR_ACTIONS = {
+    auctionLog = ClearFreeAuctionLog,
+}
+
+local function FreeClearCheckOnClick(self)
+    self.clearFrame.sureButton:Update()
+end
+
+local function CreateFreeClearCheckButton(frame, id, text)
+    local bt = CreateFrame("CheckButton", nil, frame, "ChatConfigCheckButtonTemplate")
+    bt:SetSize(30, 30)
+    if next(frame.buttons) then
+        bt:SetPoint("TOPLEFT", frame.buttons[#frame.buttons], "BOTTOMLEFT", 0, 0)
+    else
+        bt:SetPoint("TOPLEFT", 10, -30)
+    end
+    bt.Text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
+    bt.Text:SetText(text)
+    bt:SetHitRectInsets(0, -bt.Text:GetWidth(), 0, 0)
+    bt.id = id
+    bt.clearFrame = frame
+    tinsert(frame.buttons, bt)
+    bt:HookScript("OnClick", FreeClearCheckOnClick)
+end
+
+local function CreateFreeClearActionButton(frame, spec)
+    local bt = BG.CreateButton(frame)
+    bt:SetSize(110, 25)
+    local anchor = spec.anchorField and frame[spec.anchorField] or frame
+    bt:SetPoint(spec.point, anchor, spec.relPoint, spec.x, spec.y)
+    bt:SetText(spec.text)
+    if spec.choose then
+        bt.choose = true
+    end
+    frame[spec.field] = bt
+    return bt
+end
+
+local function FreeClearToggleAll(self)
+    BG.PlaySound(1)
+    local frame = self:GetParent()
+    for _, bt in ipairs(frame.buttons) do
+        bt:SetChecked(self.choose)
+    end
+    frame.sureButton:Update()
+end
+
+local function FreeClearSureOnClick(self)
+    local frame = self:GetParent()
+    local FB = frame.clearFB
+    for _, bt in ipairs(frame.buttons) do
+        if bt:GetChecked() then
+            local action = type(bt.id) == "number" and NUMBER_CLEAR_ACTION or FREE_CLEAR_ACTIONS[bt.id]
+            if action then
+                action(FB, bt.id)
+            end
+        end
+    end
+    BG.PlaySound(2)
+    frame:Hide()
+end
+
+
+local function ApplyMoneyColor(button, r, g, b)
+    button.Text:SetTextColor(r, g, b)
+    button.title.Text:SetTextColor(r, g, b)
+end
+
 function BG.ClearBiaoGeUI()
     function BG.ClearBiaoGeByIndex(FB, b)
+        local uiFrame = BG.Frame[FB]
+        local dbTable = BiaoGe[FB]
         if b == Maxb[FB] + 1 then
-            for i = 1, BG.Maxi + 10 do -- 清空支出
-                if BG.Frame[FB]["boss" .. Maxb[FB] + 1]["zhuangbei" .. i] then
+            local maxIndex = math.max(BG.Maxi + 10, BG.GetMaxi(FB, b))
+            local rowKey = "boss" .. (Maxb[FB] + 1)
+            local uiRow = uiFrame[rowKey]
+            local dbRow = dbTable[rowKey]
+            for i = 1, maxIndex do -- 清空支出
+                if uiRow["zhuangbei" .. i] then
                     if BiaoGe.options["retainExpenses"] ~= 1 then
-                        BG.Frame[FB]["boss" .. Maxb[FB] + 1]["zhuangbei" .. i]:SetText("")
-                        BiaoGe[FB]["boss" .. Maxb[FB] + 1]["zhuangbei" .. i] = nil
+                        uiRow["zhuangbei" .. i]:SetText("")
+                        dbRow["zhuangbei" .. i] = nil
                     end
                     if not (BiaoGe.options["retainExpenses"] == 1 and BiaoGe.options["retainExpensesMoney"] == 1) then
-                        BG.Frame[FB]["boss" .. Maxb[FB] + 1]["jine" .. i]:SetText("")
-                        BiaoGe[FB]["boss" .. Maxb[FB] + 1]["jine" .. i] = nil
+                        uiRow["jine" .. i]:SetText("")
+                        dbRow["jine" .. i] = nil
                     end
-                    BG.Frame[FB]["boss" .. Maxb[FB] + 1]["maijia" .. i]:SetText("")
-                    BiaoGe[FB]["boss" .. Maxb[FB] + 1]["maijia" .. i] = nil
+                    uiRow["maijia" .. i]:SetText("")
+                    dbRow["maijia" .. i] = nil
                 end
             end
         elseif b <= Maxb[FB] then
-            -- Keep clearing legacy hidden rows as well as expanded raid layouts.
-            for i = 1, math.max(BG.Maxi + 10, BG.GetMaxi(FB, b)) do
+            local maxIndex = math.max(BG.Maxi + 10, BG.GetMaxi(FB, b))
+            local rowKey = "boss" .. b
+            local uiRow = uiFrame[rowKey]
+            local dbRow = dbTable[rowKey]
+            local dzRow = BG.DuiZhangFrame[FB][rowKey]
+            for i = 1, maxIndex do
                 -- 表格
-                if BG.Frame[FB]["boss" .. b]["zhuangbei" .. i] then
-                    BG.Frame[FB]["boss" .. b]["zhuangbei" .. i]:SetText("")
-                    BG.Frame[FB]["boss" .. b]["maijia" .. i]:SetText("")
-                    BG.Frame[FB]["boss" .. b]["jine" .. i]:SetText("")
-                    BG.Frame[FB]["boss" .. b]["qiankuan" .. i]:Hide()
-                    BG.Frame[FB]["boss" .. b]["guanzhu" .. i]:Hide()
+                if uiRow["zhuangbei" .. i] then
+                    for _, field in ipairs(CLEAR_UI_TEXT_FIELDS) do
+                        uiRow[field .. i]:SetText("")
+                    end
+                    for _, field in ipairs(CLEAR_UI_HIDE_FIELDS) do
+                        uiRow[field .. i]:Hide()
+                    end
                 end
-                BiaoGe[FB]["boss" .. b]["zhuangbei" .. i] = nil
-                BiaoGe[FB]["boss" .. b]["maijia" .. i] = nil
-                BiaoGe[FB]["boss" .. b]["jine" .. i] = nil
-                BiaoGe[FB]["boss" .. b]["qiankuan" .. i] = nil
-                BiaoGe[FB]["boss" .. b]["guanzhu" .. i] = nil
-                BiaoGe[FB]["boss" .. b]["loot" .. i] = nil
-                BiaoGe[FB]["boss" .. b]["itemLevel" .. i] = nil
-                BiaoGe[FB]["boss" .. b]["bindOnEquip" .. i] = nil
-                for k, v in pairs(BG.playerClass) do
-                    BiaoGe[FB]["boss" .. b][k .. i] = nil
+                for _, field in ipairs(CLEAR_DB_FIELDS) do
+                    dbRow[field .. i] = nil
+                end
+                for k in pairs(BG.playerClass) do
+                    dbRow[k .. i] = nil
                 end
                 -- 对账
-                if BG.DuiZhangFrame[FB]["boss" .. b]["zhuangbei" .. i] then
-                    BG.DuiZhangFrame[FB]["boss" .. b]["zhuangbei" .. i]:SetText("")
-                    BG.DuiZhangFrame[FB]["boss" .. b]["myjine" .. i]:SetText("")
+                if dzRow["zhuangbei" .. i] then
+                    dzRow["zhuangbei" .. i]:SetText("")
+                    dzRow["myjine" .. i]:SetText("")
                 end
             end
         end
@@ -166,75 +375,9 @@ function BG.ClearBiaoGeUI()
 
     function BG.ClearBiaoGe(_type, FB)
         if not FB then return end
-        if _type == "biaoge" then
-            for b = 1, Maxb[FB] + 1 do
-                BG.ClearBiaoGeByIndex(FB, b)
-            end
-            BiaoGe[FB].tradeTbl = {}
-            BiaoGe[FB].raidRoster = nil
-            BiaoGe[FB].auctionLog = nil
-            BiaoGe[FB].leaderInfo = nil
-            BG.UpdateAuctionLogFrame()
-            BG.auctionLogFrame.changeFrame:Hide()
-
-            local num -- 分钱人数
-            if BG.IsVanilla then
-                num = BG.GetFBinfo(FB, "maxplayers") or 40
-            elseif BG.IsTBC then
-                num = BG.GetFBinfo(FB, "maxplayers") or 25
-            elseif BG.IsTitan then
-                if BiaoGe.options["QingKongPeople"] == 1
-                    and tonumber(BiaoGe.options["MaxPlayers_Titan"])
-                    and FB ~= "Worldtitan"
-                then
-                    num = tonumber(BiaoGe.options["MaxPlayers_Titan"])
-                else
-                    num = BG.GetFBinfo(FB, "maxplayers") or 25
-                end
-            elseif BG.IsRetail then
-                num = BG.GetFBinfo(FB, "maxplayers") or 20
-            else
-                num = 25
-                local nanduID = GetRaidDifficultyID()
-                if nanduID == 3 or nanduID == 175 then
-                    num = (BiaoGe.options["QingKongPeople"] == 1 and BiaoGe.options["10MaxPlayers"]) or 10
-                elseif nanduID == 4 or nanduID == 176 then
-                    num = (BiaoGe.options["QingKongPeople"] == 1 and BiaoGe.options["25MaxPlayers"]) or 25
-                elseif nanduID == 5 or nanduID == 193 then
-                    num = (BiaoGe.options["QingKongPeople"] == 1 and BiaoGe.options["10MaxPlayers"]) or 10
-                elseif nanduID == 6 or nanduID == 194 then
-                    num = (BiaoGe.options["QingKongPeople"] == 1 and BiaoGe.options["25MaxPlayers"]) or 25
-                end
-            end
-            if num then
-                BG.Frame[FB]["boss" .. Maxb[FB] + 2]["jine4"]:SetText(num)
-                BiaoGe[FB]["boss" .. Maxb[FB] + 2]["jine4"] = num
-            end
-
-            local money = floor(GetMoney() / 1e4)
-            BiaoGe.clearBiaoGeMoney = BiaoGe.clearBiaoGeMoney or {}
-            BiaoGe.clearBiaoGeMoney[FB] = {
-                FB = FB,
-                realmID = realmID,
-                name = player,
-                money = money,
-                time = GetServerTime()
-            }
-            BG.UpdateButtonClearBiaoGeMoney()
-            return num
-        elseif _type == "hope" then
-            for n = 1, HopeMaxn[FB] do
-                for b = 1, Maxb[FB] - 1 do
-                    for i = 1, HopeMaxi do
-                        if BG.HopeFrame[FB]["nandu" .. n]["boss" .. b]["zhuangbei" .. i] then
-                            BG.HopeFrame[FB]["nandu" .. n]["boss" .. b]["zhuangbei" .. i]:SetText("")
-                            BiaoGe.Hope[realmID][player][FB]["nandu" .. n]["boss" .. b]["zhuangbei" .. i] = nil
-                        end
-                    end
-                end
-            end
-            BG.UpdateItemLib_LeftHope_HideAll()
-            BG.UpdateItemLib_RightHope_HideAll()
+        local handler = CLEAR_TYPE_HANDLERS[_type]
+        if handler then
+            return handler(FB)
         end
     end
 
@@ -329,38 +472,38 @@ function BG.ClearBiaoGeUI()
 
         local function OnEnter(self)
             local FB = BG.FB1
-            local p = SetClassCFF(BiaoGe.clearBiaoGeMoney[FB].name)
-            local f = BG.GetFBinfo(BiaoGe.clearBiaoGeMoney[FB].FB, "shortName")
-            local t = date("%m-%d %H:%M", BiaoGe.clearBiaoGeMoney[FB].time)
-            local m = GetMoneyString(BiaoGe.clearBiaoGeMoney[FB].money .. "0000", true)
+            local entry = BiaoGe.clearBiaoGeMoney[FB]
+            local p = SetClassCFF(entry.name)
+            local f = BG.GetFBinfo(entry.FB, "shortName")
+            local t = date("%m-%d %H:%M", entry.time)
+            local m = GetMoneyString(entry.money .. "0000", true)
             GameTooltip:SetOwner(poit, "ANCHOR_TOPLEFT", 0, 0)
             GameTooltip:ClearLines()
             GameTooltip:AddLine(L["清空表格时携带的金币"], 1, 1, 1, true)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddDoubleLine(L["角色："], p, 1, 0.82, 0, 1, 0.82, 0)
-            GameTooltip:AddDoubleLine(L["表格："], f, 1, 0.82, 0, 1, 0.82, 0)
-            GameTooltip:AddDoubleLine(L["时间："], t, 1, 0.82, 0, 1, 0.82, 0)
-            GameTooltip:AddDoubleLine(L["金币："], m, 1, 0.82, 0, 1, 0.82, 0)
+            AddGoldDoubleLine(L["角色："], p)
+            AddGoldDoubleLine(L["表格："], f)
+            AddGoldDoubleLine(L["时间："], t)
+            AddGoldDoubleLine(L["金币："], m)
             GameTooltip:Show()
         end
 
         function BG.UpdateButtonClearBiaoGeMoney()
             local FB = BG.FB1
             local f = BG.ButtonClearBiaoGeMoney
-            if not (BiaoGe.clearBiaoGeMoney and BiaoGe.clearBiaoGeMoney[FB]) then
+            local entry = BiaoGe.clearBiaoGeMoney and BiaoGe.clearBiaoGeMoney[FB]
+            if not entry then
                 f:Hide()
             else
                 local jine = BG.Frame[FB]["boss" .. Maxb[FB] + 2].jine5
                 f:Show()
                 f:ClearAllPoints()
                 f:SetPoint("TOPRIGHT", jine, "BOTTOMRIGHT", 1, -1)
-                f.Text:SetText(BiaoGe.clearBiaoGeMoney[FB].money)
-                if BiaoGe.clearBiaoGeMoney[FB].realmID == realmID and BiaoGe.clearBiaoGeMoney[FB].name == player then
-                    f.Text:SetTextColor(1, .82, 0)
-                    f.title.Text:SetTextColor(1, .82, 0)
+                f.Text:SetText(entry.money)
+                if entry.realmID == realmID and entry.name == player then
+                    ApplyMoneyColor(f, 1, .82, 0)
                 else
-                    f.Text:SetTextColor(.5, .5, .5)
-                    f.title.Text:SetTextColor(.5, .5, .5)
+                    ApplyMoneyColor(f, .5, .5, .5)
                 end
             end
         end
@@ -410,11 +553,7 @@ function BG.ClearBiaoGeUI()
         local FB = BG.FB1
         local parent = BG["Frame" .. FB]
         local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-        f:SetBackdrop({
-            bgFile = "Interface/ChatFrame/ChatFrameBackground",
-            edgeFile = "Interface/ChatFrame/ChatFrameBackground",
-            edgeSize = 1,
-        })
+        f:SetBackdrop(FREE_CLEAR_BACKDROP)
         f:SetBackdropColor(0, 0, 0, 0.9)
         f:SetBackdropBorderColor(1, 1, 1, BG.borderAlpha)
         f:SetPoint("BOTTOMLEFT", BG.ButtonQingKong, "TOPLEFT", 0, 5)
@@ -423,15 +562,10 @@ function BG.ClearBiaoGeUI()
         f:SetMovable(true)
         f:SetFrameStrata("HIGH")
         f.buttons = {}
-        f:SetScript("OnHide", function(self)
-            self:Hide()
-        end)
-        f:SetScript("OnMouseUp", function(self)
-            self:StopMovingOrSizing()
-        end)
-        f:SetScript("OnMouseDown", function(self)
-            self:StartMoving()
-        end)
+        f.clearFB = FB
+        f:SetScript("OnHide", FreeClearOnHide)
+        f:SetScript("OnMouseUp", FreeClearOnMouseUp)
+        f:SetScript("OnMouseDown", FreeClearOnMouseDown)
         BG.freeClearBiaoGeFrame = f
 
         BG.CreateCloseButton(f)
@@ -447,80 +581,26 @@ function BG.ClearBiaoGeUI()
         f.titleText:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
         f.titleText:SetFormattedText(L["清空表格（%s）"], BG.GetFBinfo(FB, "shortName"))
 
-        local function CreateCheckButton(b, text)
-            local bt = CreateFrame("CheckButton", nil, f, "ChatConfigCheckButtonTemplate")
-            bt:SetSize(30, 30)
-            if next(f.buttons) then
-                bt:SetPoint("TOPLEFT", f.buttons[#f.buttons], "BOTTOMLEFT", 0, 0)
-            else
-                bt:SetPoint("TOPLEFT", 10, -30)
-            end
-            bt.Text:SetFont(BIAOGE_TEXT_FONT, 15, "OUTLINE")
-            bt.Text:SetText(text)
-            bt:SetHitRectInsets(0, -bt.Text:GetWidth(), 0, 0)
-            bt.id = b
-            tinsert(f.buttons, bt)
-            bt:HookScript("OnClick", function()
-                f.sureButton:Update()
-            end)
+        local bossCount = Maxb[FB] + 1
+        local bossTable = BG.Boss[FB]
+        for b = 1, bossCount do
+            local boss = bossTable["boss" .. b]
+            CreateFreeClearCheckButton(f, b, "|cff" .. boss.color .. boss.name2)
         end
-
-        for b = 1, Maxb[FB] + 1 do
-            local bossName = BG.Boss[FB]["boss" .. b].name2
-            local color = BG.Boss[FB]["boss" .. b].color
-            local text = "|cff" .. color .. bossName
-            CreateCheckButton(b, text)
-        end
-        CreateCheckButton("auctionLog", L["自动拍卖记录"])
+        CreateFreeClearCheckButton(f, "auctionLog", L["自动拍卖记录"])
         f:SetHeight(#f.buttons * 30 + 40)
 
-        local function OnClick(self)
-            BG.PlaySound(1)
-            for i, bt in ipairs(f.buttons) do
-                bt:SetChecked(self.choose)
+        for _, spec in ipairs(FREE_CLEAR_BUTTON_SPECS) do
+            local bt = CreateFreeClearActionButton(f, spec)
+            if spec.field == "sureButton" then
+                bt:SetScript("OnClick", FreeClearSureOnClick)
+            else
+                bt:SetScript("OnClick", FreeClearToggleAll)
             end
-            f.sureButton:Update()
         end
-
-        local bt = BG.CreateButton(f)
-        bt:SetSize(110, 25)
-        bt:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -30)
-        bt:SetText(L["全选"])
-        bt.choose = true
-        f.chooseAllButton = bt
-        bt:SetScript("OnClick", OnClick)
-
-        local bt = BG.CreateButton(f)
-        bt:SetSize(110, 25)
-        bt:SetPoint("TOP", f.chooseAllButton, "BOTTOM", 0, -5)
-        bt:SetText(L["取消全选"])
-        f.cancelAllButton = bt
-        bt:SetScript("OnClick", OnClick)
-
-        local bt = BG.CreateButton(f)
-        bt:SetSize(110, 25)
-        bt:SetPoint("TOP", f.cancelAllButton, "BOTTOM", 0, -40)
-        bt:SetText(L["确定清空表格"])
-        f.sureButton = bt
-        bt:SetScript("OnClick", function(self)
-            for i, bt in ipairs(f.buttons) do
-                if bt:GetChecked() then
-                    local b = bt.id
-                    if b == "auctionLog" then
-                        BiaoGe[FB].auctionLog = nil
-                        BG.UpdateAuctionLogFrame()
-                        BG.auctionLogFrame.changeFrame:Hide()
-                    elseif type(b) == "number" then
-                        BG.ClearBiaoGeByIndex(FB, bt.id)
-                    end
-                end
-            end
-            BG.PlaySound(2)
-            f:Hide()
-        end)
         function f.sureButton:Update()
             self:Disable()
-            for i, bt in ipairs(f.buttons) do
+            for _, bt in ipairs(f.buttons) do
                 if bt:GetChecked() then
                     self:Enable()
                 end
