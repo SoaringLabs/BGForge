@@ -4,6 +4,10 @@
 
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。新增更新日志与 GitHub Release 说明的格式规范见 [仓库格式规范](https://github.com/SoaringLabs/BGForge/blob/main/AGENTS.md#changelog-format)。
 
+## v1.6.0 - 2026-10-31
+
+1.【优化】同步官方 BGLite v1.6，保留 BGForge 的心愿清单、装备过滤、角色总览及清表修复
+
 ## v1.5.1 - 2026-10-10
 
 1.【修复】角色总览大界面和小界面补充奥杜尔 CD 显示，支持查看首领击杀进度与重置时间

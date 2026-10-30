@@ -16,8 +16,8 @@
       "new_sha256": "63057149060bb8a566d4648399cb53bd9fec5301c19dc4a63b5a0e86553722e2",
       "target": "BGForge.toc",
       "disposition": "metadata-adapted",
-      "notes": "加载条目映射至 BGForge.toc；新增两个协议模块并记录 X-Upstream-Release，保留本插件版本及通信版本。",
-      "target_sha256": "11456a0b1cb94c7db1c0804919106e732f8431af39d25a7bf1fe7df208e65f46"
+      "notes": "加载条目映射至 BGForge.toc；新增两个协议模块并记录 X-Upstream-Release，本插件目标版本升至1.6.0，保留通信版本。",
+      "target_sha256": "8779d8134d216d0e59e85d93cdbdf74318c3a064c4dbf75beb97c2add02a5fe0"
     },
     {
       "path": "Core/BiaoGe.lua",
@@ -485,5 +485,6 @@
       "disposition": "distribution-only",
       "notes": "官方发行平台作者标识，不复制到独立插件。"
     }
-  ]
+  ],
+  "bgforge_target_version": "1.6.0"
 }

@@ -149,5 +149,6 @@
       "exit": 0,
       "output": "已移除心愿：|Hitem:100|h[Item 100]|h\nWishlist UI render regression tests passed"
     }
-  ]
+  ],
+  "bgforge_target_version": "1.6.0"
 }

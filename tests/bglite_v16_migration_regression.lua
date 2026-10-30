@@ -344,7 +344,7 @@ CreateFrame=createFrameBeforeReceive
 print('BGLite v1.6 table framing, chunk assembly and decoded fields passed')
 
 -- Load the refactored database and execute its actual startup callbacks.
-GetAddOnMetadata=function(_,key) return key=='X-Upstream-Version' and '2.4.4' or '1.5.1' end
+GetAddOnMetadata=function(_,key) return key=='X-Upstream-Version' and '2.4.4' or '1.6.0' end
 GetRealZoneText=function(id) return tostring(id) end
 UnitRace=function() return 'Human','Human',1 end
 UnitLevel=function() return 80 end
@@ -372,6 +372,8 @@ Equal(BG.FBWidth.ULDtitan,1685,'Ulduar four-column layout')
 Equal(ns.Maxi.ULDtitan[15],52,'expanded misc rows')
 Equal(BG.FBIDtable[603],'ULDtitan')
 Equal(BG.HistoryFeatureEnabled,false)
+Equal(BG.addonVer,'v1.6.0','release version is independent of upstream protocol')
+Equal(BG.ver,'v2.4.4','version bump must preserve upstream protocol')
 local historic={keep=true}
 BiaoGe={Alpha=0.65,History=historic,options={autoQingKong=0},ULDtitan={boss15={zhuangbei52=link}}}
 for _,f in ipairs(initCallbacks) do f() end
