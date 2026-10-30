@@ -23,34 +23,11 @@ if [[ "$version" != *"Lua 5.1"* ]]; then
     exit 2
 fi
 
-files=(
-    Core/DB/DB.lua
-    Core/DB/DB_BossName.lua
-    Core/DB/DB_Loot_Titan.lua
-    Core/DB/DB_Loot_BlackWhiteList.lua
-    Locales/zhCN.lua
-    Locales/zhTW.lua
-    Locales/enUS.lua
-    Core/UI/DesignSystem.lua
-    Core/Module/HistoryStore.lua
-    Core/Module/History.lua
-    Core/Module/ClearBiaoGe.lua
-    Core/Module/AuctionMSG.lua
-    Core/Module/AuctionLog.lua
-    Core/Module/RaidLockoutOverview.lua
-    Core/Module/CharacterDetails.lua
-    Core/Module/Wishlist.lua
-    Core/Module/WishlistUI.lua
-    Core/Module/ChatYYLink.lua
-    Core/Module/RurutiaSuiteCompat.lua
-    Core/BiaoGe.lua
-    Core/Module/Auction.lua
-    Core/Module/AuctionWA.lua
-    Core/Module/AuctionWAEvent.lua
-    Core/Module/Loot.lua
-    Core/Module/Trade.lua
-    Core/Options.lua
-)
+# Include every Core/Locales Lua file, including newly added protocol modules.
+files=()
+while IFS= read -r file; do
+    files+=("$file")
+done < <(rg --files Core Locales -g '*.lua' | LC_ALL=C sort)
 
 for file in "${files[@]}"; do
     "$compiler" -p "$file"

@@ -1,0 +1,489 @@
+{
+  "upstream_release": "v1.6",
+  "upstream_internal_version": "2.4.4",
+  "auction_protocol_version": "v4.0",
+  "bgforge_base_commit": "f46eb5b3eff40a2c45083ce83936fbb2d012606c",
+  "source_v15_tree_sha256": "3e937608b81ce64febec7c3fa08603eff07f4b2278078890535f12625268e403",
+  "source_v16_tree_sha256": "37f88c8f08cc43208ed293b76258fa7ae8c90327f6580437a1d311b372d40314",
+  "source_fingerprint_method": "SHA256 of sorted relative UTF-8 path + NUL + raw SHA256 digest of each file",
+  "modified_files": 51,
+  "added_files": 2,
+  "removed_files": 0,
+  "entries": [
+    {
+      "path": "BGLite.toc",
+      "old_sha256": "a0ecd1edf9d40c1938ce7874cfbd69b6c519853c1f2bde5fa2845cfe7c5af513",
+      "new_sha256": "63057149060bb8a566d4648399cb53bd9fec5301c19dc4a63b5a0e86553722e2",
+      "target": "BGForge.toc",
+      "disposition": "metadata-adapted",
+      "notes": "加载条目映射至 BGForge.toc；新增两个协议模块并记录 X-Upstream-Release，保留本插件版本及通信版本。",
+      "target_sha256": "11456a0b1cb94c7db1c0804919106e732f8431af39d25a7bf1fe7df208e65f46"
+    },
+    {
+      "path": "Core/BiaoGe.lua",
+      "old_sha256": "413f838a8b0abb592b3110d97d8332c89b58b2ad0aac6ee6d5da8fad3c9d9695",
+      "new_sha256": "8b369535b30fb3e998dabd51350606928f9029a32938c123b233683b90b3d7bf",
+      "target": "Core/BiaoGe.lua",
+      "disposition": "integrated",
+      "notes": "同步辅助逻辑、职业色消息规则和资源路径；保留主导航、总览与心愿入口、历史软下线和品牌图标。",
+      "target_sha256": "b3d9ad50325a5d3de11779672373980916ca1dd6bc2ae4e5d32f45a7385eb8a0"
+    },
+    {
+      "path": "Core/DB/DB.lua",
+      "old_sha256": "7643073bd977e4c268c664f6bd2134f2659221f1702c9ca574001682d07634ab",
+      "new_sha256": "c188ec3ffc704bb2ae0f688ac84c860bb05f494e01fa153120c9b6132b877378",
+      "target": "Core/DB/DB.lua",
+      "disposition": "integrated",
+      "notes": "同步表驱动初始化和分步存档初始化；保留协议/发布版本分离、新存档透明度、强制清表、旧历史保留、身份字段清理及过滤存储精简。",
+      "target_sha256": "99c8e7a059da070bf640ec80c11acb3f08c962602aa966ece065ed8f0b0f62c3"
+    },
+    {
+      "path": "Core/DB/DB_BossName.lua",
+      "old_sha256": "dcef3a8298327ffce529bea6c620d9625dd97d720314f329ac4d25f8c0b6fdeb",
+      "new_sha256": "2195a9d832c9858d72e37f428137714dfcf63d18f19986bff0928f5ca46f755d",
+      "target": "Core/DB/DB_BossName.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "2195a9d832c9858d72e37f428137714dfcf63d18f19986bff0928f5ca46f755d"
+    },
+    {
+      "path": "Core/DB/DB_EncounterID.lua",
+      "old_sha256": "0d8b2de6d120274b474b7a53872dcba1940748cc081ab4e7a2e8c9ef840e3c7f",
+      "new_sha256": "90e9d8a33a0df3b7e2e384d8384bb7e1024904a3bc6e4e314f177340006506fb",
+      "target": "Core/DB/DB_EncounterID.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "90e9d8a33a0df3b7e2e384d8384bb7e1024904a3bc6e4e314f177340006506fb"
+    },
+    {
+      "path": "Core/DB/DB_Loot_BlackWhiteList.lua",
+      "old_sha256": "f60e0bfd87f293392e0d1750bfdd25ae82cda1c5f28d06a554b702a86b54d796",
+      "new_sha256": "a844c0cbd5a2ec32873b6198260c22f17217ede381ec381828e6aed940f40233",
+      "target": "Core/DB/DB_Loot_BlackWhiteList.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "a844c0cbd5a2ec32873b6198260c22f17217ede381ec381828e6aed940f40233"
+    },
+    {
+      "path": "Core/DB/DB_Loot_CTM.lua",
+      "old_sha256": "ba3c4c4ef8a9c16f493738a2515aeddfdb147cbce0d4e87e21bdadac02296b8e",
+      "new_sha256": "d61801d950b84b6fcf7789ca33b69a70f260172ca279a78965bdefb4934c4172",
+      "target": "Core/DB/DB_Loot_CTM.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "7a001875f1c51cb175011e2a4dc2cd56b2c11d484718888834ebe0ef5792ec53"
+    },
+    {
+      "path": "Core/DB/DB_Loot_MOP.lua",
+      "old_sha256": "df0d933d1e00e004026e1caf8501377c29631da929b02dbad211f55fcb38f636",
+      "new_sha256": "5d2f40bcb2359b86e2a93b106300ed8315a17d8e912356a065c726d6d0790da5",
+      "target": "Core/DB/DB_Loot_MOP.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "30ff29f2e518265ddba11390090bb77226b9ab788352586097672f6b70819fdd"
+    },
+    {
+      "path": "Core/DB/DB_Loot_Retail.lua",
+      "old_sha256": "0b4598e6239bdfc621d3be84b97a31a34f2ffc96de2111fbd32120a857890bd5",
+      "new_sha256": "d9b4e3d8e877187bfec20291a54b08f6ab08f49d04d69a0d1a351baa19271f60",
+      "target": "Core/DB/DB_Loot_Retail.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "d9b4e3d8e877187bfec20291a54b08f6ab08f49d04d69a0d1a351baa19271f60"
+    },
+    {
+      "path": "Core/DB/DB_Loot_TBC.lua",
+      "old_sha256": "da3fe08090cf5c571f9a751ddbaa8e84cb4a23fb3445a078b5e66026de353218",
+      "new_sha256": "1d01b5c915f3b2dd5382fe1a0acdee8a5dea21b743f3d5657466d77f05eb6ed0",
+      "target": "Core/DB/DB_Loot_TBC.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "1eef4714e0ee284de84b45c9a2e9660daa5a203242046019abae5a8383324c6a"
+    },
+    {
+      "path": "Core/DB/DB_Loot_Titan.lua",
+      "old_sha256": "ba356355a9214d0fdbd9d3d70a95c0df7f0af516e2d5dff0c621f2117597d569",
+      "new_sha256": "0a0b816b25abfa1e8fdbbaffb20f797fb1308ea969e05d843554752fad5a5949",
+      "target": "Core/DB/DB_Loot_Titan.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "8d2f2499efb54910eb50789e0ec1595c6e877f87644998a6d194ff15afcd216f"
+    },
+    {
+      "path": "Core/DB/DB_Loot_Vanilla_60.lua",
+      "old_sha256": "9a68e9795cd7eb1b32ee7d01db1cf33054a7fe889e30b584ee2b433baf27e8b4",
+      "new_sha256": "9f388f1383de2ff25af5cec35c98e747c10b1e7d1b3c5ba9f26f2eb802ea5ea4",
+      "target": "Core/DB/DB_Loot_Vanilla_60.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "b1c11aab37710b03ffca31c63270705fd1bcdc2db1b1e310b1da101cb3de7ce4"
+    },
+    {
+      "path": "Core/DB/DB_Loot_Vanilla_Sod.lua",
+      "old_sha256": "92493e34278b2df408bedf133d33296779fba46352d451505dab6c2b0d22691c",
+      "new_sha256": "ec0d8b116ef13dab3381821a9cfefb80c7a3a8cae4c6544362581f08043c080b",
+      "target": "Core/DB/DB_Loot_Vanilla_Sod.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "56f26a94b64b51e6f1b7769a639a79cdb3df2f9a2784adc8cdcf5cfaeb248dcc"
+    },
+    {
+      "path": "Core/DB/DB_Loot_WLK.lua",
+      "old_sha256": "dac01d2fe363af2cdbe58a32f538cb47bec8888a3d22af1b51aea0d01606af18",
+      "new_sha256": "fd8337f70d9bb5ab5959f1bf97981364520e9538ea4a5e852a1d57e938af7a66",
+      "target": "Core/DB/DB_Loot_WLK.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "fd8337f70d9bb5ab5959f1bf97981364520e9538ea4a5e852a1d57e938af7a66"
+    },
+    {
+      "path": "Core/DB/Init.lua",
+      "old_sha256": "4c7d88114c7760662668c3fe405b93d321de32dfbbd4f59061970611e2a2cce9",
+      "new_sha256": "c5d3595d9bb3337ec4511fc10b6c020b87a4fc7fe6c062be29dc9b01bcee6c88",
+      "target": "Core/DB/Init.lua",
+      "disposition": "integrated",
+      "notes": "采用上游生命周期队列；加载名称以实际 AddonName 忽略大小写匹配，确保 BGForge 初始化。",
+      "target_sha256": "fcd2475547d40641d24b1dcdecba8595b661484361fa77b1f6e077ae418677ce"
+    },
+    {
+      "path": "Core/DB/Init2.lua",
+      "old_sha256": "894e19571e28bbe1eb11dc9d11199d820667c871a036e85f5de77b62dc2858ca",
+      "new_sha256": "b10b5514f93ad19cc8518972a5dd71f485d3b796c8eb59f4efe34efa811e020a",
+      "target": "Core/DB/Init2.lua",
+      "disposition": "integrated",
+      "notes": "采用上游协议常量注册频道。",
+      "target_sha256": "f469ec888f2e34d1eafbb0f3435064b0bd89358591a976e8f213533eff79c6b2"
+    },
+    {
+      "path": "Core/FBUI/CreateFBUI.lua",
+      "old_sha256": "e2193fad9b6b4bcdd33e5c51a3533a09457f1d70c5a7a7906a90477213961564",
+      "new_sha256": "98bed80b38727b7f57ec923b3617566697c4e71d9d7a0cac91ef77cf5968b988",
+      "target": "Core/FBUI/CreateFBUI.lua",
+      "disposition": "integrated",
+      "notes": "同步表驱动渲染；保留休眠历史帧映射，不恢复历史入口。",
+      "target_sha256": "68215e3f6c8f59f06694845458d03721a9011255a2d1602f36925d22854c7fdc"
+    },
+    {
+      "path": "Core/FBUI/DuiZhangUIfunction.lua",
+      "old_sha256": "a3f9872d0e4f9e5eb11a835c08c08a0664d4af04a64a0357fd155c918cb08c1d",
+      "new_sha256": "f67777ae489b2c977c30ec47dc4766d80cb6d4bc65a6c8df429ec17844d99f0f",
+      "target": "Core/FBUI/DuiZhangUIfunction.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "3d196160cc3948dd422b5fb96d59ae1d257be84580ef011028ecf6ff7852b300"
+    },
+    {
+      "path": "Core/FBUI/FBUIfunction.lua",
+      "old_sha256": "45e422b20de564cb0e42052e4f56d4941509d0f9c5586839566f5a1565016876",
+      "new_sha256": "01fc55e63d4ba1676e72a612c6d8cc320445d06458940bd8ed7a5e2ea1d3667a",
+      "target": "Core/FBUI/FBUIfunction.lua",
+      "disposition": "integrated",
+      "notes": "同步单元格与总览区域重构；保留主导航高度补偿和装备过滤接入。",
+      "target_sha256": "760cddf8d93dc2705629733f21460f3a4a2822b5537804998de381d595c89b6e"
+    },
+    {
+      "path": "Core/FBUI/Model.lua",
+      "old_sha256": "9877bfaecd5b5a706543119621f3bafbe0f1d757804869b5fdc9582ed5bce542",
+      "new_sha256": "17bb8aa93dd4df4f9c1debc64418eddaf2463ff75e0866b02cfcc030e13df72c",
+      "target": "Core/FBUI/Model.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "17bb8aa93dd4df4f9c1debc64418eddaf2463ff75e0866b02cfcc030e13df72c"
+    },
+    {
+      "path": "Core/FBUI/ReceiveUIfunction.lua",
+      "old_sha256": "9114e0321c59c031be25a58c8ef5832e5eb78dd924147bc83da4d352fb8512e8",
+      "new_sha256": "6832df904cb1c82ac991da6d6cf91b52de68644113728663fe16a01812f0207d",
+      "target": "Core/FBUI/ReceiveUIfunction.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "6832df904cb1c82ac991da6d6cf91b52de68644113728663fe16a01812f0207d"
+    },
+    {
+      "path": "Core/Module/Auction.lua",
+      "old_sha256": "c0dec0e593e6dcbbea04023fbc9176cab29a16507e2ff4c1cff0c13d1d5478b5",
+      "new_sha256": "e200cf7d5e081e6423412c9bbfc6e1dbc017984b53c3e6039da29f169abb005d",
+      "target": "Core/Module/Auction.lua",
+      "disposition": "integrated",
+      "notes": "同步发送组装、排队发送、物品/金额控件和标记辅助函数；保留顶栏版本选择、默认二代、心愿模型、过滤折叠及预览隔离，不恢复单物品旧选择器。",
+      "target_sha256": "e33812a8b73f0d685fd3c0054397e91d11b80d3e58ec47303102da6020e77fb9"
+    },
+    {
+      "path": "Core/Module/AuctionLog.lua",
+      "old_sha256": "b9f5183defd882ba4e48e158717ae1d9fe467fe11e3149515764646bc0ee1bed",
+      "new_sha256": "94d5b085424f57b6f08201f466f354157aa22d2a91fa793fff730de72d26234f",
+      "target": "Core/Module/AuctionLog.lua",
+      "disposition": "integrated",
+      "notes": "同步记录、筛选和界面构建；保留装备过滤接入和品牌文案。",
+      "target_sha256": "e843a11ac4ce725abae3e4418e2a3ffbb9e6929ddbca895c24552bd728f9234c"
+    },
+    {
+      "path": "Core/Module/AuctionMSG.lua",
+      "old_sha256": "b9b65799789fb30b47187f5c9fd5c50ee904335bb3c15900619c5090911855f9",
+      "new_sha256": "ec999f1f6975e117047c2a9dbfec29064e7566987c52f691074ab9ade751492a",
+      "target": "Core/Module/AuctionMSG.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "ec999f1f6975e117047c2a9dbfec29064e7566987c52f691074ab9ade751492a"
+    },
+    {
+      "path": "Core/Module/AuctionWA.lua",
+      "old_sha256": "6d053e1e79af708d8628ac90966a1753a366fae208da1173c035006698544fc7",
+      "new_sha256": "52799bdcca78a7143070983d49fea164dcfcb1e7fde9d6f16bd8f91b410cd38b",
+      "target": "Core/Module/AuctionWA.lua",
+      "disposition": "integrated",
+      "notes": "同步 Wire、字体、出价与倒计时辅助函数；保留精简过滤边界和预览按钮保护；适配字体变量名。",
+      "target_sha256": "6bd82baa2be9b40ace3b879d1e00d467c2ce30236e5f4d538b04f9482189b9ca"
+    },
+    {
+      "path": "Core/Module/AuctionWAEvent.lua",
+      "old_sha256": "4dbcf262e0dd9efa6bc55e092e7a57b0d1774fe118a43cfc94921d04ab614dfb",
+      "new_sha256": "505f3f8e7b88320964488fedfe80c87994fd87a415faba897184dc5fa83d4f66",
+      "target": "Core/Module/AuctionWAEvent.lua",
+      "disposition": "integrated",
+      "notes": "同步事件及窗口构建；保留本地心愿预览、禁用交互和匿名消息忽略，适配 panel/typeface 变量名。",
+      "target_sha256": "b605f1f03438b35e419e41ce9cca2fa4ee22d94671a775856f0a41a32a197501"
+    },
+    {
+      "path": "Core/Module/ClearBiaoGe.lua",
+      "old_sha256": "ea941b5b402174f93189010bfbcddd543f2933080984de1e8d59fa2a96253ec2",
+      "new_sha256": "a0f8d5db5da2f26c3c352ea9d2fd16025f525ce36b62b0e00878cda2e33b5511",
+      "target": "Core/Module/ClearBiaoGe.lua",
+      "disposition": "integrated",
+      "notes": "同步清表、人数及选择按钮辅助函数；保留整阶段/每周周期判断、旧隐形格及奥杜尔52格清理；不恢复历史名单判断和自动历史保存。",
+      "target_sha256": "72e788458f0ea320b3eb397f5621213c575ef6516efbc379607897819072a045"
+    },
+    {
+      "path": "Core/Module/DuiZhang.lua",
+      "old_sha256": "462fd845eda61a2251285b952f9b8593afb7c3afc6ae03d54346746ed7151980",
+      "new_sha256": "a05c9769052f324e6d133a0f585f6edd0541ef0b94c079e37ced1fde2a28b304",
+      "target": "Core/Module/DuiZhang.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "a972b3fbcd199de32b85297b50c77b3782421ef752d6d786cacf81be817fe9d8"
+    },
+    {
+      "path": "Core/Module/ItemTooltip.lua",
+      "old_sha256": "07d589352bea1d95be05e304d1e4c83eab5e87849ea97dd8d3e8c0df4fc3e1fe",
+      "new_sha256": "28c9ede24604d90f683e57f69a50c0e6fa5a119318462951183556063ee5d64b",
+      "target": "Core/Module/ItemTooltip.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "28c9ede24604d90f683e57f69a50c0e6fa5a119318462951183556063ee5d64b"
+    },
+    {
+      "path": "Core/Module/Loot.lua",
+      "old_sha256": "e3a036260547cd9c0c0220acd8a69fa39fed7ae811a33ae39335a329fa4a0b0c",
+      "new_sha256": "4e67a9857f1e96a8ef61890143aecebcc256f2ca2ea8119dcf8c6a26032bc07b",
+      "target": "Core/Module/Loot.lua",
+      "disposition": "integrated",
+      "notes": "同步掉落解析及分配辅助函数；保留真实心愿判断和独立提醒；世界Boss单次记账回归覆盖。",
+      "target_sha256": "3cfc7f47fda23e653eb335d03d00d0e50e44f1d55e7e05bd1f0c5289bf2a95e3"
+    },
+    {
+      "path": "Core/Module/MailHistory.lua",
+      "old_sha256": "fd45ce4ffa36cf9a12bf2b556e47705ebb040fb8bd5a89de6f6bc9e4612afac2",
+      "new_sha256": "7468a28225216e467f7ace102c097aefdc9c82ec08c717fad88526568e924000",
+      "target": "Core/Module/MailHistory.lua",
+      "disposition": "integrated",
+      "notes": "同步全部常量整理；保留主导航高度补偿。",
+      "target_sha256": "1716ee53e123da8d1fe3de413e43fc605f2e8925966c481fb788d11ca9c809ad"
+    },
+    {
+      "path": "Core/Module/QuickAccounting.lua",
+      "old_sha256": "af2930ac5fa7b2412fff2ebb5ffdbc0768dce49c3d8d70ca8df465571d854e83",
+      "new_sha256": "633d72457abed739e67987e374bfdeb568016a1b65066afc0607a9ec171a75df",
+      "target": "Core/Module/QuickAccounting.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "633d72457abed739e67987e374bfdeb568016a1b65066afc0607a9ec171a75df"
+    },
+    {
+      "path": "Core/Module/Receive.lua",
+      "old_sha256": "105f49c72be56057b1df74ebe4e36a10c97d0b4a9cd9abca8dce980340cad524",
+      "new_sha256": "36dfb3e93d4bcc1a51af566d0f432c3605cdfde2beef1eaabdd79d9d6c50842c",
+      "target": "Core/Module/Receive.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "36dfb3e93d4bcc1a51af566d0f432c3605cdfde2beef1eaabdd79d9d6c50842c"
+    },
+    {
+      "path": "Core/Module/SendMail.lua",
+      "old_sha256": "b541c810fe84abca32c3174c81efb83db337ece675867ea98d0f337243abd81e",
+      "new_sha256": "fb0611eb066c0131da0ccd61f63c2e5f159337d1dbba5d31e560bde65c61fe90",
+      "target": "Core/Module/SendMail.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "fb0611eb066c0131da0ccd61f63c2e5f159337d1dbba5d31e560bde65c61fe90"
+    },
+    {
+      "path": "Core/Module/Trade.lua",
+      "old_sha256": "ce0e12b649e009dfbe5706a6fadcf7d2b2dae0b9a61d92877e86fc9cb559fbb0",
+      "new_sha256": "492db255b44c45199575e8f9e4fb635769e374745972b88ca87e5c089dd2b9d7",
+      "target": "Core/Module/Trade.lua",
+      "disposition": "integrated",
+      "notes": "同步交易与确认辅助函数；保留确认获得后移除本地心愿，不恢复旧心愿UI扫描。",
+      "target_sha256": "685b7c93751f943fbd9922f7652d0e811423e2527f948938f7f8959b872ea394"
+    },
+    {
+      "path": "Core/Module/TradeHistory.lua",
+      "old_sha256": "eb04eaf294528414a1f66403e56b8d1fba2d676960f8fe210313fd1dfe2a7a76",
+      "new_sha256": "066b8eebeb1d7959e2ae56639d598f2ff156b8e64e2b6b6e015fceaf49dfc25b",
+      "target": "Core/Module/TradeHistory.lua",
+      "disposition": "integrated",
+      "notes": "同步交易历史构建和通报；保持 BGForge 前缀。",
+      "target_sha256": "6ca2b995f121ae1a4d3517bdac60886968a49ae657f2f9f354e168b5bf11f7b6"
+    },
+    {
+      "path": "Core/Module/hooks.lua",
+      "old_sha256": "39d6c38a0b8d576483e6a9700d5c048fad94d1a312434f6ab9a79f74d13e53ad",
+      "new_sha256": "cc8d8e69d05a3afb2082f269243e5664b920dac8d65b97cbe4c031a790d1b29e",
+      "target": "Core/Module/hooks.lua",
+      "disposition": "integrated",
+      "notes": "同步钩子辅助函数；保留品牌提示。",
+      "target_sha256": "fc50b25260aeeab765b07700bf529027b05010fc031afc0f550040c5268e11cf"
+    },
+    {
+      "path": "Core/Module/minimap.lua",
+      "old_sha256": "5aba50c380274d51da7f90da587c2253b046a2bbf57550d7976fe344e2aa2198",
+      "new_sha256": "1fce57ad9c64726205d72c64119c84499336fcad3289b27c40b89225659d1bff",
+      "target": "Core/Module/minimap.lua",
+      "disposition": "integrated",
+      "notes": "同步按插件目录生成路径；保持 BGForge 名称和 icon-128。",
+      "target_sha256": "86ed3c7d8dce1110b45a732702cb9efe822cbaae1fdb8edb7959ee822c4a7568"
+    },
+    {
+      "path": "Core/Options.lua",
+      "old_sha256": "5b840ecd5a62f390b7f596912043d313f8e7a5185424ed5763c1d26e799d3055",
+      "new_sha256": "faec71ad3717cc626f1b9e44e881f59720efab5edbb893eb21a1de3e9b36c0d9",
+      "target": "Core/Options.lua",
+      "disposition": "integrated",
+      "notes": "同步选项默认值辅助函数；保留本地设置、关闭旧拍卖选择器和历史软下线。",
+      "target_sha256": "0fae77ae99826c4fbab72b52f2e4d4c426d587bbe8e921020445b2b392c51c72"
+    },
+    {
+      "path": "Core/Protocol/Constants.lua",
+      "old_sha256": null,
+      "new_sha256": "a04c07824e10b53fcdd04d96a2375053011ac2d71462bb47d3d8a7e9cb7eee17",
+      "target": "Core/Protocol/Constants.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "a04c07824e10b53fcdd04d96a2375053011ac2d71462bb47d3d8a7e9cb7eee17"
+    },
+    {
+      "path": "Core/Protocol/SendGateway.lua",
+      "old_sha256": null,
+      "new_sha256": "60bed9149e903f6fa713e31955736865edb7cff391d7c822716b0209716cafac",
+      "target": "Core/Protocol/SendGateway.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "60bed9149e903f6fa713e31955736865edb7cff391d7c822716b0209716cafac"
+    },
+    {
+      "path": "Core/TongBao/Channel.lua",
+      "old_sha256": "5cec9bad1f92baa3015180ee808d33e10d3994f016191e4879e0ac105c2a1e9f",
+      "new_sha256": "4f2a247186c7705d5c53e112f6a5e19c0581245bd3d40d00780533ef71c143e8",
+      "target": "Core/TongBao/Channel.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "4f2a247186c7705d5c53e112f6a5e19c0581245bd3d40d00780533ef71c143e8"
+    },
+    {
+      "path": "Core/TongBao/LiuPai.lua",
+      "old_sha256": "c1b5a238995c38ab4afdaad1c7f4644abdb30eb914f6b4683c471481329d8470",
+      "new_sha256": "e2173369897e88e864ab6af604e544072537cd4f3ec5c7e8ac38f54235873563",
+      "target": "Core/TongBao/LiuPai.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "e2173369897e88e864ab6af604e544072537cd4f3ec5c7e8ac38f54235873563"
+    },
+    {
+      "path": "Core/TongBao/QianKuan.lua",
+      "old_sha256": "642da12fe4c71454c3787b8d56f954442ae71d3fcab93a0f8a4856598dc2d97f",
+      "new_sha256": "9e09ba95f7818ca3a651d0c3aa2b75c31b6d67f56a1804b189d14df149c6bf1f",
+      "target": "Core/TongBao/QianKuan.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "9e09ba95f7818ca3a651d0c3aa2b75c31b6d67f56a1804b189d14df149c6bf1f"
+    },
+    {
+      "path": "Core/TongBao/XiaoFei.lua",
+      "old_sha256": "ae2b6824c9c2f2115da361d5dfd93f899bbae41ff884458714905e1fb387fd2c",
+      "new_sha256": "126d8f5f385eec500190d781daba6e54d3cb202ab380a96dc98b42489a9bda2e",
+      "target": "Core/TongBao/XiaoFei.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "126d8f5f385eec500190d781daba6e54d3cb202ab380a96dc98b42489a9bda2e"
+    },
+    {
+      "path": "Core/TongBao/ZhangDan.lua",
+      "old_sha256": "0a9a0cb0cfa8e2cc8575dd4ca98dab90265189f4d54537d2afb67a42b1946a06",
+      "new_sha256": "c8a9c62f6434ba3d0bdc6f38c61b5a1c4b24948ec1ac57ce7471d1d3e13d8e2f",
+      "target": "Core/TongBao/ZhangDan.lua",
+      "disposition": "integrated",
+      "notes": "上游改动完整同步，保留不重叠的 BGForge 增量；现有其他客户端代码整理不扩展产品范围。",
+      "target_sha256": "c8a9c62f6434ba3d0bdc6f38c61b5a1c4b24948ec1ac57ce7471d1d3e13d8e2f"
+    },
+    {
+      "path": "Core/function1.lua",
+      "old_sha256": "dc75ebd5dc50b1194e3d06f2b2e36060dce8e4d727e79f9071c4147b59cf9d4e",
+      "new_sha256": "787a6ddbe9afa99a4c9b0159d07a59b4c4ec6fc6123c733a781d6d5923516ea4",
+      "target": "Core/function1.lua",
+      "disposition": "integrated",
+      "notes": "同步辅助函数及动态资源路径；采用 BGForge 实际目录。",
+      "target_sha256": "a790a416bbc58352afb5ace65041d0e02f01bc0b13d0a359acd88540d9f59e0e"
+    },
+    {
+      "path": "Core/function2.lua",
+      "old_sha256": "31192b4768d42790b284f121d10cfdb02dbc1c518406e0a6de6c2704afae60bd",
+      "new_sha256": "e8a7494729be65387a62215003c5d0cd49fec475c63ef2ac7061ad6b9874de0e",
+      "target": "Core/function2.lua",
+      "disposition": "integrated",
+      "notes": "同步弹窗、标记、交换、背包适配重构；保留精简提示读取、本地总览入口，不恢复旧过滤存档和失效模块。",
+      "target_sha256": "8a362f004606e4c9294c8f3bf162219102ead95f8e353db1c3e19ea76e3a9c84"
+    },
+    {
+      "path": "Locales/enUS.lua",
+      "old_sha256": "a5b5063fcd42489afc0df8fcc63e2830b91293a534fa6f41bd3eee52e99244a4",
+      "new_sha256": "95dfd75af13aeca883fbc27057f4f9afe75b530bff9cfaf00d61e76c1de71ffa",
+      "target": "Locales/enUS.lua",
+      "disposition": "integrated",
+      "notes": "同步清理；保留全部 BGForge 自有翻译。",
+      "target_sha256": "0dff822dfd1e01f798dbaa790af65c120cd1f5a7da028cbb88e30ee667e9ed27"
+    },
+    {
+      "path": "Locales/zhCN.lua",
+      "old_sha256": "b214fa6daa1cbed04b4280d444ad5cee797876f0c4abbd320481f23a43579f96",
+      "new_sha256": "614bebbd7332536210927e1a999ce802deb1a9f43577b18d3790675acd4e5be5",
+      "target": "Locales/zhCN.lua",
+      "disposition": "integrated",
+      "notes": "同步清理；保留 BGForge 说明、全部自有翻译及既有功能文案。",
+      "target_sha256": "c13ebce761b858cfd17784f03f1f5bb1b2b83ca9cfeabc98f03b2413933e5fe6"
+    },
+    {
+      "path": "Locales/zhTW.lua",
+      "old_sha256": "227075a1364e9a22c26274992fc8453d86a347b0e476960555cb213603db1387",
+      "new_sha256": "f4e5ad760b6bb81de96af0507d3e33ccb589f7bf93e0369069b818cb479ee1b9",
+      "target": "Locales/zhTW.lua",
+      "disposition": "integrated",
+      "notes": "同步清理；保留全部 BGForge 自有翻译。",
+      "target_sha256": "c19e578a2dadac6a3331c6e8eb1b15abc6ea791842b17d54c3099a200484386d"
+    },
+    {
+      "path": "addon_version.txt",
+      "old_sha256": "258e687a8bc39aa9fc93ce58c04a39fe54e62d9735908f6d0e59dc4fa27fbb1d",
+      "new_sha256": "8c7974acd670b45299ae37c146eb6a09ca85d5411af0327944e96a7fe05e2b65",
+      "target": null,
+      "disposition": "distribution-only",
+      "notes": "官方发行平台标识，不复制到独立插件。"
+    },
+    {
+      "path": "dd_author.toc",
+      "old_sha256": "7a3757b715d2e5e181987791ff0d2567c729ec17a4ab03b4cfde6555b415a3e4",
+      "new_sha256": "f3d937823f14450bf2f3a1d14e053b57b16db771a4aba1bcebb4cdaba062d046",
+      "target": null,
+      "disposition": "distribution-only",
+      "notes": "官方发行平台作者标识，不复制到独立插件。"
+    }
+  ]
+}
