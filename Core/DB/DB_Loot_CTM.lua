@@ -5,7 +5,6 @@ local _, ns = ...
 local LibBG = ns.LibBG
 local L = ns.L
 
-local pt = print
 
 -- 副本掉落
 do
@@ -97,9 +96,6 @@ do
 
 
                 -- -- 头
-                -- [] = {},
-                -- [] = {},
-                -- [] = {},
             }
         end
 
@@ -463,11 +459,6 @@ do
         [L["小怪"]] = { 76160, 76161, 76162, },
     }
 
-    -- BG.Loot[FB].Team[FB_5] = {
-    --     [L[""]] = {},
-    --     [L[""]] = {},
-    --     [L[""]] = {},
-    --     [L["小怪"]] = {},
     -- }
 end
 
@@ -546,7 +537,7 @@ do
             AddCurrency(FB, 396, 64674, 700)
             AddCurrency(FB, 396, 64676, 700)
             AddCurrency(FB, 396, 68812, 1250)
-            -- 359套装（用勇气换）
+            -- 359装等的套装，可用勇气点数兑换
             local tbl = { 60340, 60355, 60326, 60345, 60280, 60248, 60290, 60247, 60275, 60307, 60312, 60298, 60350, 60257, 60363, 60319, 60314, 60332, 60285 }
             for i, itemID in ipairs(tbl) do -- 手
                 AddCurrency(FB, 396, itemID, 1650)
@@ -1775,9 +1766,6 @@ do
         BG.Loot.BOT.Faction["1173:4"] = { 62440, 62441, 62446, 62445, }
         BG.Loot.BOT.Faction["1173:5"] = { 62447, 62450, 62448, 62449, }
         -- -- 拉穆卡恒
-        -- BG.Loot.BOT.Faction[":3"] = {},
-        -- BG.Loot.BOT.Faction[":4"] = {},
-        -- BG.Loot.BOT.Faction[":5"] = {},
         if BG.IsAlliance then
             -- 巴拉丁典狱官
             BG.Loot.BOT.Faction["1177:3"] = { 65175, }
@@ -1888,18 +1876,3 @@ do
     AddDB(FB, get, 62051, 62045, nil, color, 1)
     AddDB(FB, get, 62048, 62046, nil, color, 1)
 end
-
---[[
-local FB = "FL"
-do
-    local hard = "H"
-    BG.Loot[FB][hard].boss1 = {}
-    BG.Loot[FB][hard].boss2 = {}
-    BG.Loot[FB][hard].boss3 = {}
-    BG.Loot[FB][hard].boss4 = {}
-    BG.Loot[FB][hard].boss5 = {}
-    BG.Loot[FB][hard].boss6 = {}
-    BG.Loot[FB][hard].boss7 = {}
-    BG.Loot[FB][hard].boss8 = {}
-end
- ]]

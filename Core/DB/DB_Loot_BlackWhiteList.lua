@@ -3,7 +3,6 @@ local _, ns = ...
 local LibBG = ns.LibBG
 local L = ns.L
 
-local pt = print
 
 BG.Loot.blacklist = {}
 BG.Loot.whitelist = {}
@@ -84,7 +83,7 @@ elseif BG.IsWLK_80 then
         69771, 54806, 225923,                                                          -- iLv353、232、225的埃霍恩的冰霜之镰
         30312, 30311, 30317, 30316, 30313, 30314, 30318, 30319, 30320, 265069, 265070, -- 风暴要塞神器
     }
-    -- ICC声望戒指加入黑名单
+    -- 把ICC声望戒指列入黑名单
     if BG.Loot.ICC then
         for i = 2, 5 do
             if BG.Loot.ICC.Faction["1156:" .. i] then
@@ -111,7 +110,7 @@ elseif BG.IsWLK_80 then
         47557, 47558, 47559, -- TOC258套装圣物
         37254,               -- 超级猴子球
     }
-    -- ICC小怪掉落总是记录到杂项
+    -- ICC小怪掉落一律归入杂项
     if BG.Loot.ICC then
         for _, itemID in pairs(BG.Loot.ICC.H25.boss14) do
             tinsert(BG.Loot.zaXiangItems, itemID)
@@ -148,7 +147,7 @@ elseif BG.IsTitan then
         69771, 54806, 225923,                                                          -- iLv353、232、225的埃霍恩的冰霜之镰
         30312, 30311, 30317, 30316, 30313, 30314, 30318, 30319, 30320, 265069, 265070, -- 风暴要塞神器
     }
-    -- ICC声望戒指加入黑名单
+    -- 把ICC声望戒指列入黑名单
     if BG.Loot.ICC then
         for i = 2, 5 do
             if BG.Loot.ICC.Faction["1156:" .. i] then
@@ -207,7 +206,7 @@ elseif BG.IsTitan then
         47242,                                                                 -- 北伐
         37254,                                                                 -- 超级猴子球
     }
-    -- 时光服TOC箱子记录到杂项
+    -- 时光服的TOC箱子归入杂项
     if BG.IsAlliance then
         for _, itemID in ipairs({ 47506, 47526, 47517, 47519, 47521, 47524, 47515, 47547, 47545, 47549, 47552, 47553, 49096, }) do
             tinsert(BG.Loot.zaXiangItems, itemID)

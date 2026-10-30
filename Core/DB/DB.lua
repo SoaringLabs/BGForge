@@ -147,7 +147,7 @@ do
     local mainFrameWidth                       = 1275
     local mainFrameWidth2                      = 1685
     local Maxt, Maxb, Maxi, HopeMaxb, HopeMaxn = {}, {}, {}, {}, {}
-    -- 表格大小、排列方式、BOSS格子数
+    -- 主表格的尺寸、排布方式以及每个BOSS对应的格子数量
     do
         local function AddDB(FB, width, height, maxt, maxb,
                              bossNumTbl, diffTbl, diffIDTbl, maxiTbl, zaxiangI,
@@ -176,7 +176,7 @@ do
             Maxi[FB] = maxiTbl
             -- 设置支出格子为x个
             tinsert(Maxi[FB], payMaxi or 8)
-            -- 设置总览工资格子为x个
+            -- 把总览里的工资格子数量定为x
             tinsert(Maxi[FB], 5)
             if zaxiangI then
                 BG.zaxiang[FB] = { i = zaxiangI }
@@ -186,44 +186,59 @@ do
         end
 
         if BG.IsVanilla_Sod then
-            AddDB("BD", mainFrameWidth, 810, 3, 9, { 0, 5, 9 }, nil, nil,
-                { 5, 5, 5, 5, 5, 5, 5, 5, 10, })
-            AddDB("Gno", mainFrameWidth, 810, 3, 8, { 0, 5, 8 }, nil, nil,
-                { 5, 5, 5, 5, 5, 10, 8, 8, })
-            AddDB("Temple", mainFrameWidth, 885, 3, 10, { 0, 6, 9, }, nil, nil,
-                { 5, 5, 5, 4, 4, 4, 4, 6, 25, 9, }, 20)
-            AddDB("MCsod", mainFrameWidth, 940, 3, 13, { 0, 6, 11 }, nil, nil,
-                { 5, 5, 5, 5, 5, 5, 5, 5, 6, 8, 6, 11, 6, })
-            AddDB("ZUGsod", mainFrameWidth, 810, 3, 12, { 0, 6, 11 }, nil, nil,
-                { 4, 4, 4, 4, 4, 4, 4, 4, 4, 9, 10, 6, }, 5)
-            AddDB("BWLsod", mainFrameWidth, 810, 3, 9, { 0, 5, 7 }, nil, nil,
-                { 4, 4, 4, 4, 8, 5, 21, 7, 5, })
-            AddDB("Worldsod", mainFrameWidth, 810, 3, 10, { 0, 4, 9 }, nil, nil,
-                { 10, 5, 5, 5, 5, 5, 5, 5, 4, 5 })
+            local rows = {
+                { "BD", mainFrameWidth, 810, 3, 9, { 0, 5, 9 }, nil, nil,
+                    { 5, 5, 5, 5, 5, 5, 5, 5, 10, } },
+                { "Gno", mainFrameWidth, 810, 3, 8, { 0, 5, 8 }, nil, nil,
+                    { 5, 5, 5, 5, 5, 10, 8, 8, } },
+                { "Temple", mainFrameWidth, 885, 3, 10, { 0, 6, 9, }, nil, nil,
+                    { 5, 5, 5, 4, 4, 4, 4, 6, 25, 9, }, 20 },
+                { "MCsod", mainFrameWidth, 940, 3, 13, { 0, 6, 11 }, nil, nil,
+                    { 5, 5, 5, 5, 5, 5, 5, 5, 6, 8, 6, 11, 6, } },
+                { "ZUGsod", mainFrameWidth, 810, 3, 12, { 0, 6, 11 }, nil, nil,
+                    { 4, 4, 4, 4, 4, 4, 4, 4, 4, 9, 10, 6, }, 5 },
+                { "BWLsod", mainFrameWidth, 810, 3, 9, { 0, 5, 7 }, nil, nil,
+                    { 4, 4, 4, 4, 8, 5, 21, 7, 5, } },
+                { "Worldsod", mainFrameWidth, 810, 3, 10, { 0, 4, 9 }, nil, nil,
+                    { 10, 5, 5, 5, 5, 5, 5, 5, 4, 5 } },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
         end
         if BG.IsVanilla_60 then
-            AddDB("MC", mainFrameWidth, 810, 3, 13, { 0, 7, 12 }, nil, nil,
-                { 4, 4, 4, 4, 4, 4, 4, 4, 4, 6, 8, 15, 10, }, 8, 6)
-            AddDB("BWL", mainFrameWidth, 810, 3, 10, { 0, 5, 9 }, nil, nil,
-                { 6, 6, 6, 5, 6, 6, 6, 6, 12, 17, })
-            AddDB("ZUG", mainFrameWidth, 810, 3, 12, { 0, 6, 11 }, nil, nil,
-                { 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 9, 17, })
-            AddDB("AQL", mainFrameWidth, 810, 3, 8, { 0, 5, 7 }, nil, nil,
-                { 6, 6, 5, 6, 6, 6, 28, 13, }, 26)
-            AddDB("TAQ", mainFrameWidth, 810, 3, 11, { 0, 6, 10 }, nil, nil,
-                { 5, 4, 4, 5, 5, 5, 5, 5, 6, 19, 10, }, 14)
-            AddDB("NAXX", mainFrameWidth, 900, 3, 17, { 0, 8, 15 }, nil, nil,
-                { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 12, 9, })
+            local rows = {
+                { "MC", mainFrameWidth, 810, 3, 13, { 0, 7, 12 }, nil, nil,
+                    { 4, 4, 4, 4, 4, 4, 4, 4, 4, 6, 8, 15, 10, }, 8, 6 },
+                { "BWL", mainFrameWidth, 810, 3, 10, { 0, 5, 9 }, nil, nil,
+                    { 6, 6, 6, 5, 6, 6, 6, 6, 12, 17, } },
+                { "ZUG", mainFrameWidth, 810, 3, 12, { 0, 6, 11 }, nil, nil,
+                    { 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 9, 17, } },
+                { "AQL", mainFrameWidth, 810, 3, 8, { 0, 5, 7 }, nil, nil,
+                    { 6, 6, 5, 6, 6, 6, 28, 13, }, 26 },
+                { "TAQ", mainFrameWidth, 810, 3, 11, { 0, 6, 10 }, nil, nil,
+                    { 5, 4, 4, 5, 5, 5, 5, 5, 6, 19, 10, }, 14 },
+                { "NAXX", mainFrameWidth, 900, 3, 17, { 0, 8, 15 }, nil, nil,
+                    { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 12, 9, } },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
         end
         if BG.IsTBC then
-            AddDB("KZ", mainFrameWidth, 830, 3, 13, { 0, 6, 12 }, nil, nil,
-                { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 12, 10, }, 6)
-            AddDB("GL", mainFrameWidth, 830, 2, 5, { 0, 4, }, nil, nil,
-                { 8, 8, 8, 7, 18 })
-            AddDB("SSC", mainFrameWidth, 870, 3, 12, { 0, 7, 11 }, nil, nil,
-                { 4, 4, 4, 4, 4, 7, 4, 4, 4, 6, 33, 5, }, 20)
-            AddDB("BT", mainFrameWidth, 870, 3, 16, { 0, 8, 14 }, nil, nil,
-                { 3, 3, 3, 4, 5, 3, 4, 4, 4, 4, 4, 5, 5, 9, 14, 5, })
+            local rows = {
+                { "KZ", mainFrameWidth, 830, 3, 13, { 0, 6, 12 }, nil, nil,
+                    { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 12, 10, }, 6 },
+                { "GL", mainFrameWidth, 830, 2, 5, { 0, 4, }, nil, nil,
+                    { 8, 8, 8, 7, 18 } },
+                { "SSC", mainFrameWidth, 870, 3, 12, { 0, 7, 11 }, nil, nil,
+                    { 4, 4, 4, 4, 4, 7, 4, 4, 4, 6, 33, 5, }, 20 },
+                { "BT", mainFrameWidth, 870, 3, 16, { 0, 8, 14 }, nil, nil,
+                    { 3, 3, 3, 4, 5, 3, 4, 4, 4, 4, 4, 5, 5, 9, 14, 5, } },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
             -- AddDB("HS", mainFrameWidth, 835, 2, 7, { 0, 5, }, nil, nil,
             --     { 5, 5, 5, 5, 5, 7, 5 })
         end
@@ -258,63 +273,83 @@ do
                 [6] = "N",
                 [194] = "N",
             }
-            AddDB("ICC", mainFrameWidth, 875, 3, 15, { 0, 7, 13 }, { "N10", "N25", "H10", "H25", }, difTbl2,
-                { 3, 3, 3, 5, 3, 3, 5, 3, 5, 3, 5, 8, 3, 12, 6, }, nil, 5)
-            AddDB("TOC", mainFrameWidth, 835, 3, 9, { 0, 5, 8 }, { "N10", "N25", "H10", "H25", }, difTbl2,
-                { 5, 5, 5, 5, 5, 3, 8, 22, 5, }, 16)
-            AddDB("ULD", mainFrameWidth, 875, 3, 16, { 0, 7, 13 }, { "N10", "N25" }, difTbl1,
-                { 4, 3, 3, 4, 5, 3, 3, 4, 4, 4, 4, 4, 6, 4, 8, 5, }, nil, 5)
-            AddDB("NAXX", mainFrameWidth2, 945, 4, 19, { 0, 6, 12, 16 }, { "N10", "N25" }, difTbl1,
-                { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 14, 6, 6, 5, })
-            -- TBC
-            AddDB("SW", mainFrameWidth, 835, 3, 8, { 0, 5, 8 }, nil, difTbl3,
-                { 5, 5, 5, 6, 5, 6, 10, 11, })
-            AddDB("BT", mainFrameWidth, 835, 3, 11, { 0, 5, 9 }, nil, difTbl3,
-                { 5, 5, 5, 5, 5, 5, 5, 5, 10, 8, 5, })
-            AddDB("HS", mainFrameWidth, 835, 2, 7, { 0, 5, }, nil, difTbl3,
-                { 5, 5, 5, 5, 5, 7, 5 })
-            AddDB("SSC", mainFrameWidth, 835, 3, 12, { 0, 6, 10 }, nil, difTbl3,
-                { 4, 4, 4, 4, 4, 5, 5, 5, 5, 10, 8, 5, })
-            AddDB("TAQ", mainFrameWidth, 810, 3, 11, { 0, 6, 10 }, nil, difTbl3,
-                { 4, 4, 4, 4, 4, 4, 4, 4, 6, 19, 5, }, 13)
-            AddDB("BWL", mainFrameWidth, 810, 3, 10, { 0, 5, 9 }, nil, difTbl3,
-                { 5, 5, 5, 5, 5, 5, 5, 6, 9, 12, })
+            local rows = {
+                { "ICC", mainFrameWidth, 875, 3, 15, { 0, 7, 13 }, { "N10", "N25", "H10", "H25", }, difTbl2,
+                    { 3, 3, 3, 5, 3, 3, 5, 3, 5, 3, 5, 8, 3, 12, 6, }, nil, 5 },
+                { "TOC", mainFrameWidth, 835, 3, 9, { 0, 5, 8 }, { "N10", "N25", "H10", "H25", }, difTbl2,
+                    { 5, 5, 5, 5, 5, 3, 8, 22, 5, }, 16 },
+                { "ULD", mainFrameWidth, 875, 3, 16, { 0, 7, 13 }, { "N10", "N25" }, difTbl1,
+                    { 4, 3, 3, 4, 5, 3, 3, 4, 4, 4, 4, 4, 6, 4, 8, 5, }, nil, 5 },
+                { "NAXX", mainFrameWidth2, 945, 4, 19, { 0, 6, 12, 16 }, { "N10", "N25" }, difTbl1,
+                    { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 14, 6, 6, 5, } },
+                -- TBC
+                { "SW", mainFrameWidth, 835, 3, 8, { 0, 5, 8 }, nil, difTbl3,
+                    { 5, 5, 5, 6, 5, 6, 10, 11, } },
+                { "BT", mainFrameWidth, 835, 3, 11, { 0, 5, 9 }, nil, difTbl3,
+                    { 5, 5, 5, 5, 5, 5, 5, 5, 10, 8, 5, } },
+                { "HS", mainFrameWidth, 835, 2, 7, { 0, 5, }, nil, difTbl3,
+                    { 5, 5, 5, 5, 5, 7, 5 } },
+                { "SSC", mainFrameWidth, 835, 3, 12, { 0, 6, 10 }, nil, difTbl3,
+                    { 4, 4, 4, 4, 4, 5, 5, 5, 5, 10, 8, 5, } },
+                { "TAQ", mainFrameWidth, 810, 3, 11, { 0, 6, 10 }, nil, difTbl3,
+                    { 4, 4, 4, 4, 4, 4, 4, 4, 6, 19, 5, }, 13 },
+                { "BWL", mainFrameWidth, 810, 3, 10, { 0, 5, 9 }, nil, difTbl3,
+                    { 5, 5, 5, 5, 5, 5, 5, 6, 9, 12, } },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
         end
         if BG.IsTitan then
-            AddDB("Worldtitan", mainFrameWidth, 930, 3, 10, { 0, 4, 8 }, nil, nil,
-                { 9, 9, 9, 9, 9, 9, 9, 9, 3, 4 }, nil, 5)
-            AddDB("MCtitan", mainFrameWidth, 870, 3, 12, { 0, 6, 11 }, nil, nil,
-                { 5, 5, 5, 5, 5, 6, 5, 5, 5, 6, 11, 20, })
-            AddDB("SSCtitan", mainFrameWidth, 870, 3, 12, { 0, 6, 11 }, nil, nil,
-                { 5, 5, 5, 5, 5, 6, 5, 5, 5, 7, 18, 11, }, 11)
-            AddDB("NAXXtitan", mainFrameWidth2, 870, 4, 19, { 0, 6, 12, 16 }, nil, nil,
-                { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 8, 12, 6, 7, 5, })
-            AddDB("TOCtitan", mainFrameWidth, 980, 3, 17, { 0, 9, 16 }, nil, nil,
-                { 4, 4, 4, 4, 5, 2, 4, 4, 4, 4, 5, 5, 5, 5, 6, 31, 4, }, 8, 5)
-            AddDB("SWtitan", mainFrameWidth, 870, 3, 15, { 0, 7, 14 }, nil, nil,
-                { 3, 3, 3, 4, 5, 5, 7, 4, 4, 4, 4, 4, 5, 18, 5, }, 6)
-            -- P6 栏位：4 列布局
-            --   分列 { 0, 7, 13, 15 }：列1 行 1-7 / 列2 行 8-13 / 列3 行 14-15 / 列4 行 16-18
-            --   杂项（第 15 行）在第 3 列，52 格，折列点 33 -> 主列 32 格 + 右子列 20 格
-            --   折列锚点：FBUIfunction.lua 的 frameright 分支
-            AddDB("ULDtitan", mainFrameWidth2, 920, 4, 16, { 0, 7, 13, 15 }, nil, nil,
-                { 5, 4, 5, 5, 6, 4, 4, 5, 6, 5, 6, 6, 6, 5, 52, 5, }, 33, 5)
+            local rows = {
+                { "Worldtitan", mainFrameWidth, 930, 3, 10, { 0, 4, 8 }, nil, nil,
+                    { 9, 9, 9, 9, 9, 9, 9, 9, 3, 4 }, nil, 5 },
+                { "MCtitan", mainFrameWidth, 870, 3, 12, { 0, 6, 11 }, nil, nil,
+                    { 5, 5, 5, 5, 5, 6, 5, 5, 5, 6, 11, 20, } },
+                { "SSCtitan", mainFrameWidth, 870, 3, 12, { 0, 6, 11 }, nil, nil,
+                    { 5, 5, 5, 5, 5, 6, 5, 5, 5, 7, 18, 11, }, 11 },
+                { "NAXXtitan", mainFrameWidth2, 870, 4, 19, { 0, 6, 12, 16 }, nil, nil,
+                    { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 8, 12, 6, 7, 5, } },
+                { "TOCtitan", mainFrameWidth, 980, 3, 17, { 0, 9, 16 }, nil, nil,
+                    { 4, 4, 4, 4, 5, 2, 4, 4, 4, 4, 5, 5, 5, 5, 6, 31, 4, }, 8, 5 },
+                { "SWtitan", mainFrameWidth, 870, 3, 15, { 0, 7, 14 }, nil, nil,
+                    { 3, 3, 3, 4, 5, 5, 7, 4, 4, 4, 4, 4, 5, 18, 5, }, 6 },
+                -- P6 栏位：4 列布局
+                --   分列 { 0, 7, 13, 15 }：列1 行 1-7 / 列2 行 8-13 / 列3 行 14-15 / 列4 行 16-18
+                --   杂项（第 15 行）在第 3 列，52 格，折列点 33 -> 主列 32 格 + 右子列 20 格
+                --   折列锚点：FBUIfunction.lua 的 frameright 分支
+                { "ULDtitan", mainFrameWidth2, 920, 4, 16, { 0, 7, 13, 15 }, nil, nil,
+                    { 5, 4, 5, 5, 6, 4, 4, 5, 6, 5, 6, 6, 6, 5, 52, 5, }, 33, 5 },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
         end
         if BG.IsCTM then
-            AddDB("BOT", mainFrameWidth2, 830, 4, 15, { 0, 5, 10, 14 }, { "N", "H" }, nil,
-                { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 24, 4, }, 12)
-            AddDB("FL", mainFrameWidth, 830, 3, 9, { 0, 5, 8 }, { "N", "H" }, nil,
-                { 6, 6, 6, 6, 6, 8, 8, 15, 18, })
-            AddDB("DS", mainFrameWidth, 830, 3, 10, { 0, 5, 9 }, { "N", "H" }, nil,
-                { 6, 6, 6, 6, 6, 6, 6, 6, 13, 18, })
+            local rows = {
+                { "BOT", mainFrameWidth2, 830, 4, 15, { 0, 5, 10, 14 }, { "N", "H" }, nil,
+                    { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 24, 4, }, 12 },
+                { "FL", mainFrameWidth, 830, 3, 9, { 0, 5, 8 }, { "N", "H" }, nil,
+                    { 6, 6, 6, 6, 6, 8, 8, 15, 18, } },
+                { "DS", mainFrameWidth, 830, 3, 10, { 0, 5, 9 }, { "N", "H" }, nil,
+                    { 6, 6, 6, 6, 6, 6, 6, 6, 13, 18, } },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
         end
         if BG.IsMOP then
-            AddDB("MSV", mainFrameWidth2, 960, 4, 18, { 0, 6, 12, 17 }, { "N", "H" }, nil,
-                { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 27, 10, }, 14)
-            AddDB("TOT", mainFrameWidth, 960, 3, 15, { 0, 6, 12, }, { "N", "H" }, nil,
-                { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 11, 6 })
-            AddDB("SOO", mainFrameWidth, 960, 3, 16, { 0, 6, 12, }, { "N", "H" }, nil,
-                { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 9, 4, 6 }, nil, 5)
+            local rows = {
+                { "MSV", mainFrameWidth2, 960, 4, 18, { 0, 6, 12, 17 }, { "N", "H" }, nil,
+                    { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 27, 10, }, 14 },
+                { "TOT", mainFrameWidth, 960, 3, 15, { 0, 6, 12, }, { "N", "H" }, nil,
+                    { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 11, 6 } },
+                { "SOO", mainFrameWidth, 960, 3, 16, { 0, 6, 12, }, { "N", "H" }, nil,
+                    { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 9, 4, 6 }, nil, 5 },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
         end
         if BG.IsRetail then
             local n = 9
@@ -367,13 +402,18 @@ do
             BG.FB1 = "MCsod"
             BG.fullLevel = 60
             BG.fullLevel_RoleOverview = 25
-            AddDB("BD", 48, "P1", 10, 3)
-            AddDB("Gno", 90, "P2", 10, 3)
-            AddDB("Temple", 109, "P3", 20, 3)
-            AddDB("MCsod", 409, "P4", 20)
-            AddDB("ZUGsod", 309, "P5", 10, 3)
-            AddDB("BWLsod", 469, "P5", 20)
-            AddDB("Worldsod", 249, "", 20, nil, nil, nil, { 1, 1 })
+            local rows = {
+                { "BD", 48, "P1", 10, 3 },
+                { "Gno", 90, "P2", 10, 3 },
+                { "Temple", 109, "P3", 20, 3 },
+                { "MCsod", 409, "P4", 20 },
+                { "ZUGsod", 309, "P5", 10, 3 },
+                { "BWLsod", 469, "P5", 20 },
+                { "Worldsod", 249, "", 20, nil, nil, nil, { 1, 1 } },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
             BG.FBtable2[#BG.FBtable2].localName = L["世界Boss"]
 
             -- 风暴悬崖
@@ -387,12 +427,17 @@ do
             BG.FB1 = "MC"
             BG.fullLevel = 60
             BG.fullLevel_RoleOverview = 35
-            AddDB("MC", 409, "P1-P2", 40, nil, nil, { 1, 10 })
-            AddDB("BWL", 469, "P3", 40)
-            AddDB("ZUG", 309, "P4", 20, 3)
-            AddDB("AQL", 509, "P5", 20, 3)
-            AddDB("TAQ", 531, "P5", 40)
-            AddDB("NAXX", 533, "P6", 40)
+            local rows = {
+                { "MC", 409, "P1-P2", 40, nil, nil, { 1, 10 } },
+                { "BWL", 469, "P3", 40 },
+                { "ZUG", 309, "P4", 20, 3 },
+                { "AQL", 509, "P5", 20, 3 },
+                { "TAQ", 531, "P5", 40 },
+                { "NAXX", 533, "P6", 40 },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
 
             BG.FBIDtable[249] = "MC" -- 奥妮克希亚的巢穴
             BG.bossPositionStartEnd[249] = { 11, 11 }
@@ -404,9 +449,13 @@ do
             BG.FB1 = "KZ"
             BG.fullLevel = 70
             BG.fullLevel_RoleOverview = 35
-            AddDB("KZ", 532, "P1", 10, nil, { "KZ", "GL" })
-
-            AddDB("GL", 565, "P1", 25, nil, { "KZ", "GL" })
+            local rows = {
+                { "KZ", 532, "P1", 10, nil, { "KZ", "GL" } },
+                { "GL", 565, "P1", 25, nil, { "KZ", "GL" } },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
             BG.FBIDtable[544] = "GL" -- 玛瑟里顿
             BG.bossPositionStartEnd[544] = { 3, 3 }
             BG.FBfromBossPosition["GL"][3] = { name = "ML", localName = GetRealZoneText(544) }
@@ -434,10 +483,15 @@ do
             BG.fullLevel = 80
             BG.fullLevel_RoleOverview = 60
 
-            AddDB("NAXX", 533, "P1", nil, nil, nil, { 1, 15 })
-            AddDB("ULD", 603, "P2")
-            AddDB("TOC", 649, "P3", nil, nil, nil, { 1, 6 })
-            AddDB("ICC", 631, "P4", nil, nil, nil, { 1, 12 })
+            local rows = {
+                { "NAXX", 533, "P1", nil, nil, nil, { 1, 15 } },
+                { "ULD", 603, "P2" },
+                { "TOC", 649, "P3", nil, nil, nil, { 1, 6 } },
+                { "ICC", 631, "P4", nil, nil, nil, { 1, 12 } },
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
 
             BG.FBIDtable[615] = "NAXX" -- 黑曜石圣殿
             BG.bossPositionStartEnd[615] = { 16, 16 }
@@ -460,12 +514,17 @@ do
 
             -- TBC
             do
-                AddDB("BWL", 469, "", nil, nil, nil, nil, L["黑翼"])
-                AddDB("TAQ", 531, "", nil, nil, nil, nil, L["安其拉"])
-                AddDB("SSC", 548, "", nil, nil, nil, nil, L["毒蛇风暴"])
-                AddDB("HS", 534, "", nil, nil, nil, nil, L["海加尔山"])
-                AddDB("BT", 564, "", nil, nil, nil, nil, L["黑暗神殿"])
-                AddDB("SW", 580, "", nil, nil, nil, nil, L["太阳井"])
+                local rows = {
+                    { "BWL", 469, "", nil, nil, nil, nil, L["黑翼"] },
+                    { "TAQ", 531, "", nil, nil, nil, nil, L["安其拉"] },
+                    { "SSC", 548, "", nil, nil, nil, nil, L["毒蛇风暴"] },
+                    { "HS", 534, "", nil, nil, nil, nil, L["海加尔山"] },
+                    { "BT", 564, "", nil, nil, nil, nil, L["黑暗神殿"] },
+                    { "SW", 580, "", nil, nil, nil, nil, L["太阳井"] },
+                }
+                for _, row in ipairs(rows) do
+                    AddDB(unpack(row))
+                end
 
                 BG.FBIDtable[550] = "SSC" -- 风暴要塞
                 BG.bossPositionStartEnd[550] = { 7, 10 }
@@ -547,8 +606,13 @@ do
                 BG.FBfromBossPosition["BOT"][i] = { name = "TOF", localName = GetRealZoneText(754) }
             end
 
-            AddDB("FL", 720, "P3") -- 火焰之地
-            AddDB("DS", 967, "P4") -- 巨龙之魂
+            local rows = {
+                { "FL", 720, "P3" }, -- 火焰之地
+                { "DS", 967, "P4" }, -- 巨龙之魂
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
 
             BG.spFB.DS = {
                 -- 10939 -- 测试
@@ -574,8 +638,13 @@ do
                 BG.FBfromBossPosition["MSV"][i] = { name = "TES", localName = GetRealZoneText(996) }
             end
 
-            AddDB("TOT", 1098, "P3") -- 雷电王座
-            AddDB("SOO", 1136, "P5") -- 奥格
+            local rows = {
+                { "TOT", 1098, "P3" }, -- 雷电王座
+                { "SOO", 1136, "P5" }, -- 奥格
+            }
+            for _, row in ipairs(rows) do
+                AddDB(unpack(row))
+            end
         end
         if BG.IsRetail then
             BG.FB1 = "VS"
@@ -601,10 +670,6 @@ do
 
             local FB = "VA"
             AddDB(FB, 3004, "P2", 20, nil, nil, { 1, 6 })
-            -- local mapID = 2987 -- 潮缚石窟
-            -- BG.FBIDtable[mapID] = FB
-            -- BG.bossPositionStartEnd[mapID] = { 9, 9 }
-            -- BG.FBfromBossPosition[FB][9] = { name = "TG", localName = GetRealZoneText(mapID) }
         end
     end
 
@@ -632,10 +697,6 @@ do
         elseif BG.IsTBC then
             BG.itemLibGetFiter = {
                 { name = L["团本"], name2 = "raid", },
-                -- { name = L["声望"], name2 = "faction", },
-                -- { name = L["专业"], name2 = "profession", },
-                -- { name = L["世界掉落"], name2 = "world", },
-                -- { name = L["世界BOSS"], name2 = "worldboss", },
             }
         elseif BG.IsWLK_80 then
             BG.itemLibGetFiter = {
@@ -657,7 +718,6 @@ do
                 { name = L["牌子/货币"], name2 = "currency", },
                 { name = L["声望"], name2 = "faction", },
                 { name = L["专业"], name2 = "profession", },
-                -- { name = L["PVP"], name2 = "pvp", },
                 { name = L["世界掉落"], name2 = "world", },
             }
         elseif BG.IsCTM then
@@ -669,20 +729,16 @@ do
                 { name = L["声望"], name2 = "faction", },
                 { name = L["专业"], name2 = "profession", },
                 { name = L["世界掉落"], name2 = "world", },
-                -- { name = L["世界BOSS"], name2 = "worldboss", },
                 { name = L["PVP"], name2 = "pvp", },
             }
         elseif BG.IsMOP then
             BG.itemLibGetFiter = {
                 { name = L["团本：英雄难度"], name2 = "raidhero", },
                 { name = L["团本：普通难度"], name2 = "raidnormal", },
-                -- { name = L["5人本"], name2 = "fb5", },
                 { name = L["牌子/货币"], name2 = "currency", },
-                -- { name = L["声望"], name2 = "faction", },
                 { name = L["专业"], name2 = "profession", },
                 { name = L["世界掉落"], name2 = "world", },
                 { name = L["世界BOSS"], name2 = "worldboss", },
-                -- { name = L["PVP"], name2 = "pvp", },
             }
         elseif BG.IsRetail then
             BG.itemLibGetFiter = {
@@ -690,10 +746,6 @@ do
                 { name = L["团本：英雄难度"], name2 = "raidhero", },
                 { name = L["团本：普通难度"], name2 = "raidnormal", },
                 { name = L["大秘境"], name2 = "fb5", },
-                -- { name = L["牌子/货币"], name2 = "currency", },
-                -- { name = L["声望"], name2 = "faction", },
-                -- { name = L["专业"], name2 = "profession", },
-                -- { name = L["世界掉落"], name2 = "world", },
             }
         end
     end
@@ -761,88 +813,48 @@ do
 
     -- 表格
     do
-        -- 表格UI
+        -- 表格UI / 底色 / 心愿 / 底色 / 接收 / 底色 / 对账 / 底色
+        -- 每个容器的层级：容器、外层列数、心愿难度层数（0 表示无，-1 表示按副本难度数）、boss 上限
         BG.Frame = {}
-        for index, value in ipairs(BG.FBtable) do
-            BG.Frame[value] = {}
-            for b = 1, 22 do
-                BG.Frame[value]["boss" .. b] = {}
-            end
-        end
-
-        -- 底色
         BG.FrameDs = {}
-        for index, value in ipairs(BG.FBtable) do
-            for i = 1, 3, 1 do
-                BG.FrameDs[value .. i] = {}
-                for b = 1, 22 do
-                    BG.FrameDs[value .. i]["boss" .. b] = {}
-                end
-            end
-        end
-
-        -- 心愿UI
         BG.HopeFrame = {}
-        for _, FB in ipairs(BG.FBtable) do
-            BG.HopeFrame[FB] = {}
-            for n = 1, HopeMaxn[FB] do
-                BG.HopeFrame[FB]["nandu" .. n] = {}
-                for b = 1, 22 do
-                    BG.HopeFrame[FB]["nandu" .. n]["boss" .. b] = {}
-                end
-            end
-        end
-
-        -- 心愿底色
         BG.HopeFrameDs = {}
-        for index, value in ipairs(BG.FBtable) do
-            for t = 1, 3, 1 do
-                BG.HopeFrameDs[value .. t] = {}
-                for n = 1, 4 do
-                    BG.HopeFrameDs[value .. t]["nandu" .. n] = {}
-                    for b = 1, 22 do
-                        BG.HopeFrameDs[value .. t]["nandu" .. n]["boss" .. b] = {}
-                    end
-                end
-            end
-        end
-
-        -- 接收UI
         BG.ReceiveFrame = {}
-        for index, value in ipairs(BG.FBtable) do
-            BG.ReceiveFrame[value] = {}
-            for b = 1, 22 do
-                BG.ReceiveFrame[value]["boss" .. b] = {}
-            end
-        end
-
-        -- 接收底色
         BG.ReceiveFrameDs = {}
-        for index, value in ipairs(BG.FBtable) do
-            for i = 1, 3, 1 do
-                BG.ReceiveFrameDs[value .. i] = {}
-                for b = 1, 22 do
-                    BG.ReceiveFrameDs[value .. i]["boss" .. b] = {}
-                end
-            end
-        end
-
-        -- 对账UI
         BG.DuiZhangFrame = {}
-        for index, value in ipairs(BG.FBtable) do
-            BG.DuiZhangFrame[value] = {}
-            for b = 1, 22 do
-                BG.DuiZhangFrame[value]["boss" .. b] = {}
-            end
-        end
-
-        -- 对账底色
         BG.DuiZhangFrameDs = {}
-        for index, value in ipairs(BG.FBtable) do
-            for i = 1, 3, 1 do
-                BG.DuiZhangFrameDs[value .. i] = {}
-                for b = 1, 22 do
-                    BG.DuiZhangFrameDs[value .. i]["boss" .. b] = {}
+        local grids = {
+            { BG.Frame, 1, 0, 22 },
+            { BG.FrameDs, 3, 0, 22 },
+            { BG.HopeFrame, 1, -1, 22 },
+            { BG.HopeFrameDs, 3, 4, 22 },
+            { BG.ReceiveFrame, 1, 0, 22 },
+            { BG.ReceiveFrameDs, 3, 0, 22 },
+            { BG.DuiZhangFrame, 1, 0, 22 },
+            { BG.DuiZhangFrameDs, 3, 0, 22 },
+        }
+        for _, grid in ipairs(grids) do
+            local container, columns, difficulties, maxBoss = grid[1], grid[2], grid[3], grid[4]
+            for _, value in ipairs(BG.FBtable) do
+                for i = 1, columns do
+                    local columnKey = columns == 1 and value or value .. i
+                    container[columnKey] = {}
+                    if difficulties == 0 then
+                        for b = 1, maxBoss do
+                            container[columnKey]["boss" .. b] = {}
+                        end
+                    else
+                        local levels = difficulties
+                        if levels < 0 then
+                            levels = HopeMaxn[value]
+                        end
+                        for n = 1, levels do
+                            container[columnKey]["nandu" .. n] = {}
+                            for b = 1, maxBoss do
+                                container[columnKey]["nandu" .. n]["boss" .. b] = {}
+                            end
+                        end
+                    end
                 end
             end
         end
@@ -996,7 +1008,7 @@ do
         BG.sound2 = 569593                      -- 升级音效
         BG.sound3 = SOUNDKIT.IG_MAINMENU_CLOSE  -- 菜单打开音效
 
-    local Interface = "Interface\\AddOns\\BGForge\\Media\\sound\\"
+    local Interface = format("Interface\\AddOns\\%s\\Media\\sound\\", AddonName)
         BG.soundAuthor = {
             { ID = "AI", addonName = AddonName, isBiaoGe = true },
         }
@@ -1101,371 +1113,344 @@ end
 
 -- 本地配置数据库
 BG.Init(function()
-    if BiaoGe then
-        if type(BiaoGe) ~= "table" then
-            BiaoGe = {}
-        end
-    else
-        BiaoGe = {}
-    end
+    local STEPS = {
+        function()
+            BiaoGe = type(BiaoGe) == "table" and BiaoGe or {}
 
-    -- 清理已移除的角色查询、玩家黑名单功能遗留数据
-    BiaoGe.battleNetRoles = nil
-    BiaoGe.blacklist = nil
-    BiaoGe.migrations = nil
-    -- 历史表格（BiaoGe.History / HistoryList）兼容边界：
-    --  ① 原版记录继续原样保留，BGForge 只在读取时投影成最小账本字段，不回写旧记录；
-    --  ② BGForge 新记录带 _bgforge 标记，由 HistoryStore 按用户设置清理，绝不自动清理无标记的原版记录；
-    --  ③ 两个插件共用 ## SavedVariables: BiaoGe，因此这里仍禁止对整个 History 域做迁移式删除。
-    -- 用户主动点击「清空历史表格」仍会清空当前副本的全部记录，并有二次确认。
-    -- Lite: 恢复交易/邮件模块所需的模块禁用表初始化（TradeHistory/MailHistory 入口守卫用，空表=全部启用）。
-    -- 注：BGForge 未恢复 BG.CreateDisableButton 禁用按钮 UI，此表仅作守卫初始化，恒为启用。
-    BiaoGe.disabledModules = BiaoGe.disabledModules or {}
-
-    -- 一次性迁移：清除存量存档里已停止采集的身份字段（键形如 guid1 / raceID2 / factionGroup3）。
-    -- 这些字段全库 0 个读取点，删除不影响任何功能；其中 guid 是暴雪账号级唯一标识，
-    -- 改名转服都不变，不应连同金额长期留在账本里。
-    -- 采用「键名模式匹配 + 递归」而不是按副本/BOSS/行号遍历，以免因结构假设错误而漏行。
-    -- 只匹配「字母 + 数字后缀」形式，因此不会误删 BiaoGe.playerInfo 下的同名字段（那些无数字后缀，
-    -- 且只记录本机自己的角色，是正当用途）。
-    if not BiaoGe.migrated_dropIdentityFields then
-        local drop = {}
-        for _, key in ipairs(BG.removedIdentityFields or {}) do
-            drop[key] = true
-        end
-        local function purge(t, depth)
-            if depth > 10 or type(t) ~= "table" then return end
-            for k, v in pairs(t) do
-                local name = type(k) == "string" and k:match("^(%a+)%d+$")
-                if name and drop[name] then
-                    t[k] = nil
-                elseif type(v) == "table" then
-                    purge(v, depth + 1)
+            -- 清理已移除的角色查询、玩家黑名单功能遗留数据
+            BiaoGe.battleNetRoles = nil
+            BiaoGe.blacklist = nil
+            BiaoGe.migrations = nil
+            -- 历史表格（BiaoGe.History / HistoryList）保留；BGForge 历史功能继续软下线：
+            --  ① 其它实现加载时对该域只「创建/迁移、永不删除」，无条件置 nil 会引入偏差；
+            --  ② 只允许保留的 HistoryStore 实现处理带 _bgforge 标记的记录，禁止自动删除上游旧记录；
+            --  ③ 本插件与并存插件共享 ## SavedVariables: BiaoGe，自动删会连对方正在读取的历史账本一起抹掉。
+            -- 如需清除，应走用户主动的一次性提示，禁止自动删除。
+            -- 交易/邮件模块所需的模块禁用表初始化（TradeHistory/MailHistory 入口守卫用，空表=全部启用）。
+            -- 注：本插件未提供禁用按钮 UI，此表仅作守卫初始化，恒为启用。
+            BiaoGe.disabledModules = BiaoGe.disabledModules or {}
+        end,
+        function()
+            -- 一次性迁移：清除存量存档里已停止采集的身份字段（键形如 guid1 / raceID2 / factionGroup3）。
+            -- 这些字段全库 0 个读取点，删除不影响任何功能；其中 guid 是暴雪账号级唯一标识，
+            -- 改名转服都不变，不应连同金额长期留在账本里。
+            -- 采用「键名模式匹配 + 递归」而不是按副本/BOSS/行号遍历，以免因结构假设错误而漏行。
+            -- 只匹配「字母 + 数字后缀」形式，因此不会误删 BiaoGe.playerInfo 下的同名字段（那些无数字后缀，
+            -- 且只记录本机自己的角色，是正当用途）。
+            if not BiaoGe.migrated_dropIdentityFields then
+                local drop = {}
+                for _, key in ipairs(BG.removedIdentityFields or {}) do
+                    drop[key] = true
                 end
-            end
-        end
-        purge(BiaoGe, 1)
-        BiaoGe.migrated_dropIdentityFields = true
-    end
 
-    -- 副本选择初始化
-    -- FB1 是UI当前选择的副本
-    -- FB2 是玩家当前所处的副本
-    if BiaoGe.FB then
-        local yes
-        for k, FB in pairs(BG.FBtable) do
-            if BiaoGe.FB == FB then
-                BG.FB1 = BiaoGe.FB
-                yes = true
-                break
-            end
-        end
-        if not yes then
-            BiaoGe.FB = BG.FB1
-        end
-    else
-        BiaoGe.FB = BG.FB1
-    end
-
-    if not BiaoGe.point then
-        BiaoGe.point = {}
-    end
-    if not BiaoGe.duizhang then
-        BiaoGe.duizhang = {}
-    end
-
-    for _, FB in ipairs(BG.FBtable) do
-        if not BiaoGe[FB] then
-            BiaoGe[FB] = {}
-        end
-        BiaoGe[FB].tradeTbl = BiaoGe[FB].tradeTbl or {}
-        for b = 1, 22 do
-            if not BiaoGe[FB]["boss" .. b] then
-                BiaoGe[FB]["boss" .. b] = {}
-            end
-        end
-    end
-
-    if not BG.verLess2 then
-        if not BiaoGe.BossFrame then
-            BiaoGe.BossFrame = {}
-        end
-        for _, FB in ipairs(BG.FBtable) do
-            if not BiaoGe.BossFrame[FB] then
-                BiaoGe.BossFrame[FB] = {}
-            end
-        end
-    end
-
-    if not BiaoGe.options then
-        BiaoGe.options = {}
-    end
-    -- The main navigation is created before Options.lua initializes its controls.
-    -- Seed this value here so a freshly reset profile never passes nil to SetAlpha.
-    if type(BiaoGe.options.alpha) ~= "number" then
-        local legacyAlpha = BiaoGe.Alpha
-        BiaoGe.options.alpha = type(legacyAlpha) == "number" and legacyAlpha or 0.8
-    end
-    -- BGLite 2.4.1 makes new-lockout clearing mandatory. Keep the legacy
-    -- numeric value for compatibility and override users who previously disabled it.
-    BiaoGe.options.autoQingKong = 1
-    if not BiaoGe.options.SearchHistory then
-        BiaoGe.options.SearchHistory = {}
-    end
-    local name = "moLing"
-    BG.options[name .. "reset"] = 1
-    BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
-
-    -- 心愿清单
-    if not BiaoGe.Hope then
-        BiaoGe.Hope = {}
-    end
-
-    if not BiaoGe.Hope[realmID] then
-        BiaoGe.Hope[realmID] = {}
-    end
-    if not BiaoGe.Hope[realmID][player] then
-        BiaoGe.Hope[realmID][player] = {}
-    end
-    for index, FB in ipairs(BG.FBtable) do
-        if not BiaoGe.Hope[realmID][player][FB] then
-            BiaoGe.Hope[realmID][player][FB] = {}
-        end
-        for n = 1, 4 do
-            if not BiaoGe.Hope[realmID][player][FB]["nandu" .. n] then
-                BiaoGe.Hope[realmID][player][FB]["nandu" .. n] = {}
-                for b = 1, 22 do
-                    if not BiaoGe.Hope[realmID][player][FB]["nandu" .. n]["boss" .. b] then
-                        BiaoGe.Hope[realmID][player][FB]["nandu" .. n]["boss" .. b] = {}
-                    end
-                end
-            end
-        end
-    end
-    if BiaoGeA and BiaoGeA.Hope then
-        for k, v in pairs(BiaoGeA.Hope) do
-            BiaoGe.Hope[realmID][player][k] = v
-        end
-        BiaoGeA.Hope = nil
-    end
-
-    -- 记录服务器名称
-    do
-        BiaoGe.realmName = BiaoGe.realmName or {}
-        BiaoGe.realmName[realmID] = realmName
-    end
-    -- 记录每个角色的职业、等级、天赋
-    do
-        BiaoGe.playerInfo = BiaoGe.playerInfo or {}
-        BiaoGe.playerInfo[realmID] = BiaoGe.playerInfo[realmID] or {}
-        BiaoGe.playerInfo[realmID][player] = BiaoGe.playerInfo[realmID][player] or {}
-        BiaoGe.playerInfo[realmID][player].class = select(2, UnitClass("player"))
-        BiaoGe.playerInfo[realmID][player].raceID = select(3, UnitRace("player"))
-        BiaoGe.playerInfo[realmID][player].faction = UnitFactionGroup("player")
-        BiaoGe.playerInfo[realmID][player].iLevel = select(2, GetAverageItemLevel()) or 0
-
-        local function UpdateLevel(level)
-            BiaoGe.playerInfo[realmID][player].level = level
-            BG.isFullLevel = level >= BG.fullLevel
-        end
-        UpdateLevel(UnitLevel("player"))
-        BG.RegisterEvent("PLAYER_LEVEL_UP", function(self, event, level)
-            UpdateLevel(level)
-            if BG.UpdateMeetingHornLevelButton then
-                BG.UpdateMeetingHornLevelButton()
-            end
-        end)
-
-        -- 天赋
-        do
-            local function GetTalent(_, event)
-                local specIndex
-                if BG.verOver4 then
-                    specIndex = C_SpecializationInfo.GetSpecialization()
-                    if specIndex == 0 or specIndex == 5 then
-                        specIndex = nil
-                    end
-                else
-                    local maxNum = 0
-                    for i = 1, 3 do
-                        local num = select(5, GetTalentTabInfo(i, nil, nil, GetActiveTalentGroup()))
-                        if num and num >= maxNum then
-                            maxNum = num
-                            specIndex = i
+                local function purge(t, depth)
+                    if depth > 10 or type(t) ~= "table" then return end
+                    for k, v in pairs(t) do
+                        local name = type(k) == "string" and k:match("^(%a+)%d+$")
+                        if name and drop[name] then
+                            t[k] = nil
+                        elseif type(v) == "table" then
+                            purge(v, depth + 1)
                         end
                     end
-                    if maxNum == 0 then specIndex = nil end
                 end
-                BiaoGe.playerInfo[realmID][player].talent = specIndex
+
+                purge(BiaoGe, 1)
+                BiaoGe.migrated_dropIdentityFields = true
+            end
+        end,
+        function()
+            -- 副本选择初始化
+            -- FB1 表示界面上选中的那个副本
+            -- FB2 表示玩家实际所在的副本
+            if BiaoGe.FB then
+                local yes
+                for k, FB in pairs(BG.FBtable) do
+                    if BiaoGe.FB == FB then
+                        BG.FB1 = BiaoGe.FB
+                        yes = true
+                        break
+                    end
+                end
+                if not yes then
+                    BiaoGe.FB = BG.FB1
+                end
+            else
+                BiaoGe.FB = BG.FB1
             end
 
-            local f = CreateFrame("Frame")
-            f:RegisterEvent("PLAYER_TALENT_UPDATE")
-            f:RegisterEvent("PLAYER_ENTERING_WORLD")
-            if BG.verOver4 then
-                f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-            end
-            f:SetScript("OnEvent", function(self, event, ...)
-                if event == "PLAYER_ENTERING_WORLD" then
-                    self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+            BiaoGe.point = BiaoGe.point or {}
+            BiaoGe.duizhang = BiaoGe.duizhang or {}
+
+            for _, FB in ipairs(BG.FBtable) do
+                BiaoGe[FB] = BiaoGe[FB] or {}
+                BiaoGe[FB].tradeTbl = BiaoGe[FB].tradeTbl or {}
+                for b = 1, 22 do
+                    BiaoGe[FB]["boss" .. b] = BiaoGe[FB]["boss" .. b] or {}
                 end
-                self.t = 0
-                self:SetScript("OnUpdate", function(_, t)
-                    self.t = self.t + t
-                    if self.t > 1 then
-                        self:SetScript("OnUpdate", nil)
-                        GetTalent()
+            end
+        end,
+        function()
+            if not BG.verLess2 then
+                BiaoGe.BossFrame = BiaoGe.BossFrame or {}
+                for _, FB in ipairs(BG.FBtable) do
+                    BiaoGe.BossFrame[FB] = BiaoGe.BossFrame[FB] or {}
+                end
+            end
+
+            BiaoGe.options = BiaoGe.options or {}
+            -- Initialize alpha before the main navigation and keep automatic clearing mandatory.
+            if type(BiaoGe.options.alpha) ~= "number" then
+                local legacyAlpha = BiaoGe.Alpha
+                BiaoGe.options.alpha = type(legacyAlpha) == "number" and legacyAlpha or 0.8
+            end
+            BiaoGe.options.autoQingKong = 1
+            BiaoGe.options.SearchHistory = BiaoGe.options.SearchHistory or {}
+            local name = "moLing"
+            BG.options[name .. "reset"] = 1
+            BiaoGe.options[name] = BiaoGe.options[name] or BG.options[name .. "reset"]
+
+            -- 心愿清单
+            BiaoGe.Hope = BiaoGe.Hope or {}
+            BiaoGe.Hope[realmID] = BiaoGe.Hope[realmID] or {}
+            BiaoGe.Hope[realmID][player] = BiaoGe.Hope[realmID][player] or {}
+            for index, FB in ipairs(BG.FBtable) do
+                BiaoGe.Hope[realmID][player][FB] = BiaoGe.Hope[realmID][player][FB] or {}
+                for n = 1, 4 do
+                    if not BiaoGe.Hope[realmID][player][FB]["nandu" .. n] then
+                        BiaoGe.Hope[realmID][player][FB]["nandu" .. n] = {}
+                        for b = 1, 22 do
+                            if not BiaoGe.Hope[realmID][player][FB]["nandu" .. n]["boss" .. b] then
+                                BiaoGe.Hope[realmID][player][FB]["nandu" .. n]["boss" .. b] = {}
+                            end
+                        end
                     end
-                end)
+                end
+            end
+            if BiaoGeA and BiaoGeA.Hope then
+                for k, v in pairs(BiaoGeA.Hope) do
+                    BiaoGe.Hope[realmID][player][k] = v
+                end
+                BiaoGeA.Hope = nil
+            end
+        end,
+        function()
+            -- 记录服务器名称
+            BiaoGe.realmName = BiaoGe.realmName or {}
+            BiaoGe.realmName[realmID] = realmName
+            -- 把各角色的职业、等级与天赋存下来
+            BiaoGe.playerInfo = BiaoGe.playerInfo or {}
+            BiaoGe.playerInfo[realmID] = BiaoGe.playerInfo[realmID] or {}
+            BiaoGe.playerInfo[realmID][player] = BiaoGe.playerInfo[realmID][player] or {}
+            BiaoGe.playerInfo[realmID][player].class = select(2, UnitClass("player"))
+            BiaoGe.playerInfo[realmID][player].raceID = select(3, UnitRace("player"))
+            BiaoGe.playerInfo[realmID][player].faction = UnitFactionGroup("player")
+            BiaoGe.playerInfo[realmID][player].iLevel = select(2, GetAverageItemLevel()) or 0
+
+            local function UpdateLevel(level)
+                BiaoGe.playerInfo[realmID][player].level = level
+                BG.isFullLevel = level >= BG.fullLevel
+            end
+            UpdateLevel(UnitLevel("player"))
+            BG.RegisterEvent("PLAYER_LEVEL_UP", function(self, event, level)
+                UpdateLevel(level)
+                if BG.UpdateMeetingHornLevelButton then
+                    BG.UpdateMeetingHornLevelButton()
+                end
             end)
 
-            function BG.GetTalentIcon(class, talent, w)
-                w = w or 0
-                if talent then
-                    local a, b, c, d = unpack(BG.iconTexCoord)
-                    local coord = format("100:100:%s:%s:%s:%s", a * 100, b * 100, c * 100, d * 100)
-                    local tex = BG.talentIcon[class][talent]
-                    if tex then
-                        return format("|T%s:%s:%s:0:0:%s|t", BG.talentIcon[class][talent], w, w, coord)
+            -- 天赋
+            do
+                local function GetTalent(_, event)
+                    local specIndex
+                    if BG.verOver4 then
+                        local spec = C_SpecializationInfo.GetSpecialization()
+                        if spec == 0 or spec == 5 then
+                            spec = nil
+                        end
+                        specIndex = spec
+                    else
+                        local maxNum = 0
+                        for i = 1, 3 do
+                            local num = select(5, GetTalentTabInfo(i, nil, nil, GetActiveTalentGroup()))
+                            if num and num >= maxNum then
+                                maxNum = num
+                                specIndex = i
+                            end
+                        end
+                        if maxNum == 0 then specIndex = nil end
                     end
+                    BiaoGe.playerInfo[realmID][player].talent = specIndex
                 end
-                return format("|A:GarrMission_ClassIcon-%s:%s:%s|a", class, w, w)
-            end
 
-            BG.talentIcon = {
-                DEATHKNIGHT = {
+                local f = CreateFrame("Frame")
+                local talentEvents = { "PLAYER_TALENT_UPDATE", "PLAYER_ENTERING_WORLD" }
+                if BG.verOver4 then
+                    talentEvents[#talentEvents + 1] = "PLAYER_SPECIALIZATION_CHANGED"
+                end
+                for _, eventName in ipairs(talentEvents) do
+                    f:RegisterEvent(eventName)
+                end
+                f:SetScript("OnEvent", function(self, event, ...)
+                    if event == "PLAYER_ENTERING_WORLD" then
+                        self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+                    end
+                    self.t = 0
+                    self:SetScript("OnUpdate", function(_, elapsed)
+                        self.t = self.t + elapsed
+                        if self.t <= 1 then return end
+                        self:SetScript("OnUpdate", nil)
+                        GetTalent()
+                    end)
+                end)
+
+                function BG.GetTalentIcon(class, talent, w)
+                    local size = w or 0
+                    local tex = talent and BG.talentIcon[class][talent]
+                    if tex then
+                        local a, b, c, d = unpack(BG.iconTexCoord)
+                        local coord = format("100:100:%s:%s:%s:%s", a * 100, b * 100, c * 100, d * 100)
+                        return format("|T%s:%s:%s:0:0:%s|t", tex, size, size, coord)
+                    end
+                    return format("|A:GarrMission_ClassIcon-%s:%s:%s|a", class, size, size)
+                end
+
+                local icons = {}
+                icons.DEATHKNIGHT = {
                     "Interface\\Icons\\Spell_Deathknight_BloodPresence", -- T
                     "Interface\\Icons\\Spell_Deathknight_FrostPresence",
                     "Interface\\Icons\\Spell_Deathknight_UnholyPresence",
-                },
-                PALADIN = {
+                }
+                icons.PALADIN = {
                     "Interface\\Icons\\Spell_Holy_HolyBolt",     -- N
                     "Interface\\Icons\\Spell_Holy_DevotionAura", -- T
                     "Interface\\Icons\\Spell_Holy_AuraOfLight",
-                },
-                WARRIOR = {
+                }
+                icons.WARRIOR = {
                     "Interface\\Icons\\ability_warrior_savageblow",
                     "Interface\\Icons\\ability_warrior_innerrage",
                     "Interface\\Icons\\ability_warrior_defensivestance", -- T
-                },
-                EVOKER = {                                               -- 唤魔师
+                }
+                icons.EVOKER = {                                               -- 唤魔师
                     "Interface\\Icons\\ability_evoker_powerswell",
                     "Interface\\Icons\\ability_evoker_emeraldblossom",
                     "Interface\\Icons\\ability_evoker_reversion_green",
-                },
-                SHAMAN = {
+                }
+                icons.SHAMAN = {
                     "Interface\\Icons\\spell_nature_lightning",
                     "Interface\\Icons\\spell_nature_lightningshield",
                     "Interface\\Icons\\Spell_Nature_HealingWaveGreater", -- N
-                },
-                HUNTER = {
+                }
+                icons.HUNTER = {
                     "Interface\\Icons\\Ability_Hunter_BeastTaming",
                     "Interface\\Icons\\Ability_Marksmanship",
                     "Interface\\Icons\\Ability_Hunter_SwiftStrike",
-                },
-                DEMONHUNTER = {
+                }
+                icons.DEMONHUNTER = {
                     "Interface\\Icons\\ability_demonhunter_specdps",
                     "Interface\\Icons\\Ability_DemonHunter_SpecTank",
                     "Interface\\Icons\\classicon_demonhunter_void",
-                },
-                MONK = {
+                }
+                icons.MONK = {
                     "Interface/Icons/spell_monk_brewmaster_spec", -- 酒仙
                     "Interface/Icons/spell_monk_mistweaver_spec", -- 织雾
                     "Interface/Icons/spell_monk_windwalker_spec", -- 踏风
-                },
-                ROGUE = {
+                }
+                icons.ROGUE = {
                     "Interface\\Icons\\ability_rogue_eviscerate",
                     "Interface\\Icons\\ability_backstab",
                     "Interface\\Icons\\ability_stealth",
-                },
-                MAGE = {
+                }
+                icons.MAGE = {
                     "Interface\\Icons\\inv_misc_rune_03",
                     "Interface\\Icons\\spell_fire_firebolt02",
                     "Interface\\Icons\\spell_frost_frostbolt02",
-                },
-                WARLOCK = {
+                }
+                icons.WARLOCK = {
                     "Interface\\Icons\\spell_shadow_deathcoil",
                     "Interface\\Icons\\spell_shadow_metamorphosis",
                     "Interface\\Icons\\spell_shadow_rainoffire",
-                },
-                PRIEST = {
+                }
+                icons.PRIEST = {
                     "Interface\\Icons\\spell_holy_wordfortitude",  -- N
                     "Interface\\Icons\\spell_holy_guardianspirit", -- N
                     "Interface\\Icons\\spell_shadow_shadowwordpain",
-                },
-            }
-            if BG.verOver4 then
-                BG.talentIcon.DRUID = {
-                    "Interface\\Icons\\spell_nature_starfall",     -- 鸟
-                    "Interface\\Icons\\ability_druid_catform",     -- 猫
-                    "Interface\\Icons\\ability_racial_bearform",   -- 熊
-                    "Interface\\Icons\\Spell_Nature_HealingTouch", -- N
                 }
-            else
-                BG.talentIcon.DRUID = {
-                    "Interface\\Icons\\spell_nature_starfall",
-                    "Interface\\Icons\\ability_racial_bearform",
-                    "Interface\\Icons\\Spell_Nature_HealingTouch", -- N
-                }
+                if BG.verOver4 then
+                    icons.DRUID = {
+                        "Interface\\Icons\\spell_nature_starfall",     -- 鸟
+                        "Interface\\Icons\\ability_druid_catform",     -- 猫
+                        "Interface\\Icons\\ability_racial_bearform",   -- 熊
+                        "Interface\\Icons\\Spell_Nature_HealingTouch", -- N
+                    }
+                else
+                    icons.DRUID = {
+                        "Interface\\Icons\\spell_nature_starfall",
+                        "Interface\\Icons\\ability_racial_bearform",
+                        "Interface\\Icons\\Spell_Nature_HealingTouch", -- N
+                    }
+                end
+                BG.talentIcon = icons
             end
-        end
 
-        if BiaoGe.PlayerItemsLevel then
-            for realmID in pairs(BiaoGe.PlayerItemsLevel) do
-                if type(realmID) == "number" and BiaoGe.playerInfo[realmID] then
-                    for player, iLevel in pairs(BiaoGe.PlayerItemsLevel[realmID]) do
-                        if type(iLevel) == "number" and BiaoGe.playerInfo[realmID][player] then
-                            BiaoGe.playerInfo[realmID][player].iLevel = iLevel
+            if BiaoGe.PlayerItemsLevel then
+                for realmID in pairs(BiaoGe.PlayerItemsLevel) do
+                    if type(realmID) == "number" and BiaoGe.playerInfo[realmID] then
+                        for player, iLevel in pairs(BiaoGe.PlayerItemsLevel[realmID]) do
+                            if type(iLevel) == "number" and BiaoGe.playerInfo[realmID][player] then
+                                BiaoGe.playerInfo[realmID][player].iLevel = iLevel
+                            end
                         end
                     end
                 end
+                BiaoGe.PlayerItemsLevel = nil
             end
-            BiaoGe.PlayerItemsLevel = nil
-        end
-    end
+        end,
+        function()
+            -- 修正数据
+            if BG.IsVanilla_Sod then
+                local FB = "MCsod"
+                if BiaoGe[FB].boss18.zhuangbei1 then
+                    BiaoGe[FB].boss12 = BG.Copy(BiaoGe[FB].boss15)
+                    BiaoGe[FB].boss13 = BG.Copy(BiaoGe[FB].boss16)
+                    BiaoGe[FB].boss14 = BG.Copy(BiaoGe[FB].boss17)
+                    BiaoGe[FB].boss15 = BG.Copy(BiaoGe[FB].boss18)
+                    BiaoGe[FB].boss16 = {}
+                    BiaoGe[FB].boss17 = {}
+                    BiaoGe[FB].boss18 = {}
+                end
 
-    -- 修正数据
-    if BG.IsVanilla_Sod then
-        local FB = "MCsod"
-        if BiaoGe[FB].boss18.zhuangbei1 then
-            BiaoGe[FB].boss12 = BG.Copy(BiaoGe[FB].boss15)
-            BiaoGe[FB].boss13 = BG.Copy(BiaoGe[FB].boss16)
-            BiaoGe[FB].boss14 = BG.Copy(BiaoGe[FB].boss17)
-            BiaoGe[FB].boss15 = BG.Copy(BiaoGe[FB].boss18)
-            BiaoGe[FB].boss16 = {}
-            BiaoGe[FB].boss17 = {}
-            BiaoGe[FB].boss18 = {}
-        end
-
-        local FB = "BWLsod"
-        if BiaoGe[FB].boss12.zhuangbei1 then
-            BiaoGe[FB].boss8 = BG.Copy(BiaoGe[FB].boss9)
-            BiaoGe[FB].boss9 = BG.Copy(BiaoGe[FB].boss10)
-            BiaoGe[FB].boss10 = BG.Copy(BiaoGe[FB].boss11)
-            BiaoGe[FB].boss11 = BG.Copy(BiaoGe[FB].boss12)
-            BiaoGe[FB].boss12 = {}
-        end
-    elseif BG.IsRetail then
-        if not BiaoGe.options.SearchHistory['VS' .. 260619] then
-            BiaoGe.options.SearchHistory['VS' .. 260619] = true
-            local FB = "VS"
-            for b = 14, 11, -1 do
-                BiaoGe[FB]['boss' .. b] = BG.Copy(BiaoGe[FB]['boss' .. (b - 1)])
+                local FB = "BWLsod"
+                if BiaoGe[FB].boss12.zhuangbei1 then
+                    BiaoGe[FB].boss8 = BG.Copy(BiaoGe[FB].boss9)
+                    BiaoGe[FB].boss9 = BG.Copy(BiaoGe[FB].boss10)
+                    BiaoGe[FB].boss10 = BG.Copy(BiaoGe[FB].boss11)
+                    BiaoGe[FB].boss11 = BG.Copy(BiaoGe[FB].boss12)
+                    BiaoGe[FB].boss12 = {}
+                end
+            elseif BG.IsRetail then
+                if not BiaoGe.options.SearchHistory['VS' .. 260619] then
+                    BiaoGe.options.SearchHistory['VS' .. 260619] = true
+                    local FB = "VS"
+                    for b = 14, 11, -1 do
+                        BiaoGe[FB]['boss' .. b] = BG.Copy(BiaoGe[FB]['boss' .. (b - 1)])
+                    end
+                    BiaoGe[FB]['boss' .. 10] = {}
+                end
             end
-            BiaoGe[FB]['boss' .. 10] = {}
-        end
-    end
-
-    -- 删除旧表格数据
-    do
-        if BG.IsMOP or BG.IsTitan then
-            for i, FB in ipairs({
-                "NAXX", "ULD", "TOC", "ICC",
-                "BOT", "FL", "DS",
-            }) do
-                BiaoGe[FB] = nil
+        end,
+        function()
+            -- 删除旧表格数据
+            if BG.IsMOP or BG.IsTitan then
+                local stale = { "NAXX", "ULD", "TOC", "ICC", "BOT", "FL", "DS" }
+                for _, FB in ipairs(stale) do
+                    BiaoGe[FB] = nil
+                end
             end
-        end
+        end,
+    }
+    for _, step in ipairs(STEPS) do
+        step()
     end
 
     -- 默认字体

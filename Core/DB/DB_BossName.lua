@@ -4,41 +4,72 @@ local L = ns.L
 
 local Maxb = ns.Maxb
 
-local pt = print
 
 BG.Boss = {}
 
-function BG.FormatBossName(name)
-    local n, c
-    if ns.enUS then
-        n, c = name:gsub(" ", "\n")
-    elseif name:find("\n") then
-        return name
-    else
-        local newstr = ""
-        for i = 1, string.utf8len(name) do
-            newstr = newstr .. (i == 1 and "" or "\n") .. string.utf8sub(name, i, i)
-        end
-        n = newstr
+local function BuildColumnText(name)
+    local columns = {}
+    for index = 1, string.utf8len(name) do
+        columns[#columns + 1] = string.utf8sub(name, index, index)
     end
-    return n, c
+    if not next(columns) then
+        return ""
+    end
+    return table.concat(columns, "\n")
+end
+
+function BG.FormatBossName(name)
+    if ns.enUS then
+        return name:gsub(" ", "\n")
+    end
+    if name:find("\n") then
+        return name
+    end
+    return BuildColumnText(name), nil
+end
+
+local function EnsureBossEntry(FB, index)
+    local frame = BG.Boss[FB]
+    if not frame then
+        frame = {}
+        BG.Boss[FB] = frame
+    end
+    local key = "boss" .. index
+    local entry = frame[key]
+    if not entry then
+        entry = {}
+        frame[key] = entry
+    end
+    return entry
 end
 
 local function AddDB(FB, boss)
-    if not BG.Boss[FB] then BG.Boss[FB] = {} end
-    for b = 1, #boss do
-        local name = boss[b].name
-        BG.Boss[FB]["boss" .. b] = BG.Boss[FB]["boss" .. b] or {}
-        BG.Boss[FB]["boss" .. b].name2 = name:gsub("\n", "")
-        BG.Boss[FB]["boss" .. b].color = boss[b].color
-        BG.Boss[FB]["boss" .. b].name, BG.Boss[FB]["boss" .. b].nCount = BG.FormatBossName(name)
+    for index = 1, #boss do
+        local row = boss[index]
+        local name = row.name
+        local entry = EnsureBossEntry(FB, index)
+        entry.name2 = name:gsub("\n", "")
+        entry.color = row.color
+        entry.name, entry.nCount = BG.FormatBossName(name)
     end
 end
+
+local OTHER_BOSS_ROWS = {
+    { name = L["杂\n\n项"], color = "ffffff" },
+    { name = L["罚\n\n款"], color = "ffffff" },
+    { name = L["支\n\n出"], color = "00FF00" },
+    { name = L["总\n览"], color = "EE82EE" },
+}
+
 local function Addother(boss)
-    tinsert(boss, { name = L["杂\n\n项"], color = "ffffff" })
-    tinsert(boss, { name = L["罚\n\n款"], color = "ffffff" })
-    tinsert(boss, { name = L["支\n\n出"], color = "00FF00" })
-    tinsert(boss, { name = L["总\n览"], color = "EE82EE" })
+    for _, row in ipairs(OTHER_BOSS_ROWS) do
+        tinsert(boss, { name = row.name, color = row.color })
+    end
+end
+
+local function RegisterBossSet(FB, boss)
+    Addother(boss)
+    AddDB(FB, boss)
 end
 
 -- Sod
@@ -294,18 +325,15 @@ do
         { name = L["伊利丹・怒风"], color = "00BFFF" },
     }
     if BG.IsTBC then
-        -- TBC 端只注册 BT 帧（Maxb=16 需 14 boss 槽），按 v2.3.5 合并海山5+黑庙9
-        for _, v in ipairs(boss2) do
-            tinsert(boss, v)
+        -- TBC 端只注册 BT 帧（Maxb=16 需 14 boss 槽），合并海山 5 + 黑庙 9
+        for _, entry in ipairs(boss2) do
+            tinsert(boss, entry)
         end
-        Addother(boss)
-        AddDB("BT", boss)
+        RegisterBossSet("BT", boss)
     else
-        -- WLK/vanilla 保留拆分：HS/BT 各自独立帧（修复 v2.3.5 合并表在 WLK 的错位显示/HS nil）
-        Addother(boss)
-        AddDB("HS", boss)
-        Addother(boss2)
-        AddDB("BT", boss2)
+        -- WLK/vanilla 保留拆分：HS/BT 各自独立帧（合并表在 WLK 会错位显示 / HS 取到 nil）
+        RegisterBossSet("HS", boss)
+        RegisterBossSet("BT", boss2)
     end
 
     local boss = {
@@ -645,15 +673,6 @@ end
 
 -- Retail
 do
-    -- local boss = {
-    --     { name = L["噬灭者"], color = "A12987" },
-    --     { name = L["血缚恐魔"], color = "A12987" },
-    --     { name = L["苏雷吉队长"], color = "FFFF00" },
-    --     { name = L["拉夏南"], color = "AAAAAA" },
-    --     { name = L["虫巢扭曲者"], color = "AAAAAA" },
-    --     { name = L["节点女亲王"], color = "853CC9" },
-    --     { name = L["流丝之庭"], color = "853CC9" },
-    --     { name = L["安苏雷克女王"], color = "00BFFF" },
     -- }
     -- Addother(boss)
     -- AddDB("NP", boss)
@@ -683,7 +702,6 @@ do
         { name = L["双子毒牙"], color = "99ccff" },
         { name = L["盘卷祭坛"], color = "66ff99" },
         { name = L["乌拉特克"], color = "66ff99" },
-        -- { name = L["尼姆瑞莎·唤波者"], color = "9999FF" },
     }
     Addother(boss)
     AddDB("VA", boss)
