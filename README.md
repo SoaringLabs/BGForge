@@ -6,11 +6,11 @@ BGForge 是由 **Soaring Labs** 开发、基于 **BGLite 2.4.4** 的《魔兽世
 
 游戏内插件名称：`<BGForge> 团本事务台`
 
-当前版本：`1.6.0`（待发布）
+当前版本：`1.6.0`
 
 版本变更参见 [CHANGELOG.md](CHANGELOG.md)。
 
-开发分支已完整迁移官方 BGLite v1.6，尚未发布；迁移覆盖、适配与验收情况见[迁移报告](docs/migrations/bglite-v1.6.md)。
+已完整同步官方 BGLite v1.6；迁移覆盖、适配与验收情况见[迁移报告](docs/migrations/bglite-v1.6.md)。
 
 ## 当前状态
 
